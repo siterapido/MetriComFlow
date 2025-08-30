@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 const initialBoards = [
   {
     id: "todo",
-    title: "A Fazer",
+    title: "Leads frio",
     cards: [
       {
         id: "1",
@@ -59,7 +59,7 @@ const initialBoards = [
   },
   {
     id: "done",
-    title: "Concluído",
+    title: "Contrato fechado",
     cards: [
       {
         id: "4",

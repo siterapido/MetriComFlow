@@ -41,9 +41,9 @@ const teamMembers = [
 ];
 
 const statusOptions = [
-  { value: "todo", label: "A Fazer" },
+  { value: "todo", label: "Leads frio" },
   { value: "doing", label: "Em Andamento" },
-  { value: "done", label: "Concluído" }
+  { value: "done", label: "Contrato fechado" }
 ];
 
 export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) {
