@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Filter, Calendar, MessageSquare, Paperclip, User } from "lucide-react";
+import { NewLeadModal } from "@/components/leads/NewLeadModal";
+import { useToast } from "@/hooks/use-toast";
 
-// Mock data para o Kanban
-const mockBoards = [
+// Mock data para o Kanban - agora como estado
+const initialBoards = [
   {
     id: "todo",
     title: "A Fazer",
@@ -83,13 +85,40 @@ const getLabelColor = (label: string) => {
     "Desenvolvimento": "bg-accent text-accent-foreground",
     "Alta Prioridade": "bg-warning text-warning-foreground",
     "Concluído": "bg-success text-success-foreground",
-    "Faturado": "bg-muted text-muted-foreground"
+    "Faturado": "bg-muted text-muted-foreground",
+    "Proposta": "bg-primary text-primary-foreground",
+    "Negociação": "bg-accent text-accent-foreground",
+    "Contrato": "bg-success text-success-foreground",
+    "Baixa Prioridade": "bg-muted text-muted-foreground"
   };
   return colors[label] || "bg-muted text-muted-foreground";
 };
 
 export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [boards, setBoards] = useState(initialBoards);
+  const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
+  const { toast } = useToast();
+
+  const handleNewLead = (leadData: any) => {
+    // Adicionar o novo lead na lista "A Fazer"
+    const updatedBoards = boards.map(board => {
+      if (board.id === leadData.status || (board.id === "todo" && !leadData.status)) {
+        return {
+          ...board,
+          cards: [...board.cards, leadData]
+        };
+      }
+      return board;
+    });
+    
+    setBoards(updatedBoards);
+    
+    toast({
+      title: "Lead criado com sucesso!",
+      description: `O lead "${leadData.title}" foi adicionado ao sistema.`,
+    });
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -105,7 +134,7 @@ export default function Leads() {
             <Filter className="w-4 h-4" />
             Filtros
           </Button>
-          <Button className="gap-2 bg-primary hover:bg-primary/90">
+          <Button className="gap-2 bg-primary hover:bg-primary/90" onClick={() => setIsNewLeadModalOpen(true)}>
             <Plus className="w-4 h-4" />
             Novo Lead
           </Button>
@@ -125,7 +154,7 @@ export default function Leads() {
 
       {/* Kanban Board */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-x-auto">
-        {mockBoards.map((board) => (
+        {boards.map((board) => (
           <div key={board.id} className="min-w-[320px]">
             <Card className="h-full border-border bg-card">
               <CardHeader className="pb-3">
@@ -230,6 +259,13 @@ export default function Leads() {
           </div>
         ))}
       </div>
+
+      {/* Modal para Novo Lead */}
+      <NewLeadModal 
+        open={isNewLeadModalOpen}
+        onOpenChange={setIsNewLeadModalOpen}
+        onSave={handleNewLead}
+      />
     </div>
   );
 }
