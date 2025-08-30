@@ -1,0 +1,47 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { LoginForm } from "@/components/auth/LoginForm";
+import { RegisterForm } from "@/components/auth/RegisterForm";
+
+export default function Auth() {
+  const [isLogin, setIsLogin] = useState(true);
+  const navigate = useNavigate();
+
+  const handleLogin = () => {
+    // Mock login - em produção conectar com Supabase
+    navigate("/dashboard");
+  };
+
+  const handleRegister = () => {
+    // Mock register - em produção conectar com Supabase
+    navigate("/dashboard");
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/20 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGRlZnM+CjxwYXR0ZXJuIGlkPSJncmlkIiB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiPgo8cGF0aCBkPSJtIDYwIDAgLTYwIDYwIE0gMzAgMzAgbCAzMCAtMzAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzJkYTdmZjEwIiBzdHJva2Utd2lkdGg9IjEiLz4KPC9wYXR0ZXJuPgo8L2RlZnM+CjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz4KPHN2Zz4=')] opacity-30"></div>
+      
+      <div className="relative z-10 w-full max-w-md animate-fade-in">
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 bg-gradient-to-br from-primary to-secondary rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-2xl">
+            <span className="text-3xl font-bold text-white">M</span>
+          </div>
+          <h1 className="text-4xl font-bold text-foreground mb-2">MetriCom Flow</h1>
+          <p className="text-muted-foreground">Sistema Interno de Gestão</p>
+        </div>
+
+        {isLogin ? (
+          <LoginForm
+            onSwitchToRegister={() => setIsLogin(false)}
+            onLogin={handleLogin}
+          />
+        ) : (
+          <RegisterForm
+            onSwitchToLogin={() => setIsLogin(true)}
+            onRegister={handleRegister}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
