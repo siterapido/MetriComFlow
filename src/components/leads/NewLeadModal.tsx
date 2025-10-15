@@ -8,32 +8,23 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CalendarIcon, X, Plus } from "lucide-react";
+import { CalendarIcon, X, Plus, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useCreateLead } from "@/hooks/useLeads";
+import { useLabels, useAddLabelToLead } from "@/hooks/useLabels";
+import { useToast } from "@/hooks/use-toast";
 
 interface NewLeadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (leadData: any) => void;
+  onSave?: () => void;
 }
-
-const predefinedLabels = [
-  "Urgente",
-  "Comercial", 
-  "Reunião",
-  "Desenvolvimento",
-  "Alta Prioridade",
-  "Baixa Prioridade",
-  "Proposta",
-  "Negociação",
-  "Contrato"
-];
 
 const teamMembers = [
   "João Silva",
-  "Maria Santos", 
+  "Maria Santos",
   "Pedro Costa",
   "Ana Lima",
   "Carlos Oliveira",
@@ -47,74 +38,102 @@ const statusOptions = [
 ];
 
 export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) {
+  const { toast } = useToast();
+  const createLead = useCreateLead();
+  const { data: labels } = useLabels();
+  const addLabelToLead = useAddLabelToLead();
+
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    labels: [] as string[],
+    selectedLabels: [] as string[],
     dueDate: undefined as Date | undefined,
     value: "",
     assignee: "",
-    status: "todo",
-    newLabel: ""
+    status: "todo" as 'todo' | 'doing' | 'done',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.title.trim()) {
-      alert("Título é obrigatório!");
+      toast({
+        title: "Erro",
+        description: "Título é obrigatório!",
+        variant: "destructive"
+      });
       return;
     }
 
-    const leadData = {
-      id: Date.now().toString(),
-      title: formData.title,
-      description: formData.description,
-      labels: formData.labels,
-      dueDate: formData.dueDate?.toISOString().split('T')[0],
-      value: parseInt(formData.value.replace(/\D/g, '')) || 0,
-      assignee: formData.assignee,
-      comments: 0,
-      attachments: 0,
-      checklist: { completed: 0, total: 1 }
-    };
+    setIsSubmitting(true);
 
-    onSave(leadData);
-    resetForm();
-    onOpenChange(false);
+    try {
+      // Parse value to number (remove currency formatting)
+      const valueNumber = formData.value
+        ? parseInt(formData.value.replace(/\D/g, '')) / 100
+        : 0;
+
+      // Create lead
+      const newLead = await createLead.mutateAsync({
+        title: formData.title,
+        description: formData.description || null,
+        status: formData.status,
+        value: valueNumber,
+        due_date: formData.dueDate?.toISOString().split('T')[0] || null,
+        assignee_name: formData.assignee || null,
+        position: 0,
+      });
+
+      // Add labels if any selected
+      if (formData.selectedLabels.length > 0 && newLead) {
+        await Promise.all(
+          formData.selectedLabels.map(labelId =>
+            addLabelToLead.mutateAsync({ leadId: newLead.id, labelId })
+          )
+        );
+      }
+
+      toast({
+        title: "Lead criado com sucesso!",
+        description: `O lead "${formData.title}" foi adicionado ao sistema.`,
+      });
+
+      resetForm();
+      onOpenChange(false);
+      onSave?.();
+    } catch (error) {
+      console.error('Error creating lead:', error);
+      toast({
+        title: "Erro ao criar lead",
+        description: error instanceof Error ? error.message : "Ocorreu um erro desconhecido",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const resetForm = () => {
     setFormData({
       title: "",
       description: "",
-      labels: [],
+      selectedLabels: [],
       dueDate: undefined,
       value: "",
       assignee: "",
       status: "todo",
-      newLabel: ""
     });
   };
 
-  const addLabel = (label: string) => {
-    if (label && !formData.labels.includes(label)) {
-      setFormData({ ...formData, labels: [...formData.labels, label] });
-    }
-  };
-
-  const removeLabel = (labelToRemove: string) => {
-    setFormData({
-      ...formData,
-      labels: formData.labels.filter(label => label !== labelToRemove)
-    });
-  };
-
-  const addCustomLabel = () => {
-    if (formData.newLabel.trim()) {
-      addLabel(formData.newLabel.trim());
-      setFormData({ ...formData, newLabel: "" });
-    }
+  const toggleLabel = (labelId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      selectedLabels: prev.selectedLabels.includes(labelId)
+        ? prev.selectedLabels.filter(id => id !== labelId)
+        : [...prev.selectedLabels, labelId]
+    }));
   };
 
   const formatCurrency = (value: string) => {
@@ -124,6 +143,21 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
       style: 'currency',
       currency: 'BRL'
     }).format(amount / 100);
+  };
+
+  const getLabelColor = (name: string) => {
+    const colors: { [key: string]: string } = {
+      "Urgente": "bg-red-500 hover:bg-red-600",
+      "Comercial": "bg-blue-500 hover:bg-blue-600",
+      "Reunião": "bg-purple-500 hover:bg-purple-600",
+      "Desenvolvimento": "bg-green-500 hover:bg-green-600",
+      "Alta Prioridade": "bg-orange-500 hover:bg-orange-600",
+      "Baixa Prioridade": "bg-gray-500 hover:bg-gray-600",
+      "Proposta": "bg-indigo-500 hover:bg-indigo-600",
+      "Negociação": "bg-pink-500 hover:bg-pink-600",
+      "Contrato": "bg-emerald-500 hover:bg-emerald-600",
+    };
+    return colors[name] || "bg-primary hover:bg-primary/90";
   };
 
   return (
@@ -147,6 +181,7 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               className="bg-input border-border focus:ring-primary"
               required
+              disabled={isSubmitting}
             />
           </div>
 
@@ -159,6 +194,7 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="bg-input border-border focus:ring-primary min-h-[100px]"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -167,7 +203,11 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
             {/* Status */}
             <div className="space-y-2">
               <Label className="text-foreground">Status</Label>
-              <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+              <Select
+                value={formData.status}
+                onValueChange={(value) => setFormData({ ...formData, status: value as 'todo' | 'doing' | 'done' })}
+                disabled={isSubmitting}
+              >
                 <SelectTrigger className="bg-input border-border">
                   <SelectValue placeholder="Selecione o status" />
                 </SelectTrigger>
@@ -184,7 +224,11 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
             {/* Responsável */}
             <div className="space-y-2">
               <Label className="text-foreground">Responsável</Label>
-              <Select value={formData.assignee} onValueChange={(value) => setFormData({ ...formData, assignee: value })}>
+              <Select
+                value={formData.assignee}
+                onValueChange={(value) => setFormData({ ...formData, assignee: value })}
+                disabled={isSubmitting}
+              >
                 <SelectTrigger className="bg-input border-border">
                   <SelectValue placeholder="Selecione o responsável" />
                 </SelectTrigger>
@@ -210,6 +254,7 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
                   setFormData({ ...formData, value: formatted });
                 }}
                 className="bg-input border-border focus:ring-primary"
+                disabled={isSubmitting}
               />
             </div>
 
@@ -220,6 +265,7 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
+                    disabled={isSubmitting}
                     className={cn(
                       "w-full justify-start text-left font-normal bg-input border-border",
                       !formData.dueDate && "text-muted-foreground"
@@ -249,65 +295,52 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
           {/* Etiquetas */}
           <div className="space-y-3">
             <Label className="text-foreground">Etiquetas</Label>
-            
-            {/* Etiquetas selecionadas */}
-            {formData.labels.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {formData.labels.map((label, index) => (
-                  <Badge
-                    key={index}
-                    variant="secondary"
-                    className="flex items-center gap-1 bg-primary text-primary-foreground"
-                  >
-                    {label}
-                    <X
-                      className="w-3 h-3 cursor-pointer hover:text-destructive"
-                      onClick={() => removeLabel(label)}
-                    />
-                  </Badge>
-                ))}
-              </div>
-            )}
 
-            {/* Etiquetas predefinidas */}
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Etiquetas predefinidas:</p>
-              <div className="flex flex-wrap gap-2">
-                {predefinedLabels.map((label) => (
-                  <Badge
-                    key={label}
-                    variant="outline"
-                    className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
-                    onClick={() => addLabel(label)}
-                  >
-                    {label}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-
-            {/* Nova etiqueta customizada */}
-            <div className="flex gap-2">
-              <Input
-                placeholder="Nova etiqueta..."
-                value={formData.newLabel}
-                onChange={(e) => setFormData({ ...formData, newLabel: e.target.value })}
-                className="bg-input border-border focus:ring-primary"
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomLabel())}
-              />
-              <Button type="button" onClick={addCustomLabel} size="sm" className="gap-1">
-                <Plus className="w-3 h-3" />
-                Adicionar
-              </Button>
+            {/* Etiquetas disponíveis */}
+            <div className="flex flex-wrap gap-2">
+              {labels?.map((label) => (
+                <Badge
+                  key={label.id}
+                  variant={formData.selectedLabels.includes(label.id) ? "default" : "outline"}
+                  className={cn(
+                    "cursor-pointer transition-colors",
+                    formData.selectedLabels.includes(label.id)
+                      ? getLabelColor(label.name) + " text-white"
+                      : "hover:bg-accent"
+                  )}
+                  onClick={() => !isSubmitting && toggleLabel(label.id)}
+                >
+                  {label.name}
+                  {formData.selectedLabels.includes(label.id) && (
+                    <X className="w-3 h-3 ml-1" />
+                  )}
+                </Badge>
+              ))}
             </div>
           </div>
 
           <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
+            >
               Cancelar
             </Button>
-            <Button type="submit" className="bg-primary hover:bg-primary/90">
-              Criar Lead
+            <Button
+              type="submit"
+              className="bg-primary hover:bg-primary/90"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Criando...
+                </>
+              ) : (
+                'Criar Lead'
+              )}
             </Button>
           </DialogFooter>
         </form>

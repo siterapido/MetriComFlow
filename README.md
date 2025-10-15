@@ -1,10 +1,33 @@
-# Welcome to your Lovable project
+# Metricom Flow CRM
 
-## Project info
+> Sistema de CRM moderno para gestão de leads, metas e faturamento B2B
 
-**URL**: https://lovable.dev/projects/9857f451-8bd1-47f6-9f7c-40342942a99a
+**URL Lovable**: https://lovable.dev/projects/9857f451-8bd1-47f6-9f7c-40342942a99a
 
-## How can I edit this code?
+## 🚀 Tecnologias
+
+- **Frontend**: React 18 + TypeScript + Vite
+- **UI Components**: shadcn-ui + Tailwind CSS
+- **Database**: Supabase (PostgreSQL)
+- **State Management**: TanStack Query
+- **Charts**: Recharts
+- **Drag & Drop**: @hello-pangea/dnd
+- **Forms**: React Hook Form + Zod
+
+## 📋 Funcionalidades
+
+- 🎯 **Kanban Board** - Gestão de leads com drag-and-drop
+- 📊 **Dashboard** - KPIs e gráficos de faturamento
+- 🎯 **Metas** - Acompanhamento de goals por cliente
+- 🏷️ **Labels** - Sistema de tags customizáveis
+- 📝 **Checklist** - Tasks dentro de cada lead
+- 💬 **Comentários** - Colaboração em tempo real
+- 📎 **Anexos** - Upload de arquivos
+- 🔄 **Histórico** - Audit trail de atividades
+- 🎨 **Dark Mode** - Tema escuro moderno
+- 📱 **Responsivo** - Mobile-first design
+
+## 🛠️ Como editar este código?
 
 There are several ways of editing your application.
 
@@ -50,15 +73,38 @@ npm run dev
 - Click on "New codespace" to launch a new Codespace environment.
 - Edit files directly within the Codespace and commit and push your changes once you're done.
 
-## What technologies are used for this project?
+## 🗂️ Estrutura do Projeto
 
-This project is built with:
+```
+metricom-flow/
+├── src/
+│   ├── components/      # UI components
+│   ├── pages/           # Dashboard, Leads, Metas
+│   ├── lib/             # Supabase client & types
+│   └── hooks/           # Custom hooks
+├── supabase/
+│   └── migrations/      # Database schema
+├── DATABASE.md          # Database docs
+├── SETUP_SUPABASE.md    # Setup guide
+└── CLAUDE.md            # AI instructions
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 🔧 Setup do Banco de Dados
+
+Este projeto usa **Supabase** como backend. Siga o guia completo:
+
+**→ [SETUP_SUPABASE.md](./SETUP_SUPABASE.md)**
+
+Resumo:
+1. Crie projeto no [Supabase](https://supabase.com)
+2. Configure `.env` com as credenciais
+3. Execute o SQL em `supabase/migrations/001_initial_schema.sql`
+
+## 📚 Documentação
+
+- **[DATABASE.md](./DATABASE.md)** - Schema completo e API reference
+- **[SETUP_SUPABASE.md](./SETUP_SUPABASE.md)** - Guia de setup passo a passo
+- **[CLAUDE.md](./CLAUDE.md)** - Instruções para Claude Code
 
 ## How can I deploy this project?
 

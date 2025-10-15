@@ -1,4 +1,4 @@
-import { BarChart3, Users, Target, LayoutDashboard } from "lucide-react";
+import { BarChart3, Users, Target, LayoutDashboard, Settings } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -28,6 +28,11 @@ const items = [
     url: "/metas",
     icon: Target,
   },
+  {
+    title: "Configurar Meta Ads",
+    url: "/meta-ads-config",
+    icon: Settings,
+  },
 ];
 
 export function AppSidebar() {
@@ -38,7 +43,7 @@ export function AppSidebar() {
   const isCollapsed = state === "collapsed";
 
   return (
-    <Sidebar className={isCollapsed ? "w-14" : "w-64"} collapsible="icon">
+    <Sidebar collapsible="icon">
       <SidebarContent>
         <div className="p-4 border-b border-sidebar-border">
           <div className="flex items-center gap-2">
