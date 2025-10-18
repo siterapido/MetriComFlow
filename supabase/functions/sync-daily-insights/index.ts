@@ -38,10 +38,10 @@ Deno.serve(async (req: Request) => {
     // Inicializar cliente Supabase
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Obter todas as contas de anúncios ativas
+    // Obter todas as contas de anúncios ativas (precisamos de id para filtrar campanhas e external_id para chamar a API do Meta)
     const { data: adAccounts, error: accountsError } = await supabase
       .from('ad_accounts')
-      .select('external_id');
+      .select('id, external_id');
 
     if (accountsError) {
       throw new Error(`Error fetching ad accounts: ${accountsError.message}`);
@@ -63,7 +63,7 @@ Deno.serve(async (req: Request) => {
         const { data: campaigns, error: campaignsError } = await supabase
           .from('ad_campaigns')
           .select('id, external_id')
-          .eq('ad_account_id', account.external_id);
+          .eq('ad_account_id', account.id);
 
         if (campaignsError) {
           console.error(`Error fetching campaigns for account ${account.external_id}:`, campaignsError);
@@ -80,7 +80,7 @@ Deno.serve(async (req: Request) => {
         yesterday.setDate(yesterday.getDate() - 1);
         const dateStr = yesterday.toISOString().split('T')[0];
 
-        const metaUrl = `https://graph.facebook.com/v18.0/act_${account.external_id}/insights` +
+        const metaUrl = `https://graph.facebook.com/v24.0/act_${account.external_id}/insights` +
           `?fields=campaign_id,date_start,spend,impressions,clicks,actions` +
           `&filtering=[{"field":"campaign.id","operator":"IN","value":["${campaignIds.replace(/,/g, '","')}"]}]` +
           `&time_range={"since":"${dateStr}","until":"${dateStr}"}` +

@@ -1,5 +1,17 @@
+// @ts-nocheck
+// Declare Deno for TypeScript editors that don't load the Edge Runtime types
+declare const Deno: {
+  serve: (handler: (req: Request) => Promise<Response> | Response) => void;
+  env: { get: (name: string) => string | undefined };
+};
+
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+
+// Load Supabase client dynamically to avoid module resolution issues in editors
+async function loadCreateClient() {
+  const mod = await import("jsr:@supabase/supabase-js@2");
+  return mod.createClient;
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,10 +44,12 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    // Read env with fallback names (CLI forbids SUPABASE_* in secrets sometimes)
+    const SUPABASE_URL = Deno.env.get('PROJECT_URL') ?? Deno.env.get('SUPABASE_URL') ?? '';
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+    const createClient = await loadCreateClient();
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Get user from Authorization header
     const authHeader = req.headers.get('Authorization');
@@ -52,23 +66,82 @@ Deno.serve(async (req) => {
 
     const { action, code, redirect_uri }: MetaAuthRequest = await req.json();
 
-    const META_APP_ID = Deno.env.get('META_APP_ID');
-    const META_APP_SECRET = Deno.env.get('META_APP_SECRET');
+    // Try to read secrets from environment first (Supabase Functions secrets)
+    let META_APP_ID = Deno.env.get('META_APP_ID');
+    let META_APP_SECRET = Deno.env.get('META_APP_SECRET');
+
+    // Fallback: read from Supabase Vault via RPC if not present in env
+    if (!META_APP_ID) {
+      try {
+        const { data: appId, error: appIdError } = await supabase.rpc('get_vault_secret', { secret_name: 'META_APP_ID' });
+        if (!appIdError && appId) META_APP_ID = appId as string;
+      } catch (e) {
+        console.error('Vault fallback error (META_APP_ID):', e);
+      }
+    }
+
+    if (!META_APP_SECRET) {
+      try {
+        const { data: appSecret, error: appSecretError } = await supabase.rpc('get_vault_secret', { secret_name: 'META_APP_SECRET' });
+        if (!appSecretError && appSecret) META_APP_SECRET = appSecret as string;
+      } catch (e) {
+        console.error('Vault fallback error (META_APP_SECRET):', e);
+      }
+    }
     
     if (!META_APP_ID || !META_APP_SECRET) {
-      throw new Error('Meta app credentials not configured');
+      console.error('Meta app credentials not configured:', {
+        hasAppId: !!META_APP_ID,
+        hasAppSecret: !!META_APP_SECRET
+      });
+      throw new Error('Meta app credentials not configured. Please check META_APP_ID and META_APP_SECRET in Supabase Vault.');
+    }
+
+    // Validate App ID format (should be numeric)
+    console.log('==================== META AUTH DEBUG ====================');
+    console.log('Action:', action);
+    console.log('META_APP_ID:', META_APP_ID);
+    console.log('META_APP_ID length:', META_APP_ID?.length);
+    console.log('META_APP_ID is numeric:', /^\d+$/.test(META_APP_ID || ''));
+    console.log('Expected APP_ID: 336112808735379 (CRMads)');
+    console.log('User ID:', user.id);
+    console.log('Origin:', req.headers.get('origin'));
+    console.log('Redirect URI:', redirect_uri || `${req.headers.get('origin')}/meta-ads-config`);
+    console.log('========================================================');
+
+    if (!META_APP_ID || !/^\d+$/.test(META_APP_ID)) {
+      console.error('❌ Invalid Meta App ID format:', META_APP_ID);
+      throw new Error(`Invalid Meta App ID format. App ID should be numeric. Received: ${META_APP_ID}`);
+    }
+
+    // Verificar se é o App ID correto
+    const EXPECTED_APP_ID = '336112808735379';
+    if (META_APP_ID !== EXPECTED_APP_ID) {
+      console.warn('⚠️  WARNING: Using different App ID than expected!');
+      console.warn('   Expected:', EXPECTED_APP_ID, '(CRMads)');
+      console.warn('   Received:', META_APP_ID);
+    } else {
+      console.log('✅ Using correct App ID: CRMads');
     }
 
     if (action === 'get_auth_url') {
       // Generate OAuth URL for Meta Business Manager
-      const scopes = [
+      // Scopes requested by product requirements:
+      // - ads_management: manage ad accounts/campaigns
+      // - read_insights: read insights/metrics
+      // - business_management: manage Business Manager assets
+      // Optionally include leads_retrieval for future Lead Ads usage
+      const requestedScopes = [
+        'ads_management',
         'ads_read',
-        'pages_manage_ads',
-        'leads_retrieval',
-        'business_management'
-      ].join(',');
+        'business_management',
+        'leads_retrieval', // optional; safe for apps with this permission approved or in dev with testers
+      ];
 
-      const baseUrl = 'https://www.facebook.com/v18.0/dialog/oauth';
+      const scopes = requestedScopes.join(',');
+
+      // Use Graph API v24.0 by default
+      const baseUrl = 'https://www.facebook.com/v24.0/dialog/oauth';
       const params = new URLSearchParams({
         client_id: META_APP_ID,
         redirect_uri: redirect_uri || `${req.headers.get('origin')}/meta-ads-config`,
@@ -94,7 +167,8 @@ Deno.serve(async (req) => {
       }
 
       // Exchange code for access token
-      const tokenUrl = 'https://graph.facebook.com/v18.0/oauth/access_token';
+      // Token exchange endpoint (Graph API v24.0)
+      const tokenUrl = 'https://graph.facebook.com/v24.0/oauth/access_token';
       const tokenParams = new URLSearchParams({
         client_id: META_APP_ID,
         client_secret: META_APP_SECRET,
@@ -106,13 +180,30 @@ Deno.serve(async (req) => {
       
       if (!tokenResponse.ok) {
         const errorData = await tokenResponse.text();
-        throw new Error(`Token exchange failed: ${errorData}`);
+        console.error('Meta OAuth token exchange failed:', {
+          status: tokenResponse.status,
+          statusText: tokenResponse.statusText,
+          error: errorData,
+          appId: META_APP_ID
+        });
+        
+        // Parse error for more specific messages
+        try {
+          const errorJson = JSON.parse(errorData);
+          if (errorJson.error?.code === 100 && errorJson.error?.message?.includes('Invalid application ID')) {
+            throw new Error(`Invalid Meta App ID (${META_APP_ID}). Please verify the App ID in Meta for Developers and update META_APP_ID in Supabase Vault.`);
+          }
+          throw new Error(`Meta OAuth error: ${errorJson.error?.message || errorData}`);
+        } catch (parseError) {
+          throw new Error(`Token exchange failed: ${errorData}`);
+        }
       }
 
       const tokenData: MetaTokenResponse = await tokenResponse.json();
 
       // Get user info from Meta
-      const userInfoUrl = `https://graph.facebook.com/v18.0/me?access_token=${tokenData.access_token}&fields=id,name,email`;
+      // Fetch user info (Graph API v24.0)
+      const userInfoUrl = `https://graph.facebook.com/v24.0/me?access_token=${tokenData.access_token}&fields=id,name,email`;
       const userResponse = await fetch(userInfoUrl);
       
       if (!userResponse.ok) {
@@ -122,6 +213,7 @@ Deno.serve(async (req) => {
       const userData: MetaUserResponse = await userResponse.json();
 
       // Store the connection in the database
+      // Use upsert with the unique constraint (user_id, meta_user_id)
       const { error: insertError } = await supabase
         .from('meta_business_connections')
         .upsert({
@@ -130,11 +222,14 @@ Deno.serve(async (req) => {
           meta_user_name: userData.name,
           meta_user_email: userData.email,
           access_token: tokenData.access_token,
-          token_expires_at: tokenData.expires_in 
+          token_expires_at: tokenData.expires_in
             ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
             : null,
           connected_at: new Date().toISOString(),
           is_active: true,
+        }, {
+          onConflict: 'user_id,meta_user_id',
+          ignoreDuplicates: false
         });
 
       if (insertError) {
@@ -143,29 +238,27 @@ Deno.serve(async (req) => {
       }
 
       // Get ad accounts accessible to this user
-      const adAccountsUrl = `https://graph.facebook.com/v18.0/me/adaccounts?access_token=${tokenData.access_token}&fields=id,name,account_status,currency,timezone_name`;
+      // List ad accounts (Graph API v24.0)
+      const adAccountsUrl = `https://graph.facebook.com/v24.0/me/adaccounts?access_token=${tokenData.access_token}&fields=id,name,account_status,currency,timezone_name`;
       const adAccountsResponse = await fetch(adAccountsUrl);
       
       if (adAccountsResponse.ok) {
         const adAccountsData = await adAccountsResponse.json();
         
-        // Store ad accounts
+        // Store ad accounts aligned with current schema (external_id + connected_by)
         if (adAccountsData.data && adAccountsData.data.length > 0) {
-          const adAccountsToInsert = adAccountsData.data.map((account: any) => ({
-            user_id: user.id,
-            ad_account_id: account.id,
-            name: account.name,
-            account_status: account.account_status,
-            currency: account.currency,
-            timezone_name: account.timezone_name,
-            platform: 'meta_ads',
-            is_active: account.account_status === 1, // 1 = ACTIVE
-            connected_at: new Date().toISOString(),
+          const adAccountsToUpsert = adAccountsData.data.map((account: any) => ({
+            external_id: account.id,
+            business_name: account.name,
+            // Align with schema: provider should be 'meta'
+            provider: 'meta',
+            connected_by: user.id,
+            updated_at: new Date().toISOString(),
           }));
 
           await supabase
             .from('ad_accounts')
-            .upsert(adAccountsToInsert, { onConflict: 'ad_account_id' });
+            .upsert(adAccountsToUpsert, { onConflict: 'external_id' });
         }
       }
 

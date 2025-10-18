@@ -62,3 +62,21 @@ export function useUpdateClientGoal() {
     },
   })
 }
+
+export function useDeleteClientGoal() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('client_goals')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['client-goals'] })
+    },
+  })
+}

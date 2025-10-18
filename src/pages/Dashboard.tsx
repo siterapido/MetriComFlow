@@ -1,13 +1,30 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Filter, TrendingUp, DollarSign, Target, Loader2 } from "lucide-react";
+import { Filter, TrendingUp, DollarSign, Target, Loader2, Users, BarChart3 } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { useDashboardKPIs, useRevenueRecords } from "@/hooks/useDashboard";
-import { useMemo } from "react";
+import { useDashboardSummary, useRevenueRecords, useMetaKPIs } from "@/hooks/useDashboard";
+import { MetricCard } from "@/components/metrics/MetricCard";
+import { formatCurrency, formatNumber } from "@/lib/formatters";
+import { useMemo, useState } from "react";
+import { MetaAdsFilters, type FilterValues } from "@/components/meta-ads/MetaAdsFilters";
+import { MetaAdsChart } from "@/components/meta-ads/MetaAdsChart";
+import { MetaAdsKPICards, MetaAdsDetailedMetrics } from "@/components/meta-ads/MetaAdsKPICards";
+import { useFilteredInsights, useMetricsSummary, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
 
 export default function Dashboard() {
-  const { data: kpis, isLoading: kpisLoading } = useDashboardKPIs();
+  const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
+  const { data: metaKPIs, isLoading: metaLoading } = useMetaKPIs();
   const { data: revenueRecords, isLoading: revenueLoading } = useRevenueRecords(undefined, new Date().getFullYear());
+
+  // Meta Ads filters state
+  const [metaFilters, setMetaFilters] = useState<FilterValues>({
+    period: '90',
+    dateRange: getLastNDaysDateRange(90),
+  });
+
+  // Fetch filtered Meta Ads data
+  const { data: metaInsights, isLoading: insightsLoading } = useFilteredInsights(metaFilters);
+  const { data: metaSummary, isLoading: summaryMetaLoading } = useMetricsSummary(metaFilters);
 
   // Transform revenue records into chart data
   const chartData = useMemo(() => {
@@ -43,7 +60,7 @@ export default function Dashboard() {
       .map(month => grouped[month]);
   }, [revenueRecords]);
 
-  const isLoading = kpisLoading || revenueLoading;
+  const isLoading = summaryLoading || metaLoading || revenueLoading;
 
   if (isLoading) {
     return (
@@ -78,7 +95,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">
-              {kpis ? `R$ ${(kpis.faturamento_mensal || 0).toLocaleString("pt-BR")}` : 'R$ 0'}
+              {summary ? `R$ ${((summary.faturamento_mensal || 0)).toLocaleString("pt-BR")}` : 'R$ 0'}
             </div>
             <p className="text-xs text-primary">Meta mensal</p>
           </CardContent>
@@ -93,10 +110,10 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">
-              {kpis ? `R$ ${((kpis.faturamento_anual || 0) / 1000).toFixed(1)}k` : 'R$ 0'}
+              {summary ? `R$ ${((summary.faturamento_anual || 0) / 1000).toFixed(1)}k` : 'R$ 0'}
             </div>
             <p className="text-xs text-secondary">
-              Meta: R$ {kpis ? ((kpis.faturamento_anual || 0) * 1.2 / 1000).toFixed(1) : '0'}k
+              Meta: R$ {summary ? ((summary.faturamento_anual || 0) * 1.2 / 1000).toFixed(1) : '0'}k
             </p>
           </CardContent>
         </Card>
@@ -110,13 +127,49 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">
-              {kpis?.oportunidades_ativas || 0}
+              {summary?.oportunidades_ativas || 0}
             </div>
             <p className="text-xs text-accent">
-              R$ {((kpis?.pipeline_value || 0) / 1000).toFixed(0)}k em pipeline
+              R$ {((summary?.pipeline_value || 0) / 1000).toFixed(0)}k em pipeline
             </p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Meta Ads KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <MetricCard
+          title="Investimento Meta Ads"
+          value={metaKPIs?.investimento_total || 0}
+          format="currency"
+          icon={DollarSign}
+          iconColor="text-blue-500"
+          subtitle="Mês atual"
+        />
+        <MetricCard
+          title="Leads Gerados"
+          value={metaKPIs?.leads_gerados || 0}
+          format="number"
+          icon={Users}
+          iconColor="text-green-500"
+          subtitle="Via Meta Ads"
+        />
+        <MetricCard
+          title="CPL (Custo por Lead)"
+          value={metaKPIs?.cpl || 0}
+          format="currency"
+          icon={Target}
+          iconColor="text-purple-500"
+          subtitle={metaKPIs?.cpl && metaKPIs.cpl < 50 ? 'Excelente' : 'Monitorar'}
+        />
+        <MetricCard
+          title="ROAS"
+          value={metaKPIs?.roas ? `${metaKPIs.roas.toFixed(2)}x` : '0x'}
+          format="none"
+          icon={BarChart3}
+          iconColor={metaKPIs?.roas && metaKPIs.roas >= 3 ? 'text-success' : 'text-warning'}
+          subtitle={metaKPIs?.roas && metaKPIs.roas >= 3 ? 'Saudável (≥3)' : 'Melhorar'}
+        />
       </div>
 
       {/* Charts Grid */}
@@ -162,7 +215,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Faturamento Clientes Chart */}
+          {/* Faturamento Clientes */}
           <Card className="border-border bg-card">
             <CardHeader>
               <CardTitle className="text-foreground">Faturamento Clientes</CardTitle>
@@ -183,6 +236,7 @@ export default function Dashboard() {
                       borderRadius: "8px",
                       color: "#F9FAFB"
                     }}
+                    formatter={(value: any) => [formatCurrency(value), '']}
                   />
                   <Bar dataKey="clientes" fill="#0D9DFF" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -190,7 +244,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Oportunidades Chart */}
+          {/* Oportunidades */}
           <Card className="border-border bg-card">
             <CardHeader>
               <CardTitle className="text-foreground">Oportunidades</CardTitle>
@@ -211,29 +265,14 @@ export default function Dashboard() {
                       borderRadius: "8px",
                       color: "#F9FAFB"
                     }}
+                    formatter={(value: any) => [formatCurrency(value), '']}
                   />
-                  <Line
-                    type="monotone"
-                    dataKey="oportunidades"
-                    stroke="#0D9DFF"
-                    strokeWidth={3}
-                    dot={{ fill: "#0D9DFF", strokeWidth: 2, r: 4 }}
-                  />
+                  <Line type="monotone" dataKey="oportunidades" stroke="#22C55E" strokeWidth={3} dot={{ r: 2 }} />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
         </div>
-      )}
-
-      {chartData.length === 0 && !isLoading && (
-        <Card className="border-border bg-card">
-          <CardContent className="flex items-center justify-center h-48">
-            <p className="text-muted-foreground">
-              Nenhum dado de faturamento disponível. Adicione registros de receita para visualizar os gráficos.
-            </p>
-          </CardContent>
-        </Card>
       )}
     </div>
   );

@@ -17,6 +17,7 @@ export type Database = {
           external_id: string
           id: string
           provider: string | null
+          is_active: boolean | null
           updated_at: string | null
         }
         Insert: {
@@ -26,6 +27,7 @@ export type Database = {
           external_id: string
           id?: string
           provider?: string | null
+          is_active?: boolean | null
           updated_at?: string | null
         }
         Update: {
@@ -35,6 +37,7 @@ export type Database = {
           external_id?: string
           id?: string
           provider?: string | null
+          is_active?: boolean | null
           updated_at?: string | null
         }
         Relationships: [
@@ -46,6 +49,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      meta_business_connections: {
+        Row: {
+          id: string
+          user_id: string
+          meta_user_id: string
+          meta_user_name: string
+          meta_user_email: string | null
+          access_token: string
+          token_expires_at: string | null
+          connected_at: string | null
+          is_active: boolean | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          meta_user_id: string
+          meta_user_name: string
+          meta_user_email?: string | null
+          access_token: string
+          token_expires_at?: string | null
+          connected_at?: string | null
+          is_active?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          meta_user_id?: string
+          meta_user_name?: string
+          meta_user_email?: string | null
+          access_token?: string
+          token_expires_at?: string | null
+          connected_at?: string | null
+          is_active?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       ad_campaigns: {
         Row: {

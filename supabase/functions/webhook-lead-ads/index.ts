@@ -1,6 +1,61 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+// Verify webhook signature from Meta (Facebook) using App Secret
+async function verifyMetaSignature(req: Request, rawBody: string): Promise<boolean> {
+  try {
+    const appSecret = Deno.env.get('META_APP_SECRET');
+    if (!appSecret) {
+      console.warn('META_APP_SECRET not set; skipping signature verification');
+      return true; // Allow processing but log warning
+    }
+
+    const sig256 = req.headers.get('x-hub-signature-256');
+    const sig1 = req.headers.get('x-hub-signature');
+
+    const encoder = new TextEncoder();
+
+    // Prefer SHA-256 if present
+    if (sig256) {
+      const elements = sig256.split('=');
+      const received = elements[1]?.toLowerCase();
+      const key = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(appSecret),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      );
+      const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(rawBody));
+      const hex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+      return received === hex;
+    }
+
+    // Fallback to SHA-1 header if provided
+    if (sig1) {
+      const elements = sig1.split('=');
+      const received = elements[1]?.toLowerCase();
+      const key = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(appSecret),
+        { name: 'HMAC', hash: 'SHA-1' },
+        false,
+        ['sign']
+      );
+      const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(rawBody));
+      const hex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+      return received === hex;
+    }
+
+    // No signature header present
+    console.warn('No X-Hub-Signature headers present; skipping verification');
+    return true;
+  } catch (e) {
+    console.error('Error verifying Meta webhook signature:', e);
+    return false;
+  }
+}
+
 interface MetaLeadData {
   id: string;
   created_time: string;
@@ -64,8 +119,20 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      // Read raw body for signature verification
+      const rawBody = await req.text();
+      const isValid = await verifyMetaSignature(req, rawBody);
+      if (!isValid) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid webhook signature' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Parse JSON after verifying signature
+      const body = JSON.parse(rawBody);
+
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-      const body = await req.json();
 
       console.log('Received webhook:', JSON.stringify(body, null, 2));
 
@@ -79,7 +146,7 @@ Deno.serve(async (req: Request) => {
               const leadgenId = change.value.leadgen_id;
               
               // Buscar dados completos do lead no Meta Ads
-              const leadUrl = `https://graph.facebook.com/v18.0/${leadgenId}` +
+              const leadUrl = `https://graph.facebook.com/v24.0/${leadgenId}` +
                 `?fields=id,created_time,ad_id,adset_id,campaign_id,form_id,field_data` +
                 `&access_token=${META_ACCESS_TOKEN}`;
 

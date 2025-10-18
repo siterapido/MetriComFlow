@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { useCreateLead } from "@/hooks/useLeads";
 import { useLabels, useAddLabelToLead } from "@/hooks/useLabels";
 import { useToast } from "@/hooks/use-toast";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
 
 interface NewLeadModalProps {
   open: boolean;
@@ -22,19 +23,15 @@ interface NewLeadModalProps {
   onSave?: () => void;
 }
 
-const teamMembers = [
-  "João Silva",
-  "Maria Santos",
-  "Pedro Costa",
-  "Ana Lima",
-  "Carlos Oliveira",
-  "Beatriz Ferreira"
-];
+// Team members are fetched from Supabase via useTeamMembers
 
 const statusOptions = [
-  { value: "todo", label: "Leads frio" },
-  { value: "doing", label: "Em Andamento" },
-  { value: "done", label: "Contrato fechado" }
+  { value: "novo_lead", label: "Novo Lead" },
+  { value: "qualificacao", label: "Qualificação" },
+  { value: "proposta", label: "Proposta" },
+  { value: "negociacao", label: "Negociação" },
+  { value: "fechado_ganho", label: "Fechado - Ganho" },
+  { value: "fechado_perdido", label: "Fechado - Perdido" }
 ];
 
 export function NewLeadModalSupabase({ open, onOpenChange, onSave }: NewLeadModalProps) {
@@ -42,6 +39,7 @@ export function NewLeadModalSupabase({ open, onOpenChange, onSave }: NewLeadModa
   const createLead = useCreateLead();
   const { data: labels } = useLabels();
   const addLabelToLead = useAddLabelToLead();
+  const { data: teamMembers } = useTeamMembers();
 
   const [formData, setFormData] = useState({
     title: "",
@@ -49,8 +47,8 @@ export function NewLeadModalSupabase({ open, onOpenChange, onSave }: NewLeadModa
     selectedLabels: [] as string[],
     dueDate: undefined as Date | undefined,
     value: "",
-    assignee: "",
-    status: "todo" as 'todo' | 'doing' | 'done',
+    assigneeId: "",
+    status: "novo_lead",
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,6 +73,8 @@ export function NewLeadModalSupabase({ open, onOpenChange, onSave }: NewLeadModa
         ? parseInt(formData.value.replace(/\D/g, '')) / 100
         : 0;
 
+      const selectedAssigneeName = teamMembers?.find(m => m.id === formData.assigneeId)?.name ?? null;
+
       // Create lead
       const newLead = await createLead.mutateAsync({
         title: formData.title,
@@ -82,7 +82,8 @@ export function NewLeadModalSupabase({ open, onOpenChange, onSave }: NewLeadModa
         status: formData.status,
         value: valueNumber,
         due_date: formData.dueDate?.toISOString().split('T')[0] || null,
-        assignee_name: formData.assignee || null,
+        assignee_id: formData.assigneeId || null,
+        assignee_name: selectedAssigneeName,
         position: 0,
       });
 
@@ -122,8 +123,8 @@ export function NewLeadModalSupabase({ open, onOpenChange, onSave }: NewLeadModa
       selectedLabels: [],
       dueDate: undefined,
       value: "",
-      assignee: "",
-      status: "todo",
+      assigneeId: "",
+      status: "novo_lead",
     });
   };
 
@@ -205,7 +206,7 @@ export function NewLeadModalSupabase({ open, onOpenChange, onSave }: NewLeadModa
               <Label className="text-foreground">Status</Label>
               <Select
                 value={formData.status}
-                onValueChange={(value) => setFormData({ ...formData, status: value as 'todo' | 'doing' | 'done' })}
+                onValueChange={(value) => setFormData({ ...formData, status: value })}
                 disabled={isSubmitting}
               >
                 <SelectTrigger className="bg-input border-border">
@@ -225,19 +226,25 @@ export function NewLeadModalSupabase({ open, onOpenChange, onSave }: NewLeadModa
             <div className="space-y-2">
               <Label className="text-foreground">Responsável</Label>
               <Select
-                value={formData.assignee}
-                onValueChange={(value) => setFormData({ ...formData, assignee: value })}
+                value={formData.assigneeId}
+                onValueChange={(value) => setFormData({ ...formData, assigneeId: value })}
                 disabled={isSubmitting}
               >
                 <SelectTrigger className="bg-input border-border">
                   <SelectValue placeholder="Selecione o responsável" />
                 </SelectTrigger>
                 <SelectContent>
-                  {teamMembers.map((member) => (
-                    <SelectItem key={member} value={member}>
-                      {member}
+                  {teamMembers && teamMembers.length > 0 ? (
+                    teamMembers.map((member) => (
+                      <SelectItem key={member.id} value={member.id}>
+                        {member.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="none" disabled>
+                      Nenhum membro disponível
                     </SelectItem>
-                  ))}
+                  )}
                 </SelectContent>
               </Select>
             </div>

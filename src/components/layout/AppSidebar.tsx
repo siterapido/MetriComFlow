@@ -1,4 +1,4 @@
-import { BarChart3, Users, Target, LayoutDashboard, Settings } from "lucide-react";
+import { BarChart3, Users, Target, LayoutDashboard, Settings, TrendingUp } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -27,6 +27,11 @@ const items = [
     title: "Metas dos Clientes",
     url: "/metas",
     icon: Target,
+  },
+  {
+    title: "Métricas Meta Ads",
+    url: "/metrics",
+    icon: TrendingUp,
   },
   {
     title: "Configurar Meta Ads",

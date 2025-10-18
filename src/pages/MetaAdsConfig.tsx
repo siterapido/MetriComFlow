@@ -2,44 +2,71 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { 
-  Facebook, 
-  CheckCircle, 
-  AlertCircle, 
-  Settings, 
-  Plus,
-  Search,
+import {
+  Facebook,
+  CheckCircle,
+  AlertCircle,
+  Settings,
   ExternalLink,
   Info,
   Loader2,
   Shield,
   Users,
   BarChart3,
-  Target
+  Target,
+  Bug,
+  Zap
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useMetaAuth } from "@/hooks/useMetaAuth";
 import { useToast } from "@/hooks/use-toast";
+import AdAccountsManager from "@/components/meta-ads/AdAccountsManager";
+import AddAdAccountModal from "@/components/meta-ads/AddAdAccountModal";
 
 export default function MetaAdsConfig() {
-  const { 
-    connections, 
-    adAccounts, 
-    loading, 
-    connecting, 
-    connectMetaBusiness, 
+  const {
+    connections,
+    activeAdAccounts,
+    inactiveAdAccounts,
+    loading,
+    connecting,
+    connectMetaBusiness,
     disconnectMetaBusiness,
+    addAdAccount,
+    deactivateAdAccount,
+    activateAdAccount,
+    renameAdAccount,
+    refreshData,
     hasActiveConnection,
-    totalAdAccounts 
+    totalAdAccounts,
+    oauthError
   } = useMetaAuth();
-  
+
   const { toast } = useToast();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [showAddAccountModal, setShowAddAccountModal] = useState(false);
+
+  // Debug info
+  const debugInfo = {
+    metaAppId: import.meta.env.VITE_META_APP_ID,
+    appUrl: import.meta.env.VITE_APP_URL,
+    redirectUri: import.meta.env.VITE_META_REDIRECT_URI || `${window.location.origin}/meta-ads-config`,
+    supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+    environment: import.meta.env.MODE,
+  };
+
+  // Show OAuth errors via toast when present
+  useEffect(() => {
+    if (oauthError) {
+      toast({
+        title: 'Erro de OAuth',
+        description: oauthError,
+        variant: 'destructive',
+      });
+    }
+  }, [oauthError]);
 
   const handleConnectMeta = async () => {
     try {
@@ -73,6 +100,80 @@ export default function MetaAdsConfig() {
     }
   };
 
+  const handleAddAccount = async (accountData: {
+    external_id: string;
+    business_name: string;
+    provider?: string;
+  }) => {
+    try {
+      await addAdAccount(accountData);
+      toast({
+        title: "Conta Adicionada",
+        description: `${accountData.business_name} foi adicionada com sucesso.`,
+      });
+    } catch (error) {
+      console.error('Error adding account:', error);
+      const errorMessage = error instanceof Error ? error.message : "Não foi possível adicionar a conta.";
+      toast({
+        title: "Erro ao Adicionar Conta",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      throw error; // Re-throw to let modal handle it
+    }
+  };
+
+  const handleDeactivateAccount = async (accountId: string) => {
+    try {
+      await deactivateAdAccount(accountId);
+      toast({
+        title: "Conta Desativada",
+        description: "A conta publicitária foi desativada com sucesso. Você pode reativá-la a qualquer momento.",
+      });
+    } catch (error) {
+      console.error('Error deactivating account:', error);
+      toast({
+        title: "Erro ao Desativar Conta",
+        description: "Não foi possível desativar a conta publicitária.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleReactivateAccount = async (accountId: string) => {
+    try {
+      await activateAdAccount(accountId);
+      toast({
+        title: "Conta Reativada",
+        description: "A conta publicitária foi reativada com sucesso.",
+      });
+    } catch (error) {
+      console.error('Error reactivating account:', error);
+      toast({
+        title: "Erro ao Reativar Conta",
+        description: "Não foi possível reativar a conta publicitária.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRenameAccount = async (accountId: string, newName: string) => {
+    try {
+      await renameAdAccount(accountId, newName);
+      toast({
+        title: "Conta Renomeada",
+        description: "O nome da conta foi atualizado com sucesso.",
+      });
+    } catch (error) {
+      console.error('Error renaming account:', error);
+      toast({
+        title: "Erro ao Renomear Conta",
+        description: "Não foi possível renomear a conta publicitária.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -82,53 +183,74 @@ export default function MetaAdsConfig() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Integração Meta Business</h1>
-          <p className="text-muted-foreground">
-            Conecte sua conta do Meta Business Manager para acessar dados de campanhas
-          </p>
+    <div className="space-y-6 animate-fade-in">
+      {/* Header - Seguindo padrão do Dashboard */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-md">
+            <Facebook className="w-7 h-7 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">Integração Meta Business</h1>
+            <p className="text-muted-foreground mt-1">
+              Conecte sua conta do Meta Business Manager para acessar dados de campanhas
+            </p>
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
+          {oauthError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {oauthError}
+              </AlertDescription>
+            </Alert>
+          )}
           {/* Meta Integration Overview */}
-          <Card className="border-2 border-blue-200 bg-blue-50/50">
+          <Card className="bg-gradient-to-br from-card to-accent/20 border-border hover-lift">
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
-                <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
+                <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-sm flex-shrink-0">
                   <Facebook className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-xl font-semibold mb-2">Meta Business Manager</h3>
+                  <h3 className="text-xl font-bold mb-2 text-foreground">Meta Business Manager</h3>
                   <p className="text-muted-foreground mb-4">
-                    Conecte-se ao Meta Business Manager para importar dados de campanhas, 
+                    Conecte-se ao Meta Business Manager para importar dados de campanhas,
                     anúncios e métricas de performance diretamente para o Metricom Flow.
                   </p>
-                  
+
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <div className="text-center">
-                      <BarChart3 className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                      <p className="text-sm font-medium">Métricas</p>
+                      <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center mx-auto mb-2">
+                        <BarChart3 className="w-6 h-6 text-white" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">Métricas</p>
                       <p className="text-xs text-muted-foreground">Dados em tempo real</p>
                     </div>
                     <div className="text-center">
-                      <Target className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                      <p className="text-sm font-medium">Campanhas</p>
+                      <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center mx-auto mb-2">
+                        <Target className="w-6 h-6 text-white" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">Campanhas</p>
                       <p className="text-xs text-muted-foreground">Gestão completa</p>
                     </div>
                     <div className="text-center">
-                      <Users className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                      <p className="text-sm font-medium">Audiências</p>
+                      <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center mx-auto mb-2">
+                        <Users className="w-6 h-6 text-white" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">Audiências</p>
                       <p className="text-xs text-muted-foreground">Segmentação</p>
                     </div>
                     <div className="text-center">
-                      <Shield className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                      <p className="text-sm font-medium">Segurança</p>
+                      <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center mx-auto mb-2">
+                        <Shield className="w-6 h-6 text-white" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">Segurança</p>
                       <p className="text-xs text-muted-foreground">OAuth 2.0</p>
                     </div>
                   </div>
@@ -136,20 +258,20 @@ export default function MetaAdsConfig() {
                   {!hasActiveConnection ? (
                     <Dialog open={showAuthModal} onOpenChange={setShowAuthModal}>
                       <DialogTrigger asChild>
-                        <Button 
+                        <Button
                           onClick={handleConnectMeta}
                           disabled={connecting}
-                          className="bg-blue-600 hover:bg-blue-700"
+                          className="gap-2 bg-primary hover:bg-primary/90"
                           size="lg"
                         >
                           {connecting ? (
                             <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              <Loader2 className="w-4 h-4 animate-spin" />
                               Conectando...
                             </>
                           ) : (
                             <>
-                              <Facebook className="w-4 h-4 mr-2" />
+                              <Facebook className="w-4 h-4" />
                               Conectar com Meta Business
                             </>
                           )}
@@ -207,8 +329,8 @@ export default function MetaAdsConfig() {
                     </Dialog>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
-                      <span className="text-green-600 font-medium">Conectado com sucesso</span>
+                      <CheckCircle className="w-5 h-5 text-success" />
+                      <span className="text-success font-medium">Conectado com sucesso</span>
                     </div>
                   )}
                 </div>
@@ -218,25 +340,25 @@ export default function MetaAdsConfig() {
 
           {/* Connected Accounts */}
           {hasActiveConnection && (
-            <Card>
+            <Card className="border-border bg-card">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-blue-600" />
+                <CardTitle className="flex items-center gap-2 text-foreground">
+                  <Users className="w-5 h-5 text-primary" />
                   Conexões Ativas
                 </CardTitle>
                 <CardDescription>
                   Gerencie suas conexões com o Meta Business Manager
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3">
                 {connections.map((connection) => (
-                  <div key={connection.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div key={connection.id} className="flex items-center justify-between p-4 border-border rounded-lg bg-muted hover-lift">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <Facebook className="w-5 h-5 text-blue-600" />
+                      <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                        <Facebook className="w-5 h-5 text-primary" />
                       </div>
                       <div>
-                        <p className="font-medium">{connection.meta_user_name}</p>
+                        <p className="font-medium text-foreground">{connection.meta_user_name}</p>
                         <p className="text-sm text-muted-foreground">
                           {connection.meta_user_email}
                         </p>
@@ -246,11 +368,11 @@ export default function MetaAdsConfig() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="bg-green-100 text-green-700">
+                      <Badge className="bg-success text-success-foreground">
                         Ativo
                       </Badge>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         onClick={() => handleDisconnect(connection.id)}
                       >
@@ -263,48 +385,24 @@ export default function MetaAdsConfig() {
             </Card>
           )}
 
-          {/* Ad Accounts */}
-          {totalAdAccounts > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Target className="w-5 h-5 text-blue-600" />
-                  Contas Publicitárias ({totalAdAccounts})
-                </CardTitle>
-                <CardDescription>
-                  Contas do Meta Ads disponíveis para importação de dados
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {adAccounts.map((account) => (
-                  <div key={account.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                      <div>
-                        <p className="font-medium">{account.business_name || 'Unnamed Account'}</p>
-                            <p className="text-sm text-muted-foreground">
-                              ID: {account.external_id} • {account.provider}
-                            </p>
-                      </div>
-                    </div>
-                    <Badge 
-                      variant={account.account_status === 1 ? "secondary" : "destructive"}
-                      className={account.account_status === 1 ? "bg-green-100 text-green-700" : ""}
-                    >
-                      {account.account_status === 1 ? "Ativa" : "Inativa"}
-                    </Badge>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+          {/* Ad Accounts Manager */}
+          {hasActiveConnection && (
+            <AdAccountsManager
+              accounts={activeAdAccounts}
+              onRefresh={refreshData}
+              onAdd={() => setShowAddAccountModal(true)}
+              onRemove={handleDeactivateAccount}
+              onRename={handleRenameAccount}
+              isLoading={loading}
+            />
           )}
 
           {/* App Setup Instructions */}
           {!hasActiveConnection && (
-            <Card>
+            <Card className="border-border bg-card">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="w-5 h-5 text-orange-600" />
+                <CardTitle className="flex items-center gap-2 text-foreground">
+                  <Settings className="w-5 h-5 text-warning" />
                   Configuração Necessária
                 </CardTitle>
                 <CardDescription>
@@ -320,41 +418,41 @@ export default function MetaAdsConfig() {
                 </Alert>
                 <div className="space-y-3">
                   <div className="flex gap-3">
-                    <div className="w-6 h-6 bg-orange-600 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                    <div className="w-6 h-6 bg-warning text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
                       1
                     </div>
                     <div>
-                      <p className="font-medium">Criar App no Meta for Developers</p>
+                      <p className="font-medium text-foreground">Criar App no Meta for Developers</p>
                       <p className="text-sm text-muted-foreground">
                         Acesse developers.facebook.com e crie um novo app do tipo "Empresa"
                       </p>
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <div className="w-6 h-6 bg-orange-600 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                    <div className="w-6 h-6 bg-warning text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
                       2
                     </div>
                     <div>
-                      <p className="font-medium">Configurar Produtos</p>
+                      <p className="font-medium text-foreground">Configurar Produtos</p>
                       <p className="text-sm text-muted-foreground">
                         Adicione "Facebook Login" e "Marketing API" ao seu app
                       </p>
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <div className="w-6 h-6 bg-orange-600 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                    <div className="w-6 h-6 bg-warning text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
                       3
                     </div>
                     <div>
-                      <p className="font-medium">Atualizar Credenciais</p>
+                      <p className="font-medium text-foreground">Atualizar Credenciais</p>
                       <p className="text-sm text-muted-foreground">
                         Configure o App ID e App Secret no sistema
                       </p>
                     </div>
                   </div>
                 </div>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full"
                   onClick={() => window.open('/docs/META_APP_SETUP.md', '_blank')}
                 >
@@ -367,43 +465,43 @@ export default function MetaAdsConfig() {
 
           {/* Connection Instructions */}
           {!hasActiveConnection && (
-            <Card>
+            <Card className="border-border bg-card">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Info className="w-5 h-5 text-blue-600" />
+                <CardTitle className="flex items-center gap-2 text-foreground">
+                  <Info className="w-5 h-5 text-primary" />
                   Como Conectar
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3">
                   <div className="flex gap-3">
-                    <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                    <div className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
                       1
                     </div>
                     <div>
-                      <p className="font-medium">Clique em "Conectar com Meta Business"</p>
+                      <p className="font-medium text-foreground">Clique em "Conectar com Meta Business"</p>
                       <p className="text-sm text-muted-foreground">
                         Você será redirecionado para o Meta Business Manager
                       </p>
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                    <div className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
                       2
                     </div>
                     <div>
-                      <p className="font-medium">Autorize as permissões</p>
+                      <p className="font-medium text-foreground">Autorize as permissões</p>
                       <p className="text-sm text-muted-foreground">
                         Conceda acesso às suas contas publicitárias e dados de campanhas
                       </p>
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium">
+                    <div className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
                       3
                     </div>
                     <div>
-                      <p className="font-medium">Comece a usar</p>
+                      <p className="font-medium text-foreground">Comece a usar</p>
                       <p className="text-sm text-muted-foreground">
                         Seus dados do Meta Ads estarão disponíveis no dashboard
                       </p>
@@ -418,35 +516,35 @@ export default function MetaAdsConfig() {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Status Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Status da Integração</CardTitle>
+          <Card className="border-border bg-card">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg text-foreground">Status da Integração</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm">Conexão</span>
+                <span className="text-sm text-muted-foreground">Conexão</span>
                 <div className="flex items-center gap-2">
                   {hasActiveConnection ? (
                     <>
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                      <span className="text-sm text-green-600">Conectado</span>
+                      <div className="w-2 h-2 bg-success rounded-full animate-pulse"></div>
+                      <span className="text-sm font-medium text-success">Conectado</span>
                     </>
                   ) : (
                     <>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                      <span className="text-sm text-gray-600">Desconectado</span>
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full"></div>
+                      <span className="text-sm font-medium text-muted-foreground">Desconectado</span>
                     </>
                   )}
                 </div>
               </div>
-              
+
               <div className="flex items-center justify-between">
-                <span className="text-sm">Contas Publicitárias</span>
-                <span className="text-sm font-medium">{totalAdAccounts}</span>
+                <span className="text-sm text-muted-foreground">Contas Publicitárias</span>
+                <span className="text-sm font-bold text-foreground">{totalAdAccounts}</span>
               </div>
-              
+
               <div className="flex items-center justify-between">
-                <span className="text-sm">Última Sincronização</span>
+                <span className="text-sm text-muted-foreground">Última Sincronização</span>
                 <span className="text-sm text-muted-foreground">
                   {hasActiveConnection ? "Agora" : "Nunca"}
                 </span>
@@ -455,9 +553,9 @@ export default function MetaAdsConfig() {
           </Card>
 
           {/* Help Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Precisa de Ajuda?</CardTitle>
+          <Card className="border-border bg-card">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg text-foreground">Precisa de Ajuda?</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
@@ -469,8 +567,87 @@ export default function MetaAdsConfig() {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Debug Card */}
+          <Card className="border-border bg-card">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2 text-foreground">
+                  <Bug className="w-4 h-4 text-warning" />
+                  Debug
+                </CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowDebug(!showDebug)}
+                >
+                  {showDebug ? 'Ocultar' : 'Mostrar'}
+                </Button>
+              </div>
+            </CardHeader>
+            {showDebug && (
+              <CardContent className="space-y-3">
+                {oauthError && (
+                  <Alert variant="destructive" className="mb-3">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="text-xs">
+                      <strong>Último erro:</strong> {oauthError}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <div className="text-xs font-mono bg-muted p-3 rounded space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Meta App ID:</span>
+                    <span className="font-semibold text-foreground">{debugInfo.metaAppId || 'Not set'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Environment:</span>
+                    <span className="font-semibold text-foreground">{debugInfo.environment}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Redirect URI:</span>
+                    <span className="font-semibold text-foreground text-xs break-all">{debugInfo.redirectUri}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Supabase URL:</span>
+                    <span className="font-semibold text-foreground text-xs break-all">{debugInfo.supabaseUrl}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Connections:</span>
+                    <span className="font-semibold text-foreground">{connections.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Ad Accounts:</span>
+                    <span className="font-semibold text-foreground">{totalAdAccounts}</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Informações de configuração para debug. Verifique se o Meta App ID está correto.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs"
+                    onClick={() => console.log('Debug Info:', { debugInfo, connections, adAccounts, oauthError })}
+                  >
+                    Log Full Debug Info
+                  </Button>
+                </div>
+              </CardContent>
+            )}
+          </Card>
         </div>
       </div>
+
+      {/* Add Account Modal */}
+      <AddAdAccountModal
+        open={showAddAccountModal}
+        onOpenChange={setShowAddAccountModal}
+        onAdd={handleAddAccount}
+        inactiveAccounts={inactiveAdAccounts}
+        onReactivate={handleReactivateAccount}
+      />
     </div>
   );
 }

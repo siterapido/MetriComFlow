@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,13 +8,15 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CalendarIcon, X, Plus, Loader2 } from "lucide-react";
+import { CalendarIcon, X, Plus, Loader2, Facebook } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useCreateLead } from "@/hooks/useLeads";
 import { useLabels, useAddLabelToLead } from "@/hooks/useLabels";
+import { useAdCampaigns } from "@/hooks/useMetaMetrics";
 import { useToast } from "@/hooks/use-toast";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
 
 interface NewLeadModalProps {
   open: boolean;
@@ -22,19 +24,16 @@ interface NewLeadModalProps {
   onSave?: () => void;
 }
 
-const teamMembers = [
-  "João Silva",
-  "Maria Santos",
-  "Pedro Costa",
-  "Ana Lima",
-  "Carlos Oliveira",
-  "Beatriz Ferreira"
-];
+// Fetch team members from Supabase instead of hardcoded list
+// Uses useTeamMembers hook to get real data from the database
 
 const statusOptions = [
-  { value: "todo", label: "Leads frio" },
-  { value: "doing", label: "Em Andamento" },
-  { value: "done", label: "Contrato fechado" }
+  { value: "novo_lead", label: "Novo Lead" },
+  { value: "qualificacao", label: "Qualificação" },
+  { value: "proposta", label: "Proposta" },
+  { value: "negociacao", label: "Negociação" },
+  { value: "fechado_ganho", label: "Fechado - Ganho" },
+  { value: "fechado_perdido", label: "Fechado - Perdido" }
 ];
 
 export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) {
@@ -42,6 +41,8 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
   const createLead = useCreateLead();
   const { data: labels } = useLabels();
   const addLabelToLead = useAddLabelToLead();
+  const { data: campaigns } = useAdCampaigns();
+  const { data: teamMembers } = useTeamMembers();
 
   const [formData, setFormData] = useState({
     title: "",
@@ -49,8 +50,10 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
     selectedLabels: [] as string[],
     dueDate: undefined as Date | undefined,
     value: "",
-    assignee: "",
-    status: "todo" as 'todo' | 'doing' | 'done',
+    assigneeId: "",
+    status: "novo_lead",
+    source: "manual" as 'manual' | 'meta_ads',
+    campaign_id: undefined as string | undefined,
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,16 +78,22 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
         ? parseInt(formData.value.replace(/\D/g, '')) / 100
         : 0;
 
-      // Create lead
-      const newLead = await createLead.mutateAsync({
-        title: formData.title,
-        description: formData.description || null,
-        status: formData.status,
-        value: valueNumber,
-        due_date: formData.dueDate?.toISOString().split('T')[0] || null,
-        assignee_name: formData.assignee || null,
-        position: 0,
-      });
+      const selectedAssigneeName = teamMembers?.find(m => m.id === formData.assigneeId)?.name ?? null;
+
+       // Create lead
+       const newLead = await createLead.mutateAsync({
+         title: formData.title,
+         description: formData.description || null,
+         status: formData.status,
+         value: valueNumber,
+         due_date: formData.dueDate?.toISOString().split('T')[0] || null,
+
+        assignee_id: formData.assigneeId || null,
+        assignee_name: selectedAssigneeName,
+         position: 0,
+         source: formData.source,
+         campaign_id: formData.source === 'meta_ads' ? formData.campaign_id : null,
+       });
 
       // Add labels if any selected
       if (formData.selectedLabels.length > 0 && newLead) {
@@ -122,8 +131,10 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
       selectedLabels: [],
       dueDate: undefined,
       value: "",
-      assignee: "",
-      status: "todo",
+      assigneeId: "",
+      status: "novo_lead",
+      source: "manual",
+      campaign_id: undefined,
     });
   };
 
@@ -205,7 +216,7 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
               <Label className="text-foreground">Status</Label>
               <Select
                 value={formData.status}
-                onValueChange={(value) => setFormData({ ...formData, status: value as 'todo' | 'doing' | 'done' })}
+                onValueChange={(value) => setFormData({ ...formData, status: value })}
                 disabled={isSubmitting}
               >
                 <SelectTrigger className="bg-input border-border">
@@ -221,23 +232,81 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
               </Select>
             </div>
 
+            {/* Origem */}
+            <div className="space-y-2">
+              <Label className="text-foreground">Origem do Lead</Label>
+              <Select
+                value={formData.source}
+                onValueChange={(value: 'manual' | 'meta_ads') => setFormData({ ...formData, source: value, campaign_id: value === 'manual' ? undefined : formData.campaign_id })}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="bg-input border-border">
+                  <SelectValue placeholder="Selecione a origem" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">Manual</SelectItem>
+                  <SelectItem value="meta_ads">
+                    <div className="flex items-center gap-2">
+                      <Facebook className="w-4 h-4" />
+                      Meta Ads
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Campanha (somente se source = meta_ads) */}
+            {formData.source === 'meta_ads' && (
+              <div className="space-y-2 md:col-span-2">
+                <Label className="text-foreground">Campanha Meta Ads</Label>
+                <Select
+                  value={formData.campaign_id}
+                  onValueChange={(value) => setFormData({ ...formData, campaign_id: value })}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger className="bg-input border-border">
+                    <SelectValue placeholder="Selecione a campanha" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {campaigns && campaigns.length > 0 ? (
+                      campaigns.map((campaign) => (
+                        <SelectItem key={campaign.id} value={campaign.id}>
+                          {campaign.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="none" disabled>
+                        Nenhuma campanha disponível
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Responsável */}
             <div className="space-y-2">
               <Label className="text-foreground">Responsável</Label>
               <Select
-                value={formData.assignee}
-                onValueChange={(value) => setFormData({ ...formData, assignee: value })}
+                value={formData.assigneeId}
+                onValueChange={(value) => setFormData({ ...formData, assigneeId: value })}
                 disabled={isSubmitting}
               >
                 <SelectTrigger className="bg-input border-border">
                   <SelectValue placeholder="Selecione o responsável" />
                 </SelectTrigger>
                 <SelectContent>
-                  {teamMembers.map((member) => (
-                    <SelectItem key={member} value={member}>
-                      {member}
+                  {teamMembers && teamMembers.length > 0 ? (
+                    teamMembers.map((member) => (
+                      <SelectItem key={member.id} value={member.id}>
+                        {member.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="none" disabled>
+                      Nenhum membro disponível
                     </SelectItem>
-                  ))}
+                  )}
                 </SelectContent>
               </Select>
             </div>

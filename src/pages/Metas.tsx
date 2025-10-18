@@ -2,11 +2,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Plus, TrendingUp, AlertCircle, Loader2 } from "lucide-react";
+import { Plus, TrendingUp, AlertCircle, Loader2, Pencil, Trash2 } from "lucide-react";
 import { LineChart, Line, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { useClientGoals } from "@/hooks/useClientGoals";
+import { useClientGoals, useDeleteClientGoal } from "@/hooks/useClientGoals";
 import { useRevenueRecords } from "@/hooks/useDashboard";
-import { useMemo } from "react";
+import { NewGoalModal } from "@/components/goals/NewGoalModal";
+import { useState, useMemo } from "react";
+import { toast } from "sonner";
+import type { Database } from "@/lib/database.types";
+
+type ClientGoal = Database['public']['Tables']['client_goals']['Row'];
 
 const getStatusColor = (status: string) => {
   const colors: { [key: string]: string } = {
@@ -19,8 +24,38 @@ const getStatusColor = (status: string) => {
 };
 
 export default function Metas() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<ClientGoal | null>(null);
+
   const { data: clientGoals, isLoading: goalsLoading } = useClientGoals();
   const { data: revenueRecords, isLoading: revenueLoading } = useRevenueRecords('new_up', new Date().getFullYear());
+  const deleteGoal = useDeleteClientGoal();
+
+  const handleEdit = (goal: ClientGoal) => {
+    setEditingGoal(goal);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id: string, companyName: string) => {
+    if (window.confirm(`Tem certeza que deseja excluir a meta de "${companyName}"?`)) {
+      try {
+        await deleteGoal.mutateAsync(id);
+        toast.success("Meta excluída com sucesso!");
+      } catch (error) {
+        toast.error("Erro ao excluir meta. Tente novamente.");
+      }
+    }
+  };
+
+  const handleNewGoal = () => {
+    setEditingGoal(null);
+    setIsModalOpen(true);
+  };
+
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+    setEditingGoal(null);
+  };
 
   // Transform revenue into monthly evolution
   const monthlyEvolution = useMemo(() => {
@@ -76,7 +111,7 @@ export default function Metas() {
           <h1 className="text-3xl font-bold text-foreground">Metas dos Clientes</h1>
           <p className="text-muted-foreground">Acompanhamento de metas e performance</p>
         </div>
-        <Button className="gap-2 bg-primary hover:bg-primary/90">
+        <Button className="gap-2 bg-primary hover:bg-primary/90" onClick={handleNewGoal}>
           <Plus className="w-4 h-4" />
           Nova Meta
         </Button>
@@ -92,9 +127,27 @@ export default function Metas() {
                   <CardTitle className="text-lg font-semibold text-foreground">
                     {client.company_name}
                   </CardTitle>
-                  <Badge className={getStatusColor(client.status)}>
-                    {client.status}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className={getStatusColor(client.status)}>
+                      {client.status}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleEdit(client)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(client.id, client.company_name)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
 
@@ -161,7 +214,7 @@ export default function Metas() {
               <p className="text-muted-foreground mb-4">
                 Nenhuma meta cadastrada ainda.
               </p>
-              <Button className="gap-2 bg-primary hover:bg-primary/90">
+              <Button className="gap-2 bg-primary hover:bg-primary/90" onClick={handleNewGoal}>
                 <Plus className="w-4 h-4" />
                 Criar Primeira Meta
               </Button>
@@ -260,6 +313,14 @@ export default function Metas() {
           </Card>
         )}
       </div>
+
+      {/* New Goal Modal */}
+      <NewGoalModal
+        open={isModalOpen}
+        onOpenChange={handleModalClose}
+        goal={editingGoal}
+        onSuccess={handleModalClose}
+      />
     </div>
   );
 }

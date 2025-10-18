@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
 import Metas from "./pages/Metas";
 import MetaAdsConfig from "./pages/MetaAdsConfig";
+import MetricsPage from "./pages/MetricsPage";
 import NotFound from "./pages/NotFound";
 import ForgotPassword from "./pages/ForgotPassword";
 import UpdatePassword from "./pages/UpdatePassword";
@@ -44,6 +45,7 @@ const App = () => (
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/leads" element={<Leads />} />
                 <Route path="/metas" element={<Metas />} />
+                <Route path="/metrics" element={<MetricsPage />} />
                 <Route path="/meta-ads-config" element={<MetaAdsConfig />} />
               </Route>
             </Route>

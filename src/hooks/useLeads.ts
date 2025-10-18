@@ -15,11 +15,11 @@ export type LeadInsert = TablesInsert<'leads'>
 export type LeadUpdate = TablesUpdate<'leads'>
 export type LeadActivity = Tables<'lead_activity'>
 
-export function useLeads() {
+export function useLeads(source?: 'meta_ads' | 'manual', campaignId?: string) {
   return useQuery({
-    queryKey: ['leads'],
+    queryKey: ['leads', source, campaignId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('leads')
         .select(`
           *,
@@ -37,6 +37,16 @@ export function useLeads() {
           )
         `)
         .order('position')
+
+      if (source) {
+        query = query.eq('source', source)
+      }
+
+      if (campaignId) {
+        query = query.eq('campaign_id', campaignId)
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
       return data as Lead[]
@@ -85,18 +95,18 @@ export const useUpdateLead = () => {
       if (error) throw error
       return data
     },
-    onMutate: async ({ id, values }) => {
+    onMutate: async ({ id, updates }) => {
       await queryClient.cancelQueries({ queryKey: ['leads'] })
-      
+
       const previousLeads = queryClient.getQueryData(['leads'])
-      
+
       queryClient.setQueryData(['leads'], (old: Lead[] | undefined) => {
         if (!old) return old
-        return old.map(lead => 
-          lead.id === id ? { ...lead, ...values } : lead
+        return old.map(lead =>
+          lead.id === id ? { ...lead, ...updates } : lead
         )
       })
-      
+
       return { previousLeads }
     },
     onError: (err, variables, context) => {

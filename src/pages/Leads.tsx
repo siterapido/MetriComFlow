@@ -4,7 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Filter, Calendar, MessageSquare, Paperclip, User, History, Loader2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus, Search, Filter, Calendar, MessageSquare, Paperclip, User, History, Loader2, Facebook } from "lucide-react";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -41,6 +48,7 @@ const BOARD_CONFIG = [
 export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'meta_ads' | 'manual'>('all');
   const { toast } = useToast();
 
   // Fetch data
@@ -57,15 +65,25 @@ export default function Leads() {
   const boards = useMemo(() => {
     if (!leads) return BOARD_CONFIG.map(config => ({ ...config, cards: [] }));
 
-    const filteredLeads = leads.filter(lead =>
-      searchTerm ? lead.title.toLowerCase().includes(searchTerm.toLowerCase()) : true
-    );
+    const filteredLeads = leads.filter(lead => {
+      // Search filter
+      const matchesSearch = searchTerm
+        ? lead.title.toLowerCase().includes(searchTerm.toLowerCase())
+        : true;
+
+      // Source filter
+      const matchesSource = sourceFilter === 'all'
+        ? true
+        : lead.source === sourceFilter;
+
+      return matchesSearch && matchesSource;
+    });
 
     return BOARD_CONFIG.map(config => ({
       ...config,
       cards: filteredLeads.filter(lead => lead.status === config.id)
     }));
-  }, [leads, searchTerm]);
+  }, [leads, searchTerm, sourceFilter]);
 
   const handleNewLead = () => {
     setIsNewLeadModalOpen(false);
@@ -154,15 +172,33 @@ export default function Leads() {
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-        <Input
-          placeholder="Buscar leads..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10 bg-input border-border"
-        />
+      {/* Search and Filters */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+          <Input
+            placeholder="Buscar leads..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 bg-input border-border"
+          />
+        </div>
+
+        <Select value={sourceFilter} onValueChange={(value: any) => setSourceFilter(value)}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filtrar por origem" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as Origens</SelectItem>
+            <SelectItem value="meta_ads">
+              <div className="flex items-center gap-2">
+                <Facebook className="w-4 h-4" />
+                Meta Ads
+              </div>
+            </SelectItem>
+            <SelectItem value="manual">Manual</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Loading State */}
@@ -228,12 +264,13 @@ export default function Leads() {
                                   {/* Meta Ads Information */}
                                   {card.source === 'meta_ads' && (
                                     <div className="space-y-1">
-                                      <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                      <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 flex items-center gap-1 w-fit">
+                                        <Facebook className="w-3 h-3" />
                                         Meta Ads
                                       </Badge>
                                       {card.external_lead_id && (
                                         <p className="text-xs text-muted-foreground">
-                                          ID: {card.external_lead_id}
+                                          ID: {card.external_lead_id.substring(0, 20)}...
                                         </p>
                                       )}
                                     </div>
