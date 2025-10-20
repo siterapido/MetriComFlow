@@ -45,6 +45,14 @@ const BOARD_CONFIG = [
   { id: "fechado_perdido", title: "Fechado - Perdido" }
 ];
 
+// Allowed lead statuses for Kanban columns
+type LeadStatus =
+  | 'novo_lead'
+  | 'qualificacao'
+  | 'proposta'
+  | 'negociacao'
+  | 'fechado_ganho'
+  | 'fechado_perdido';
 export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
@@ -104,7 +112,7 @@ export default function Leads() {
     const lead = leads?.find(l => l.id === draggableId);
     if (!lead) return;
 
-    const newStatus = destination.droppableId as 'todo' | 'doing' | 'done';
+    const newStatus = destination.droppableId as LeadStatus;
     const oldStatus = source.droppableId;
 
     // Update lead status
@@ -136,14 +144,64 @@ export default function Leads() {
   };
 
   if (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
+    const isAuthError = errorMessage.toLowerCase().includes('autenticado') || errorMessage.toLowerCase().includes('autenticação')
+
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <p className="text-lg font-semibold text-destructive">Erro ao carregar leads</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            {error instanceof Error ? error.message : 'Erro desconhecido'}
-          </p>
-        </div>
+        <Card className="max-w-lg border-destructive">
+          <CardHeader>
+            <CardTitle className="text-destructive flex items-center gap-2">
+              <span className="text-2xl">⚠️</span>
+              Erro ao carregar leads
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+              <p className="text-sm text-foreground font-medium">
+                {errorMessage}
+              </p>
+            </div>
+
+            {isAuthError && (
+              <div className="bg-warning/10 border border-warning/20 rounded-lg p-4">
+                <p className="text-sm text-foreground">
+                  <strong>Solução:</strong> Faça logout e login novamente para renovar sua sessão.
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                <strong>Passos para debug:</strong>
+              </p>
+              <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-1">
+                <li>Abra o console do navegador (F12)</li>
+                <li>Verifique os logs do hook [useLeads]</li>
+                <li>Verifique se você está autenticado</li>
+                <li>Tente fazer logout e login novamente</li>
+              </ol>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={() => window.location.reload()}
+                className="flex-1"
+              >
+                Recarregar página
+              </Button>
+              {isAuthError && (
+                <Button
+                  variant="outline"
+                  onClick={() => window.location.href = '/'}
+                  className="flex-1"
+                >
+                  Ir para Login
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -331,11 +389,11 @@ export default function Leads() {
                                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                       <div className="flex items-center gap-1">
                                         <MessageSquare className="w-3 h-3" />
-                                        {card.comments_count}
+                                        {card.comments_count || 0}
                                       </div>
                                       <div className="flex items-center gap-1">
                                         <Paperclip className="w-3 h-3" />
-                                        {card.attachments_count}
+                                        {card.attachments_count || 0}
                                       </div>
                                     </div>
 

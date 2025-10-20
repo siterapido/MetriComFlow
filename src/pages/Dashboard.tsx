@@ -1,30 +1,46 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Filter, TrendingUp, DollarSign, Target, Loader2, Users, BarChart3 } from "lucide-react";
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { useDashboardSummary, useRevenueRecords, useMetaKPIs } from "@/hooks/useDashboard";
-import { MetricCard } from "@/components/metrics/MetricCard";
-import { formatCurrency, formatNumber } from "@/lib/formatters";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TrendingUp, DollarSign, Target, Loader2, Users, BarChart3, GitBranch, Award, TrendingDown } from "lucide-react";
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, FunnelChart, Funnel, LabelList } from "recharts";
+import { useDashboardSummary, useRevenueRecords, useMetaKPIs, usePipelineMetrics, usePipelineEvolution, useCombinedFunnelData } from "@/hooks/useDashboard";
+import { formatCurrency } from "@/lib/formatters";
 import { useMemo, useState } from "react";
-import { MetaAdsFilters, type FilterValues } from "@/components/meta-ads/MetaAdsFilters";
+import { type FilterValues } from "@/components/meta-ads/MetaAdsFiltersV2";
+import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
 import { MetaAdsChart } from "@/components/meta-ads/MetaAdsChart";
-import { MetaAdsKPICards, MetaAdsDetailedMetrics } from "@/components/meta-ads/MetaAdsKPICards";
-import { useFilteredInsights, useMetricsSummary, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
+import { useFilteredInsights, getLastNDaysDateRange, useAdAccounts, useAdCampaigns } from "@/hooks/useMetaMetrics";
+import { ConversionFunnel } from "@/components/dashboard/ConversionFunnel";
 
 export default function Dashboard() {
   const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
-  const { data: metaKPIs, isLoading: metaLoading } = useMetaKPIs();
   const { data: revenueRecords, isLoading: revenueLoading } = useRevenueRecords(undefined, new Date().getFullYear());
 
   // Meta Ads filters state
   const [metaFilters, setMetaFilters] = useState<FilterValues>({
-    period: '90',
     dateRange: getLastNDaysDateRange(90),
   });
 
+  // Meta KPIs com período filtrado
+  const { data: metaKPIs, isLoading: metaLoading } = useMetaKPIs(metaFilters);
+  const hasMetaData = !!metaKPIs?.has_data;
+
+  // Fetch accounts and campaigns for filters
+  const { data: accounts } = useAdAccounts();
+  const { data: campaigns } = useAdCampaigns(metaFilters.accountId);
+
   // Fetch filtered Meta Ads data
   const { data: metaInsights, isLoading: insightsLoading } = useFilteredInsights(metaFilters);
-  const { data: metaSummary, isLoading: summaryMetaLoading } = useMetricsSummary(metaFilters);
+
+  // Pipeline metrics (CRM em tempo real)
+  const { data: pipelineMetrics, isLoading: pipelineLoading } = usePipelineMetrics({ dateRange: metaFilters.dateRange });
+  const { data: pipelineEvolution, isLoading: evolutionLoading } = usePipelineEvolution(metaFilters.dateRange);
+
+  // Combined funnel data (Meta Ads + CRM)
+  const { data: funnelData, isLoading: funnelLoading } = useCombinedFunnelData({
+    dateRange: metaFilters.dateRange,
+    accountId: metaFilters.accountId,
+    campaignId: metaFilters.campaignId,
+  });
 
   // Transform revenue records into chart data
   const chartData = useMemo(() => {
@@ -72,20 +88,68 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* Header com filtros integrados */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Dashboard Geral</h1>
-          <p className="text-muted-foreground">Visão geral do faturamento e oportunidades</p>
+          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground">Visão completa de faturamento, oportunidades e Meta Ads</p>
         </div>
-        <Button className="gap-2 bg-primary hover:bg-primary/90">
-          <Filter className="w-4 h-4" />
-          Filtrar Dados
-        </Button>
+
+        {/* Filtros minimalistas inline */}
+        <div className="flex flex-wrap gap-2">
+          <DateRangeFilter
+            value={metaFilters.dateRange}
+            onChange={(dateRange) => setMetaFilters({ ...metaFilters, dateRange })}
+          />
+
+          <Select
+            value={metaFilters.accountId || 'all'}
+            onValueChange={(value) => setMetaFilters({
+              ...metaFilters,
+              accountId: value === 'all' ? undefined : value,
+              campaignId: undefined
+            })}
+          >
+            <SelectTrigger className="w-[180px] bg-background">
+              <SelectValue placeholder="Todas as contas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as contas</SelectItem>
+              {accounts?.map((account) => (
+                <SelectItem key={account.id} value={account.id}>
+                  {account.business_name || account.external_id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {metaFilters.accountId && (
+            <Select
+              value={metaFilters.campaignId || 'all'}
+              onValueChange={(value) => setMetaFilters({
+                ...metaFilters,
+                campaignId: value === 'all' ? undefined : value
+              })}
+            >
+              <SelectTrigger className="w-[200px] bg-background">
+                <SelectValue placeholder="Todas as campanhas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as campanhas</SelectItem>
+                {campaigns?.map((campaign) => (
+                  <SelectItem key={campaign.id} value={campaign.id}>
+                    {campaign.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* KPIs Unificados - Grid 7 colunas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+        {/* Faturamento Mensal */}
         <Card className="bg-gradient-to-br from-card to-accent/20 border-border hover-lift">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -101,6 +165,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {/* Faturamento Anual */}
         <Card className="bg-gradient-to-br from-card to-secondary/20 border-border hover-lift">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -118,6 +183,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {/* Oportunidades Ativas */}
         <Card className="bg-gradient-to-br from-card to-accent/10 border-border hover-lift">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -134,66 +200,219 @@ export default function Dashboard() {
             </p>
           </CardContent>
         </Card>
+
+        {/* Investimento Meta Ads */}
+        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-border hover-lift">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Investimento Meta
+            </CardTitle>
+            <DollarSign className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-foreground">
+              {hasMetaData ? formatCurrency(metaKPIs?.investimento_total || 0) : 'Sem dados'}
+            </div>
+            <p className="text-xs text-blue-500">Período selecionado</p>
+          </CardContent>
+        </Card>
+
+        {/* Leads Gerados */}
+        <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-border hover-lift">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Leads Gerados
+            </CardTitle>
+            <Users className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-foreground">
+              {hasMetaData ? metaKPIs?.leads_gerados || 0 : 'Sem contatos'}
+            </div>
+            <p className="text-xs text-green-500">Via Meta Ads</p>
+          </CardContent>
+        </Card>
+
+        {/* CPL */}
+        <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-border hover-lift">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              CPL Médio
+            </CardTitle>
+            <Target className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-foreground">
+              {hasMetaData ? formatCurrency(metaKPIs?.cpl || 0) : 'Sem dados'}
+            </div>
+            {hasMetaData && (
+              <p className="text-xs text-purple-500">
+                {metaKPIs?.cpl && metaKPIs.cpl < 50 ? 'Excelente' : 'Monitorar'}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ROAS */}
+        <Card className="bg-gradient-to-br from-orange-500/10 to-orange-600/5 border-border hover-lift">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              ROAS
+            </CardTitle>
+            <BarChart3 className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-foreground">
+              {hasMetaData ? `${(metaKPIs?.roas ?? 0).toFixed(2)}x` : 'Sem dados'}
+            </div>
+            {hasMetaData && (
+              <p className={`text-xs ${metaKPIs?.roas && metaKPIs.roas >= 3 ? 'text-success' : 'text-warning'}`}>
+                {metaKPIs?.roas && metaKPIs.roas >= 3 ? 'Saudável (≥3)' : 'Melhorar'}
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Meta Ads KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard
-          title="Investimento Meta Ads"
-          value={metaKPIs?.investimento_total || 0}
-          format="currency"
-          icon={DollarSign}
-          iconColor="text-blue-500"
-          subtitle="Mês atual"
-        />
-        <MetricCard
-          title="Leads Gerados"
-          value={metaKPIs?.leads_gerados || 0}
-          format="number"
-          icon={Users}
-          iconColor="text-green-500"
-          subtitle="Via Meta Ads"
-        />
-        <MetricCard
-          title="CPL (Custo por Lead)"
-          value={metaKPIs?.cpl || 0}
-          format="currency"
-          icon={Target}
-          iconColor="text-purple-500"
-          subtitle={metaKPIs?.cpl && metaKPIs.cpl < 50 ? 'Excelente' : 'Monitorar'}
-        />
-        <MetricCard
-          title="ROAS"
-          value={metaKPIs?.roas ? `${metaKPIs.roas.toFixed(2)}x` : '0x'}
-          format="none"
-          icon={BarChart3}
-          iconColor={metaKPIs?.roas && metaKPIs.roas >= 3 ? 'text-success' : 'text-warning'}
-          subtitle={metaKPIs?.roas && metaKPIs.roas >= 3 ? 'Saudável (≥3)' : 'Melhorar'}
-        />
-      </div>
+      {/* Pipeline CRM - Métricas em Tempo Real */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <GitBranch className="w-5 h-5 text-primary" />
+          <h2 className="text-xl font-bold text-foreground">Pipeline CRM - Tempo Real</h2>
+        </div>
 
-      {/* Charts Grid */}
-      {chartData.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {/* New Up Chart */}
-          <Card className="lg:col-span-2 xl:col-span-1 border-border bg-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">New Up</CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Faturamento da minha empresa
-              </CardDescription>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Total Pipeline Value */}
+          <Card className="bg-gradient-to-br from-card to-primary/10 border-border hover-lift">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Valor Total Pipeline
+              </CardTitle>
+              <DollarSign className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
+              <div className="text-2xl font-bold text-foreground">
+                {summary ? formatCurrency(summary.pipeline_value || 0) : 'R$ 0'}
+              </div>
+              <p className="text-xs text-primary">
+                {summary?.oportunidades_ativas || 0} leads ativos
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Conversion Rate */}
+          <Card className="bg-gradient-to-br from-card to-success/10 border-border hover-lift">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Taxa de Conversão
+              </CardTitle>
+              <Award className="h-4 w-4 text-success" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-foreground">
+                {pipelineMetrics ? `${pipelineMetrics.conversion_rate.toFixed(1)}%` : '0%'}
+              </div>
+              <p className="text-xs text-success">
+                {pipelineMetrics?.stages.fechado_ganho.count || 0} fechamentos
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Average Deal Size */}
+          <Card className="bg-gradient-to-br from-card to-secondary/10 border-border hover-lift">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Ticket Médio
+              </CardTitle>
+              <Target className="h-4 w-4 text-secondary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-foreground">
+                {pipelineMetrics ? formatCurrency(pipelineMetrics.average_deal_size) : 'R$ 0'}
+              </div>
+              <p className="text-xs text-secondary">Por negócio fechado</p>
+            </CardContent>
+          </Card>
+
+          {/* Won vs Lost */}
+          <Card className="bg-gradient-to-br from-card to-accent/10 border-border hover-lift">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Ganhos vs Perdidos
+              </CardTitle>
+              <TrendingUp className="h-4 w-4 text-accent" />
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-baseline gap-2">
+                <div className="text-xl font-bold text-success">
+                  {pipelineMetrics?.stages.fechado_ganho.count || 0}
+                </div>
+                <span className="text-muted-foreground">/</span>
+                <div className="text-xl font-bold text-destructive">
+                  {pipelineMetrics?.stages.fechado_perdido.count || 0}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Fechado ganho / Fechado perdido
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Gráficos - 2 linhas */}
+      <div className="space-y-6">
+        {/* Linha 1: Gráfico de Meta Ads */}
+         <div>
+           <h2 className="text-xl font-bold text-foreground mb-4">Evolução Temporal - Meta Ads</h2>
+           <MetaAdsChart data={metaInsights || []} isLoading={insightsLoading} />
+         </div>
+
+        {/* Linha 2 removida: Gráficos de Faturamento (New Up e Oportunidades) conforme solicitação */}
+      </div>
+
+      {/* Funil de Conversão Completo (Meta Ads + CRM) */}
+      <div className="space-y-6">
+        <ConversionFunnel data={funnelData || null} />
+      </div>
+
+      {/* Evolução do Pipeline */}
+      <div className="space-y-6">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-primary" />
+          <h2 className="text-xl font-bold text-foreground">Evolução do Pipeline</h2>
+        </div>
+
+        <Card className="border-border bg-card">
+          <CardHeader>
+            <CardTitle className="text-foreground">Movimentações ao Longo do Tempo</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Acompanhe a evolução do pipeline e fechamentos
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {pipelineEvolution && pipelineEvolution.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={chartData}>
+                <AreaChart data={pipelineEvolution}>
                   <defs>
-                    <linearGradient id="colorNewUp" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id="colorActive" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#2DA7FF" stopOpacity={0.8}/>
                       <stop offset="95%" stopColor="#2DA7FF" stopOpacity={0.1}/>
                     </linearGradient>
+                    <linearGradient id="colorWon" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#16A34A" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#16A34A" stopOpacity={0.1}/>
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="month" stroke="#9CA3AF" />
+                  <XAxis
+                    dataKey="date"
+                    stroke="#9CA3AF"
+                    tickFormatter={(value) => {
+                      const date = new Date(value);
+                      return `${date.getDate()}/${date.getMonth() + 1}`;
+                    }}
+                  />
                   <YAxis stroke="#9CA3AF" />
                   <Tooltip
                     contentStyle={{
@@ -201,79 +420,39 @@ export default function Dashboard() {
                       border: "1px solid #374151",
                       borderRadius: "8px",
                       color: "#F9FAFB"
+                    }}
+                    labelFormatter={(value) => {
+                      const date = new Date(value);
+                      return date.toLocaleDateString('pt-BR');
                     }}
                   />
                   <Area
                     type="monotone"
-                    dataKey="newUp"
+                    dataKey="total_active"
                     stroke="#2DA7FF"
                     fillOpacity={1}
-                    fill="url(#colorNewUp)"
+                    fill="url(#colorActive)"
+                    name="Pipeline Ativo"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="fechado_ganho"
+                    stroke="#16A34A"
+                    fillOpacity={1}
+                    fill="url(#colorWon)"
+                    name="Fechados (Ganho)"
                   />
                 </AreaChart>
               </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Faturamento Clientes */}
-          <Card className="border-border bg-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">Faturamento Clientes</CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Receita por contratos ativos
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="month" stroke="#9CA3AF" />
-                  <YAxis stroke="#9CA3AF" />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#1F2937",
-                      border: "1px solid #374151",
-                      borderRadius: "8px",
-                      color: "#F9FAFB"
-                    }}
-                    formatter={(value: any) => [formatCurrency(value), '']}
-                  />
-                  <Bar dataKey="clientes" fill="#0D9DFF" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Oportunidades */}
-          <Card className="border-border bg-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">Oportunidades</CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Pipeline de vendas
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="month" stroke="#9CA3AF" />
-                  <YAxis stroke="#9CA3AF" />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#1F2937",
-                      border: "1px solid #374151",
-                      borderRadius: "8px",
-                      color: "#F9FAFB"
-                    }}
-                    formatter={(value: any) => [formatCurrency(value), '']}
-                  />
-                  <Line type="monotone" dataKey="oportunidades" stroke="#22C55E" strokeWidth={3} dot={{ r: 2 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+            ) : (
+              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+                <BarChart3 className="w-12 h-12 mb-2 opacity-50" />
+                <p>Sem dados de evolução no período</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

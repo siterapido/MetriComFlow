@@ -50,6 +50,9 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
     selectedLabels: [] as string[],
     dueDate: undefined as Date | undefined,
     value: "",
+    contractValue: "",
+    contractType: "monthly" as 'monthly' | 'annual' | 'one_time',
+    contractMonths: "1",
     assigneeId: "",
     status: "novo_lead",
     source: "manual" as 'manual' | 'meta_ads',
@@ -73,21 +76,28 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
     setIsSubmitting(true);
 
     try {
-      // Parse value to number (remove currency formatting)
-      const valueNumber = formData.value
-        ? parseInt(formData.value.replace(/\D/g, '')) / 100
+      // Parse contract value to number (remove currency formatting)
+      const contractValueNumber = formData.contractValue
+        ? parseInt(formData.contractValue.replace(/\D/g, '')) / 100
         : 0;
 
       const selectedAssigneeName = teamMembers?.find(m => m.id === formData.assigneeId)?.name ?? null;
+
+      // Calcular o valor total do contrato (para exibição no pipeline)
+      const totalContractValue = formData.contractType === 'monthly'
+        ? contractValueNumber * parseInt(formData.contractMonths)
+        : contractValueNumber;
 
        // Create lead
        const newLead = await createLead.mutateAsync({
          title: formData.title,
          description: formData.description || null,
          status: formData.status,
-         value: valueNumber,
+         value: totalContractValue, // Valor total do contrato (usado no pipeline e dashboard)
+         contract_value: contractValueNumber, // Valor mensal/anual/único
+         contract_type: formData.contractType,
+         contract_months: formData.contractType === 'monthly' ? parseInt(formData.contractMonths) : 1,
          due_date: formData.dueDate?.toISOString().split('T')[0] || null,
-
         assignee_id: formData.assigneeId || null,
         assignee_name: selectedAssigneeName,
          position: 0,
@@ -131,6 +141,9 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
       selectedLabels: [],
       dueDate: undefined,
       value: "",
+      contractValue: "",
+      contractType: "monthly",
+      contractMonths: "1",
       assigneeId: "",
       status: "novo_lead",
       source: "manual",
@@ -311,21 +324,64 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
               </Select>
             </div>
 
+            {/* Tipo de Contrato */}
+            <div className="space-y-2">
+              <Label className="text-foreground">Tipo de Contrato</Label>
+              <Select
+                value={formData.contractType}
+                onValueChange={(value: 'monthly' | 'annual' | 'one_time') =>
+                  setFormData({ ...formData, contractType: value })
+                }
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="bg-input border-border">
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Mensal</SelectItem>
+                  <SelectItem value="annual">Anual</SelectItem>
+                  <SelectItem value="one_time">Pagamento Único</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Valor do Contrato */}
             <div className="space-y-2">
-              <Label htmlFor="value" className="text-foreground">Valor do Contrato</Label>
+              <Label htmlFor="contractValue" className="text-foreground">
+                Valor do Contrato {formData.contractType === 'monthly' ? '(mensal)' : ''}
+              </Label>
               <Input
-                id="value"
+                id="contractValue"
                 placeholder="R$ 0,00"
-                value={formData.value}
+                value={formData.contractValue}
                 onChange={(e) => {
                   const formatted = formatCurrency(e.target.value);
-                  setFormData({ ...formData, value: formatted });
+                  setFormData({ ...formData, contractValue: formatted });
                 }}
                 className="bg-input border-border focus:ring-primary"
                 disabled={isSubmitting}
               />
             </div>
+
+            {/* Quantidade de Meses (só para contratos mensais) */}
+            {formData.contractType === 'monthly' && (
+              <div className="space-y-2">
+                <Label htmlFor="contractMonths" className="text-foreground">
+                  Quantidade de Meses
+                </Label>
+                <Input
+                  id="contractMonths"
+                  type="number"
+                  min="1"
+                  max="120"
+                  placeholder="1"
+                  value={formData.contractMonths}
+                  onChange={(e) => setFormData({ ...formData, contractMonths: e.target.value })}
+                  className="bg-input border-border focus:ring-primary"
+                  disabled={isSubmitting}
+                />
+              </div>
+            )}
 
             {/* Data de Entrega */}
             <div className="space-y-2">

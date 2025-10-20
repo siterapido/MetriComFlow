@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { TrendingUp, DollarSign, Users, MousePointerClick } from 'lucide-react'
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { TrendingUp, DollarSign, MousePointerClick } from 'lucide-react'
 import { formatCurrency, formatNumber } from '@/lib/formatters'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -97,23 +97,19 @@ export function MetaAdsChart({ data, isLoading }: MetaAdsChartProps) {
         </div>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="spend" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto">
+        <Tabs defaultValue="overview" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-3 lg:w-auto">
+            <TabsTrigger value="overview" className="gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Visão Geral
+            </TabsTrigger>
             <TabsTrigger value="spend" className="gap-2">
               <DollarSign className="w-4 h-4" />
               Investimento
             </TabsTrigger>
-            <TabsTrigger value="leads" className="gap-2">
-              <Users className="w-4 h-4" />
-              Leads
-            </TabsTrigger>
             <TabsTrigger value="performance" className="gap-2">
               <MousePointerClick className="w-4 h-4" />
               Performance
-            </TabsTrigger>
-            <TabsTrigger value="overview" className="gap-2">
-              <TrendingUp className="w-4 h-4" />
-              Visão Geral
             </TabsTrigger>
           </TabsList>
 
@@ -152,30 +148,7 @@ export function MetaAdsChart({ data, isLoading }: MetaAdsChartProps) {
             </ResponsiveContainer>
           </TabsContent>
 
-          {/* Leads Tab */}
-          <TabsContent value="leads" className="space-y-4">
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis
-                  dataKey="dateFormatted"
-                  stroke="#9CA3AF"
-                  style={{ fontSize: '12px' }}
-                />
-                <YAxis
-                  stroke="#9CA3AF"
-                  style={{ fontSize: '12px' }}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Bar
-                  dataKey="leads_count"
-                  name="Leads Gerados"
-                  fill="#16A34A"
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </TabsContent>
+          {/* Leads Tab removida */}
 
           {/* Performance Tab */}
           <TabsContent value="performance" className="space-y-4">

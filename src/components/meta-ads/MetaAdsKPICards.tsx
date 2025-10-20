@@ -38,9 +38,10 @@ type KPICardProps = {
   icon: React.ElementType
   iconColor: string
   isLoading?: boolean
+  hideChange?: boolean
 }
 
-function KPICard({ title, value, change, subtitle, icon: Icon, iconColor, isLoading }: KPICardProps) {
+function KPICard({ title, value, change, subtitle, icon: Icon, iconColor, isLoading, hideChange }: KPICardProps) {
   const isPositive = change !== undefined && change > 0
   const isNegative = change !== undefined && change < 0
   const isNeutral = change !== undefined && change === 0
@@ -71,7 +72,7 @@ function KPICard({ title, value, change, subtitle, icon: Icon, iconColor, isLoad
             <div className="text-2xl font-bold text-foreground">
               {value}
             </div>
-            {change !== undefined && (
+            {change !== undefined && !hideChange && (
               <div className="flex items-center gap-1 mt-1">
                 {showPositive && (
                   <>
@@ -114,36 +115,44 @@ function KPICard({ title, value, change, subtitle, icon: Icon, iconColor, isLoad
 }
 
 export function MetaAdsKPICards({ summary, isLoading }: MetaAdsKPICardsProps) {
+  const hasData = !!summary && (
+    (summary.current.spend ?? 0) > 0 ||
+    (summary.current.leads ?? 0) > 0 ||
+    (summary.current.clicks ?? 0) > 0 ||
+    (summary.current.impressions ?? 0) > 0
+  )
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       <KPICard
         title="Investimento Total"
-        value={summary ? formatCurrency(summary.current.spend) : 'R$ 0,00'}
+        value={hasData ? formatCurrency(summary!.current.spend) : 'Sem dados'}
         change={summary?.changes.spend}
         icon={DollarSign}
         iconColor="bg-gradient-to-br from-blue-500 to-blue-600"
         isLoading={isLoading}
+        hideChange={!hasData}
       />
 
       <KPICard
         title="Leads Gerados"
-        value={summary ? formatNumber(summary.current.leads) : '0'}
+        value={hasData ? formatNumber(summary!.current.leads) : 'Sem contatos'}
         change={summary?.changes.leads}
-        subtitle={summary ? `${summary.current.impressions.toLocaleString('pt-BR')} impressões` : undefined}
+        subtitle={hasData ? `${summary!.current.impressions.toLocaleString('pt-BR')} impressões` : undefined}
         icon={Users}
         iconColor="bg-gradient-to-br from-green-500 to-green-600"
         isLoading={isLoading}
+        hideChange={!hasData}
       />
 
       <KPICard
         title="CPL (Custo por Lead)"
-        value={summary ? formatCurrency(summary.current.cpl) : 'R$ 0,00'}
+        value={hasData ? formatCurrency(summary!.current.cpl) : 'Sem dados'}
         change={summary?.changes.cpl}
         subtitle={
-          summary
-            ? summary.current.cpl < 50
+          hasData
+            ? summary!.current.cpl < 50
               ? 'Excelente custo'
-              : summary.current.cpl < 100
+              : summary!.current.cpl < 100
               ? 'Dentro da meta'
               : 'Acima do ideal'
             : undefined
@@ -151,12 +160,13 @@ export function MetaAdsKPICards({ summary, isLoading }: MetaAdsKPICardsProps) {
         icon={Target}
         iconColor="bg-gradient-to-br from-purple-500 to-purple-600"
         isLoading={isLoading}
+        hideChange={!hasData}
       />
 
       <KPICard
         title="Taxa de Cliques (CTR)"
-        value={summary ? `${summary.current.ctr.toFixed(2)}%` : '0%'}
-        subtitle={summary ? `${summary.current.clicks.toLocaleString('pt-BR')} cliques` : undefined}
+        value={hasData ? `${summary!.current.ctr.toFixed(2)}%` : 'Sem dados'}
+        subtitle={hasData ? `${summary!.current.clicks.toLocaleString('pt-BR')} cliques` : undefined}
         icon={MousePointerClick}
         iconColor="bg-gradient-to-br from-orange-500 to-orange-600"
         isLoading={isLoading}
@@ -165,86 +175,105 @@ export function MetaAdsKPICards({ summary, isLoading }: MetaAdsKPICardsProps) {
   )
 }
 
-// Additional detailed metrics card
-type DetailedMetricsProps = {
-  summary: MetricsSummary | undefined
-  isLoading?: boolean
-}
+ // Additional detailed metrics card
+ type DetailedMetricsProps = {
+   summary: MetricsSummary | undefined
+   isLoading?: boolean
+ }
 
-export function MetaAdsDetailedMetrics({ summary, isLoading }: DetailedMetricsProps) {
-  if (isLoading) {
+ export function MetaAdsDetailedMetrics({ summary, isLoading }: DetailedMetricsProps) {
+  const hasData = !!summary && (
+    (summary.current.spend ?? 0) > 0 ||
+    (summary.current.leads ?? 0) > 0 ||
+    (summary.current.clicks ?? 0) > 0 ||
+    (summary.current.impressions ?? 0) > 0
+  )
+   if (isLoading) {
+     return (
+       <Card className="border-border bg-card">
+         <CardHeader>
+           <CardTitle className="text-foreground">Métricas Detalhadas</CardTitle>
+         </CardHeader>
+         <CardContent>
+           <div className="space-y-4">
+             {[1, 2, 3, 4].map((i) => (
+               <div key={i} className="h-12 bg-muted animate-pulse rounded" />
+             ))}
+           </div>
+         </CardContent>
+       </Card>
+     )
+   }
+
+   if (!summary) {
+     return null
+   }
+
+  if (!hasData) {
     return (
       <Card className="border-border bg-card">
         <CardHeader>
           <CardTitle className="text-foreground">Métricas Detalhadas</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-12 bg-muted animate-pulse rounded" />
-            ))}
-          </div>
+          <div className="text-muted-foreground">Sem dados para o período selecionado</div>
         </CardContent>
       </Card>
     )
   }
 
-  if (!summary) {
-    return null
-  }
+   const metrics = [
+     {
+       label: 'Impressões Totais',
+       value: summary.current.impressions.toLocaleString('pt-BR'),
+       icon: Eye,
+       color: 'text-blue-500',
+     },
+     {
+       label: 'Cliques Totais',
+       value: summary.current.clicks.toLocaleString('pt-BR'),
+       icon: MousePointerClick,
+       color: 'text-green-500',
+     },
+     {
+       label: 'CPC Médio (Custo por Clique)',
+       value: formatCurrency(summary.current.cpc),
+       icon: DollarSign,
+       color: 'text-purple-500',
+     },
+     {
+       label: 'Taxa de Conversão (Leads/Cliques)',
+       value: summary.current.clicks > 0
+         ? `${((summary.current.leads / summary.current.clicks) * 100).toFixed(2)}%`
+         : '0%',
+       icon: Target,
+       color: 'text-orange-500',
+     },
+   ]
 
-  const metrics = [
-    {
-      label: 'Impressões Totais',
-      value: summary.current.impressions.toLocaleString('pt-BR'),
-      icon: Eye,
-      color: 'text-blue-500',
-    },
-    {
-      label: 'Cliques Totais',
-      value: summary.current.clicks.toLocaleString('pt-BR'),
-      icon: MousePointerClick,
-      color: 'text-green-500',
-    },
-    {
-      label: 'CPC Médio (Custo por Clique)',
-      value: formatCurrency(summary.current.cpc),
-      icon: DollarSign,
-      color: 'text-purple-500',
-    },
-    {
-      label: 'Taxa de Conversão (Leads/Cliques)',
-      value: summary.current.clicks > 0
-        ? `${((summary.current.leads / summary.current.clicks) * 100).toFixed(2)}%`
-        : '0%',
-      icon: Target,
-      color: 'text-orange-500',
-    },
-  ]
-
-  return (
-    <Card className="border-border bg-card">
-      <CardHeader>
-        <CardTitle className="text-foreground">Métricas Detalhadas</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {metrics.map((metric) => (
-            <div
-              key={metric.label}
-              className="flex items-center gap-3 p-4 rounded-lg bg-gradient-to-br from-muted/50 to-accent/10 border border-border"
-            >
-              <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center bg-gradient-to-br from-card to-muted', metric.color)}>
-                <metric.icon className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">{metric.label}</p>
-                <p className="text-lg font-bold text-foreground">{metric.value}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
+   return (
+     <Card className="border-border bg-card">
+       <CardHeader>
+         <CardTitle className="text-foreground">Métricas Detalhadas</CardTitle>
+       </CardHeader>
+       <CardContent>
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+           {metrics.map((metric) => (
+             <div
+               key={metric.label}
+               className="flex items-center gap-3 p-4 rounded-lg bg-gradient-to-br from-muted/50 to-accent/10 border border-border"
+             >
+               <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center bg-gradient-to-br from-card to-muted', metric.color)}>
+                 <metric.icon className="w-5 h-5" />
+               </div>
+               <div>
+                 <p className="text-sm text-muted-foreground">{metric.label}</p>
+                 <p className="text-lg font-bold text-foreground">{metric.value}</p>
+               </div>
+             </div>
+           ))}
+         </div>
+       </CardContent>
+     </Card>
+   )
+ }

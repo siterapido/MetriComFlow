@@ -16,8 +16,8 @@ export type Database = {
           created_at: string | null
           external_id: string
           id: string
-          provider: string | null
           is_active: boolean | null
+          provider: string | null
           updated_at: string | null
         }
         Insert: {
@@ -26,8 +26,8 @@ export type Database = {
           created_at?: string | null
           external_id: string
           id?: string
-          provider?: string | null
           is_active?: boolean | null
+          provider?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -36,8 +36,8 @@ export type Database = {
           created_at?: string | null
           external_id?: string
           id?: string
-          provider?: string | null
           is_active?: boolean | null
+          provider?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -49,48 +49,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      meta_business_connections: {
-        Row: {
-          id: string
-          user_id: string
-          meta_user_id: string
-          meta_user_name: string
-          meta_user_email: string | null
-          access_token: string
-          token_expires_at: string | null
-          connected_at: string | null
-          is_active: boolean | null
-          created_at: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          meta_user_id: string
-          meta_user_name: string
-          meta_user_email?: string | null
-          access_token: string
-          token_expires_at?: string | null
-          connected_at?: string | null
-          is_active?: boolean | null
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          meta_user_id?: string
-          meta_user_name?: string
-          meta_user_email?: string | null
-          access_token?: string
-          token_expires_at?: string | null
-          connected_at?: string | null
-          is_active?: boolean | null
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Relationships: []
       }
       ad_campaigns: {
         Row: {
@@ -443,6 +401,60 @@ export type Database = {
           },
         ]
       }
+      interactions: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          interaction_date: string | null
+          interaction_type: string
+          lead_id: string | null
+          notes: string | null
+          outcome: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          interaction_date?: string | null
+          interaction_type: string
+          lead_id?: string | null
+          notes?: string | null
+          outcome?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          interaction_date?: string | null
+          interaction_type?: string
+          lead_id?: string | null
+          notes?: string | null
+          outcome?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interactions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interactions_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_labels: {
         Row: {
           created_at: string | null
@@ -487,14 +499,25 @@ export type Database = {
           closed_lost_at: string | null
           closed_won_at: string | null
           comments_count: number | null
+          contract_months: number | null
+          contract_type: string | null
+          contract_value: number | null
+          conversion_probability: number | null
           created_at: string | null
           created_by: string | null
           description: string | null
           due_date: string | null
+          expected_close_date: string | null
           external_lead_id: string | null
           id: string
+          last_contact_date: string | null
+          lead_score: number | null
+          lead_source_detail: string | null
           lost_reason: string | null
+          next_follow_up_date: string | null
           position: number | null
+          priority: string | null
+          product_interest: string | null
           source: string | null
           status: string
           title: string
@@ -511,14 +534,25 @@ export type Database = {
           closed_lost_at?: string | null
           closed_won_at?: string | null
           comments_count?: number | null
+          contract_months?: number | null
+          contract_type?: string | null
+          contract_value?: number | null
+          conversion_probability?: number | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
           due_date?: string | null
+          expected_close_date?: string | null
           external_lead_id?: string | null
           id?: string
+          last_contact_date?: string | null
+          lead_score?: number | null
+          lead_source_detail?: string | null
           lost_reason?: string | null
+          next_follow_up_date?: string | null
           position?: number | null
+          priority?: string | null
+          product_interest?: string | null
           source?: string | null
           status?: string
           title: string
@@ -535,14 +569,25 @@ export type Database = {
           closed_lost_at?: string | null
           closed_won_at?: string | null
           comments_count?: number | null
+          contract_months?: number | null
+          contract_type?: string | null
+          contract_value?: number | null
+          conversion_probability?: number | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
           due_date?: string | null
+          expected_close_date?: string | null
           external_lead_id?: string | null
           id?: string
+          last_contact_date?: string | null
+          lead_score?: number | null
+          lead_source_detail?: string | null
           lost_reason?: string | null
+          next_follow_up_date?: string | null
           position?: number | null
+          priority?: string | null
+          product_interest?: string | null
           source?: string | null
           status?: string
           title?: string
@@ -580,6 +625,48 @@ export type Database = {
           },
         ]
       }
+      meta_business_connections: {
+        Row: {
+          access_token: string
+          connected_at: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          meta_user_email: string | null
+          meta_user_id: string
+          meta_user_name: string
+          token_expires_at: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          connected_at?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          meta_user_email?: string | null
+          meta_user_id: string
+          meta_user_name: string
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          connected_at?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          meta_user_email?: string | null
+          meta_user_id?: string
+          meta_user_name?: string
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -589,6 +676,7 @@ export type Database = {
           id: string
           role: string | null
           updated_at: string | null
+          user_type: Database["public"]["Enums"]["user_type"]
         }
         Insert: {
           avatar_url?: string | null
@@ -598,6 +686,7 @@ export type Database = {
           id: string
           role?: string | null
           updated_at?: string | null
+          user_type?: Database["public"]["Enums"]["user_type"]
         }
         Update: {
           avatar_url?: string | null
@@ -607,6 +696,7 @@ export type Database = {
           id?: string
           role?: string | null
           updated_at?: string | null
+          user_type?: Database["public"]["Enums"]["user_type"]
         }
         Relationships: []
       }
@@ -674,41 +764,172 @@ export type Database = {
           },
         ]
       }
-      team_members: {
+      stopped_sales: {
         Row: {
+          cliente: string
           created_at: string | null
-          email: string
+          dias_parado: number | null
           id: string
-          name: string
-          role: string | null
+          last_activity_date: string | null
+          lead_id: string | null
+          updated_at: string | null
+          valor: number
+        }
+        Insert: {
+          cliente: string
+          created_at?: string | null
+          dias_parado?: number | null
+          id?: string
+          last_activity_date?: string | null
+          lead_id?: string | null
+          updated_at?: string | null
+          valor: number
+        }
+        Update: {
+          cliente?: string
+          created_at?: string | null
+          dias_parado?: number | null
+          id?: string
+          last_activity_date?: string | null
+          lead_id?: string | null
+          updated_at?: string | null
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stopped_sales_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tasks: {
+        Row: {
+          assigned_to: string | null
+          completed: boolean | null
+          completed_at: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          lead_id: string | null
+          priority: string | null
+          task_type: string | null
+          title: string
           updated_at: string | null
         }
         Insert: {
+          assigned_to?: string | null
+          completed?: boolean | null
+          completed_at?: string | null
           created_at?: string | null
-          email: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
           id?: string
-          name: string
-          role?: string | null
+          lead_id?: string | null
+          priority?: string | null
+          task_type?: string | null
+          title: string
           updated_at?: string | null
         }
         Update: {
+          assigned_to?: string | null
+          completed?: boolean | null
+          completed_at?: string | null
           created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          lead_id?: string | null
+          priority?: string | null
+          task_type?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_members: {
+        Row: {
+          active: boolean | null
+          created_at: string | null
+          department: string | null
+          email: string
+          id: string
+          name: string
+          position: string | null
+          profile_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string | null
+          department?: string | null
+          email: string
+          id?: string
+          name: string
+          position?: string | null
+          profile_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string | null
+          department?: string | null
           email?: string
           id?: string
           name?: string
-          role?: string | null
+          position?: string | null
+          profile_id?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "team_members_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       business_kpis: {
         Row: {
-          avg_deal_size: number | null
-          conversion_rate: number | null
-          total_leads: number | null
-          total_revenue: number | null
+          clientes_fechados: number | null
+          cpl: number | null
+          faturamento_previsto: number | null
+          faturamento_realizado: number | null
+          investimento_total: number | null
+          leads_gerados: number | null
+          roas: number | null
         }
         Relationships: []
       }
@@ -716,52 +937,89 @@ export type Database = {
         Row: {
           campaign_id: string | null
           campaign_name: string | null
-          cpl: number | null
-          leads_count: number | null
+          faturamento: number | null
+          investimento: number | null
+          leads_gerados: number | null
           roas: number | null
-          total_clicks: number | null
-          total_impressions: number | null
+          vendas_fechadas: number | null
+        }
+        Relationships: []
+      }
+      dashboard_kpis: {
+        Row: {
+          faturamento_anual: number | null
+          faturamento_mensal: number | null
+          oportunidades_ativas: number | null
+          pipeline_value: number | null
+        }
+        Relationships: []
+      }
+      monthly_revenue: {
+        Row: {
+          category: string | null
+          month: string | null
+          record_count: number | null
+          total_amount: number | null
+          year: number | null
+        }
+        Relationships: []
+      }
+      sales_metrics: {
+        Row: {
+          avg_deal_size: number | null
+          avg_sales_cycle_days: number | null
+          conversion_rate: number | null
+          leads_count: number | null
+          period: string | null
+          sales_count: number | null
           total_revenue: number | null
-          total_spend: number | null
+        }
+        Relationships: []
+      }
+      vault_decrypted_secrets: {
+        Row: {
+          name: string | null
+          secret: string | null
         }
         Insert: {
-          campaign_id?: string | null
-          campaign_name?: string | null
-          cpl?: never
-          leads_count?: number | null
-          roas?: never
-          total_clicks?: number | null
-          total_impressions?: number | null
-          total_revenue?: number | null
-          total_spend?: number | null
+          name?: string | null
+          secret?: string | null
         }
         Update: {
-          campaign_id?: string | null
-          campaign_name?: string | null
-          cpl?: never
-          leads_count?: number | null
-          roas?: never
-          total_clicks?: number | null
-          total_impressions?: number | null
-          total_revenue?: number | null
-          total_spend?: number | null
+          name?: string | null
+          secret?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "ad_campaigns_ad_account_id_fkey"
-            columns: ["campaign_id"]
-            isOneToOne: false
-            referencedRelation: "ad_accounts"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Functions: {
-      [_ in never]: never
+      calculate_lead_total_value: {
+        Args: {
+          p_contract_months: number
+          p_contract_type: string
+          p_contract_value: number
+        }
+        Returns: number
+      }
+      get_vault_secret: {
+        Args: { secret_name: string }
+        Returns: string
+      }
+      has_crm_access: {
+        Args: { user_id: string }
+        Returns: boolean
+      }
+      has_metrics_access: {
+        Args: { user_id: string }
+        Returns: boolean
+      }
+      is_owner: {
+        Args: { user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      user_type: "owner" | "traffic_manager" | "sales"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -769,27 +1027,33 @@ export type Database = {
   }
 }
 
-type PublicSchema = Database[Extract<keyof Database, "public">]
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
-  PublicTableNameOrOptions extends
-    | keyof (PublicSchema["Tables"] & PublicSchema["Views"])
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
-        Database[PublicTableNameOrOptions["schema"]]["Views"])
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
-      Database[PublicTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
     ? R
     : never
-  : PublicTableNameOrOptions extends keyof (PublicSchema["Tables"] &
-        PublicSchema["Views"])
-    ? (PublicSchema["Tables"] &
-        PublicSchema["Views"])[PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
         Row: infer R
       }
       ? R
@@ -797,20 +1061,24 @@ export type Tables<
     : never
 
 export type TablesInsert<
-  PublicTableNameOrOptions extends
-    | keyof PublicSchema["Tables"]
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Insert: infer I
     }
     ? I
     : never
-  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
-    ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
         Insert: infer I
       }
       ? I
@@ -818,20 +1086,24 @@ export type TablesInsert<
     : never
 
 export type TablesUpdate<
-  PublicTableNameOrOptions extends
-    | keyof PublicSchema["Tables"]
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Update: infer U
     }
     ? U
     : never
-  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
-    ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
         Update: infer U
       }
       ? U
@@ -839,14 +1111,43 @@ export type TablesUpdate<
     : never
 
 export type Enums<
-  PublicEnumNameOrOptions extends
-    | keyof PublicSchema["Enums"]
-    | { schema: keyof Database },
-  EnumName extends PublicEnumNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicEnumNameOrOptions["schema"]]["Enums"]
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
-> = PublicEnumNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : PublicEnumNameOrOptions extends keyof PublicSchema["Enums"]
-    ? PublicSchema["Enums"][PublicEnumNameOrOptions]
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      user_type: ["owner", "traffic_manager", "sales"],
+    },
+  },
+} as const

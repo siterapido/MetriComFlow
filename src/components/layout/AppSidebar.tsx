@@ -1,4 +1,4 @@
-import { BarChart3, Users, Target, LayoutDashboard, Settings, TrendingUp } from "lucide-react";
+import { BarChart3, Users, Target, LayoutDashboard, Settings, TrendingUp, UserCog } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -11,8 +11,18 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
 
-const items = [
+interface NavItem {
+  title: string;
+  url: string;
+  icon: any;
+  requiresCRM?: boolean;
+  requiresMetrics?: boolean;
+  requiresOwner?: boolean;
+}
+
+const items: NavItem[] = [
   {
     title: "Dashboard Geral",
     url: "/dashboard",
@@ -22,30 +32,43 @@ const items = [
     title: "Leads",
     url: "/leads",
     icon: Users,
+    requiresCRM: true,
   },
   {
     title: "Metas dos Clientes",
     url: "/metas",
     icon: Target,
+    requiresMetrics: true,
   },
   {
     title: "Métricas Meta Ads",
-    url: "/metrics",
+    url: "/meta-ads-config",
     icon: TrendingUp,
+    requiresMetrics: true,
   },
   {
-    title: "Configurar Meta Ads",
-    url: "/meta-ads-config",
-    icon: Settings,
+    title: "Usuários",
+    url: "/usuarios",
+    icon: UserCog,
+    requiresOwner: true,
   },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const location = useLocation();
+  const { data: permissions } = useUserPermissions();
 
   const isActive = (path: string) => location.pathname === path;
   const isCollapsed = state === "collapsed";
+
+  // Filter items based on user permissions
+  const visibleItems = items.filter((item) => {
+    if (item.requiresOwner && !permissions?.isOwner) return false;
+    if (item.requiresCRM && !permissions?.hasCRMAccess) return false;
+    if (item.requiresMetrics && !permissions?.hasMetricsAccess) return false;
+    return true;
+  });
 
   return (
     <Sidebar collapsible="icon">
@@ -68,7 +91,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Navegação</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
+              {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)}>
                     <NavLink
