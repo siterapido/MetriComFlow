@@ -14,6 +14,7 @@ import LeadsLinear from "./pages/LeadsLinear";
 import Metas from "./pages/Metas";
 import MetaAdsConfig from "./pages/MetaAdsConfig";
 import Users from "./pages/Users";
+import LeadForms from "./pages/LeadForms";
 import NotFound from "./pages/NotFound";
 import ForgotPassword from "./pages/ForgotPassword";
 import UpdatePassword from "./pages/UpdatePassword";
@@ -46,6 +47,7 @@ const App = () => (
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/leads" element={<LeadsLinear />} />
                 <Route path="/leads/kanban" element={<Leads />} />
+                <Route path="/formularios" element={<LeadForms />} />
                 <Route path="/metas" element={<Metas />} />
                 {/* Redireciona /metrics para /meta-ads-config (páginas unificadas) */}
                 <Route path="/metrics" element={<Navigate to="/meta-ads-config" replace />} />
