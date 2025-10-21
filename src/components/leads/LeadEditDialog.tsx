@@ -34,7 +34,8 @@ import { useUpdateLead, useDeleteLead } from "@/hooks/useLeads";
 import { useLabels, useAddLabelToLead, useRemoveLabelFromLead } from "@/hooks/useLabels";
 import { useAdCampaigns } from "@/hooks/useMetaMetrics";
 import { useToast } from "@/hooks/use-toast";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useAssignableUsers } from "@/hooks/useAssignableUsers";
+import { USER_TYPE_LABELS } from "@/hooks/useUserPermissions";
 import type { Tables } from "@/lib/database.types";
 
 type Lead = Tables<"leads"> & {
@@ -67,7 +68,7 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
   const addLabelToLead = useAddLabelToLead();
   const removeLabelFromLead = useRemoveLabelFromLead();
   const { data: campaigns } = useAdCampaigns();
-  const { data: teamMembers } = useTeamMembers();
+  const { data: assignableUsers } = useAssignableUsers();
 
   const [formData, setFormData] = useState({
     title: lead.title,
@@ -118,7 +119,7 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
         : 0;
 
       const selectedAssigneeName =
-        teamMembers?.find((m) => m.id === formData.assigneeId)?.name ?? null;
+        assignableUsers?.find((user) => user.id === formData.assigneeId)?.full_name ?? null;
 
       // Update lead
       await updateLead.mutateAsync({
@@ -318,15 +319,20 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
                       <SelectValue placeholder="Selecione o responsável" />
                     </SelectTrigger>
                     <SelectContent>
-                      {teamMembers && teamMembers.length > 0 ? (
-                        teamMembers.map((member) => (
-                          <SelectItem key={member.id} value={member.id}>
-                            {member.name}
+                      {assignableUsers && assignableUsers.length > 0 ? (
+                        assignableUsers.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            <div className="flex flex-col">
+                              <span>{user.full_name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {USER_TYPE_LABELS[user.user_type]}
+                              </span>
+                            </div>
                           </SelectItem>
                         ))
                       ) : (
                         <SelectItem value="none" disabled>
-                          Nenhum membro disponível
+                          Nenhum usuário disponível
                         </SelectItem>
                       )}
                     </SelectContent>

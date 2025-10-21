@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Loader2, Mail, Lock } from "lucide-react";
 import { authHelpers } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
+import { mergeUserSettings, resolveDefaultHomePath, type UserSettings } from "@/hooks/useUserSettings";
 
 export function LoginFormSupabase() {
   const [email, setEmail] = useState("");
@@ -25,17 +26,22 @@ export function LoginFormSupabase() {
       if (error) throw error;
 
       if (data.user) {
+        const settings = mergeUserSettings(
+          (data.user.user_metadata?.settings as Partial<UserSettings> | null) ?? undefined
+        );
+        const homePath = resolveDefaultHomePath(settings);
+
         toast({
           title: "Login realizado com sucesso!",
           description: `Bem-vindo de volta, ${data.user.email}!`,
         });
-        navigate("/dashboard");
+        navigate(homePath);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Login error:", error);
       toast({
         title: "Erro ao fazer login",
-        description: error.message || "Credenciais inválidas",
+        description: error instanceof Error ? error.message : "Credenciais inválidas",
         variant: "destructive",
       });
     } finally {

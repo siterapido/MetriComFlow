@@ -21,7 +21,7 @@ Métricas essenciais do MVP e como calculá-las.
   - Fonte: SUM(`leads.value`) com `status='venda_ganha'` no período.
 
 - Faturamento Previsto (R$)
-  - Fonte: SUM(`leads.value`) com `status IN ('em_negociacao','proposta_enviada')` no período.
+  - Fonte: SUM(`leads.value`) com `status IN ('qualificacao','proposta','negociacao','follow_up','aguardando_resposta')` no período.
 
 - ROAS
   - Fórmula: Faturamento Realizado / Investimento

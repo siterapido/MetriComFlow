@@ -8,11 +8,11 @@ Referências
 - docs/mvp/metricas/calculos.md
 
 Kanban de Leads
-- Exibir novos campos: source, campanha (nome), external_lead_id, closed_won_at, closed_lost_at, lost_reason.
-- Transições de status: novo_lead → em_negociacao → proposta_enviada → venda_ganha / venda_perdida.
-- Modal obrigatório para lost_reason ao mover para venda_perdida.
-- Deduplicação: garantir que cards com mesmo external_lead_id não se duplicam.
-- Atualização em tempo real: useLeadIngestion (via realtime/broadcast das Edge Functions).
+- Exibir campos: source, campanha (nome), priority, lead_score, next_follow_up_date, external_lead_id, closed_won_at, closed_lost_at, lost_reason.
+- Transições: `novo_lead → qualificacao → proposta → negociacao → follow_up → aguardando_resposta → fechado_ganho` / `fechado_perdido`.
+- Modal obrigatório para `lost_reason` ao mover para `fechado_perdido`; toast de sucesso para `fechado_ganho`.
+- Deduplicação: manter checagem de `external_lead_id` ao inserir (exibir badge “Lead Meta”).
+- Atualização em tempo real: usar canal Realtime já criado (`realtime-leads`) e planejar `useLeadIngestion` para eventos Webhook.
 
 Hooks e Estado
 - Atualizar useLeads com transitionLeadStatus e suporte aos novos campos.
@@ -20,15 +20,14 @@ Hooks e Estado
 - Garantir formatação, timezone e consistência com backend.
 
 Relatórios por Campanha
-- Tabela com filtros de período; ordenação por ROAS; export CSV.
-- Data source: campaign_financials e business_kpis.
-- Fallback: usar SUM(campaign_daily_insights.leads_count) se webhooks não estiverem ativos.
-- Consistência de período entre Insights e Leads; timezone.
+- `MetricsPage` deve suportar filtros (conta, campanha, período), ordenação customizável (ROAS/Faturamento) e export CSV.
+- Fonte de dados: `campaign_financials`; fallback `SUM(campaign_daily_insights.leads_count)` quando leads não vinculados.
+- Garantir alinhamento de timezone/período entre insights e leads (helpers `getLastNDaysDateRange`).
 
 Tela Admin (Configuração)
-- Conectar conta (act_id) e acionar importação de campanhas.
-- Mostrar estado da integração (tokens ok, assinatura de página, última coleta de insights).
-- Nunca expor tokens; operações via backend/Edge.
+- Fluxo Meta (`MetaAdsConfig`) precisa listar conexões, contas ativas/inativas, última sincronização e status dos webhooks.
+- Acionar manualmente `sync-daily-insights` (refresh) e gerenciamento de apelidos das contas.
+- Nunca expor tokens; todas as chamadas passam por Edge Functions.
 
 Qualidade e Acessibilidade
 - Estados de carregamento, vazio e erro; toasts/notificações.

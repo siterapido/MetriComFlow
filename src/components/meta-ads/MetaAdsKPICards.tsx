@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DollarSign, Users, Target, TrendingUp, TrendingDown, MousePointerClick, Eye } from 'lucide-react'
-import { formatCurrency, formatNumber } from '@/lib/formatters'
+import { formatCurrency, formatNumber, type CurrencyFormatOptions } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 
 type MetricsSummary = {
@@ -28,6 +28,8 @@ type MetricsSummary = {
 type MetaAdsKPICardsProps = {
   summary: MetricsSummary | undefined
   isLoading?: boolean
+  currencyOptions?: CurrencyFormatOptions
+  highlightCAC?: boolean
 }
 
 type KPICardProps = {
@@ -39,9 +41,10 @@ type KPICardProps = {
   iconColor: string
   isLoading?: boolean
   hideChange?: boolean
+  highlight?: boolean
 }
 
-function KPICard({ title, value, change, subtitle, icon: Icon, iconColor, isLoading, hideChange }: KPICardProps) {
+function KPICard({ title, value, change, subtitle, icon: Icon, iconColor, isLoading, hideChange, highlight }: KPICardProps) {
   const isPositive = change !== undefined && change > 0
   const isNegative = change !== undefined && change < 0
   const isNeutral = change !== undefined && change === 0
@@ -52,7 +55,7 @@ function KPICard({ title, value, change, subtitle, icon: Icon, iconColor, isLoad
   const showNegative = isCPLMetric ? isPositive : isNegative
 
   return (
-    <Card className="bg-gradient-to-br from-card to-accent/20 border-border hover-lift">
+    <Card className={cn("bg-gradient-to-br from-card to-accent/20 border-border hover-lift", highlight && "ring-2 ring-purple-500/50 shadow-lg") }>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
@@ -114,18 +117,20 @@ function KPICard({ title, value, change, subtitle, icon: Icon, iconColor, isLoad
   )
 }
 
-export function MetaAdsKPICards({ summary, isLoading }: MetaAdsKPICardsProps) {
+export function MetaAdsKPICards({ summary, isLoading, currencyOptions, highlightCAC = false }: MetaAdsKPICardsProps) {
   const hasData = !!summary && (
     (summary.current.spend ?? 0) > 0 ||
     (summary.current.leads ?? 0) > 0 ||
     (summary.current.clicks ?? 0) > 0 ||
     (summary.current.impressions ?? 0) > 0
   )
+  const currencyPrefs: CurrencyFormatOptions = currencyOptions ?? { currency: 'BRL' }
+  const locale = currencyPrefs.locale ?? 'pt-BR'
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       <KPICard
         title="Investimento Total"
-        value={hasData ? formatCurrency(summary!.current.spend) : 'Sem dados'}
+        value={hasData ? formatCurrency(summary!.current.spend, currencyPrefs) : 'Sem dados'}
         change={summary?.changes.spend}
         icon={DollarSign}
         iconColor="bg-gradient-to-br from-blue-500 to-blue-600"
@@ -137,7 +142,7 @@ export function MetaAdsKPICards({ summary, isLoading }: MetaAdsKPICardsProps) {
         title="Leads Gerados"
         value={hasData ? formatNumber(summary!.current.leads) : 'Sem contatos'}
         change={summary?.changes.leads}
-        subtitle={hasData ? `${summary!.current.impressions.toLocaleString('pt-BR')} impressões` : undefined}
+        subtitle={hasData ? `${summary!.current.impressions.toLocaleString(locale)} impressões` : undefined}
         icon={Users}
         iconColor="bg-gradient-to-br from-green-500 to-green-600"
         isLoading={isLoading}
@@ -146,7 +151,7 @@ export function MetaAdsKPICards({ summary, isLoading }: MetaAdsKPICardsProps) {
 
       <KPICard
         title="CPL (Custo por Lead)"
-        value={hasData ? formatCurrency(summary!.current.cpl) : 'Sem dados'}
+        value={hasData ? formatCurrency(summary!.current.cpl, currencyPrefs) : 'Sem dados'}
         change={summary?.changes.cpl}
         subtitle={
           hasData
@@ -161,12 +166,13 @@ export function MetaAdsKPICards({ summary, isLoading }: MetaAdsKPICardsProps) {
         iconColor="bg-gradient-to-br from-purple-500 to-purple-600"
         isLoading={isLoading}
         hideChange={!hasData}
+        highlight={highlightCAC && hasData}
       />
 
       <KPICard
         title="Taxa de Cliques (CTR)"
         value={hasData ? `${summary!.current.ctr.toFixed(2)}%` : 'Sem dados'}
-        subtitle={hasData ? `${summary!.current.clicks.toLocaleString('pt-BR')} cliques` : undefined}
+        subtitle={hasData ? `${summary!.current.clicks.toLocaleString(locale)} cliques` : undefined}
         icon={MousePointerClick}
         iconColor="bg-gradient-to-br from-orange-500 to-orange-600"
         isLoading={isLoading}

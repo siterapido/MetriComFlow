@@ -25,11 +25,14 @@ import { useToast } from "@/hooks/use-toast";
 import AdAccountsManager from "@/components/meta-ads/AdAccountsManager";
 import AddAdAccountModal from "@/components/meta-ads/AddAdAccountModal";
 import { CampaignTable } from "@/components/metrics/CampaignTable";
-import { MetaAdsFilters, type FilterValues } from "@/components/meta-ads/MetaAdsFilters";
+import { type FilterValues } from "@/components/meta-ads/MetaAdsFilters";
+import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MetaAdsChart } from "@/components/meta-ads/MetaAdsChart";
 import { MetaAdsKPICards } from "@/components/meta-ads/MetaAdsKPICards";
-import { useFilteredInsights, useMetricsSummary, useCampaignFinancialsFiltered, useAdCampaigns, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
+import { useFilteredInsights, useMetricsSummary, useCampaignFinancialsFiltered, useAdAccounts, useAdCampaigns, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
 import { formatCurrency } from "@/lib/formatters";
+import { useUserSettings } from "@/hooks/useUserSettings";
 
 export default function MetaAdsConfig() {
   // Meta Auth state
@@ -52,6 +55,15 @@ export default function MetaAdsConfig() {
   } = useMetaAuth();
 
   const { toast } = useToast();
+  const { data: settings } = useUserSettings();
+  const preferredPeriod = settings?.metrics.defaultDateRange ?? "90";
+  const currencyOptions = useMemo(() => {
+    const currency = settings?.metrics.preferredCurrency ?? "BRL";
+    const locale = currency === "USD" ? "en-US" : "pt-BR";
+    return { currency, locale };
+  }, [settings?.metrics.preferredCurrency]);
+  const highlightCAC = settings?.metrics.highlightCAC ?? true;
+  const showForecastCards = settings?.metrics.showForecastCards ?? true;
 
   // Config dialog states
   const [showConfigDialog, setShowConfigDialog] = useState(false);
@@ -60,10 +72,10 @@ export default function MetaAdsConfig() {
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
 
   // Metrics filters
-  const [filters, setFilters] = useState<FilterValues>({
-    period: '90',
-    dateRange: getLastNDaysDateRange(90),
-  });
+  const [filters, setFilters] = useState<FilterValues>(() => ({
+    period: preferredPeriod,
+    dateRange: getLastNDaysDateRange(Number(preferredPeriod)),
+  }));
 
   // Fetch metrics data
   const { data: metaInsights, isLoading: insightsLoading } = useFilteredInsights(filters);
@@ -73,9 +85,22 @@ export default function MetaAdsConfig() {
     campaignId: filters.campaignId,
     dateRange: filters.dateRange,
   });
+  const { data: accounts } = useAdAccounts();
   const { data: accountCampaigns } = useAdCampaigns(filters.accountId);
 
   const isLoading = summaryLoading || financialsLoading || insightsLoading;
+
+  useEffect(() => {
+    const nextPeriod = settings?.metrics.defaultDateRange ?? "90";
+    setFilters((prev) => {
+      if (prev.period === nextPeriod) return prev;
+      return {
+        ...prev,
+        period: nextPeriod,
+        dateRange: getLastNDaysDateRange(Number(nextPeriod)),
+      };
+    });
+  }, [settings?.metrics.defaultDateRange]);
 
   // Debug info
   const debugInfo = {
@@ -246,12 +271,66 @@ export default function MetaAdsConfig() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header with Settings Button */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* Header com filtros integrados */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Métricas Meta Ads</h1>
           <p className="text-muted-foreground">Performance e ROI das campanhas</p>
         </div>
+
+        {/* Filtros minimalistas inline + botão de configurações */}
+        <div className="flex flex-wrap gap-2 items-center">
+          {hasActiveConnection && (
+            <>
+              <DateRangeFilter
+                value={filters.dateRange}
+                onChange={(dateRange) => setFilters({ ...filters, dateRange })}
+              />
+
+              <Select
+                value={filters.accountId || 'all'}
+                onValueChange={(value) => setFilters({
+                  ...filters,
+                  accountId: value === 'all' ? undefined : value,
+                  campaignId: undefined
+                })}
+              >
+                <SelectTrigger className="w-[180px] bg-background">
+                  <SelectValue placeholder="Todas as contas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as contas</SelectItem>
+                  {accounts?.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.business_name || account.external_id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {filters.accountId && (
+                <Select
+                  value={filters.campaignId || 'all'}
+                  onValueChange={(value) => setFilters({
+                    ...filters,
+                    campaignId: value === 'all' ? undefined : value
+                  })}
+                >
+                  <SelectTrigger className="w-[200px] bg-background">
+                    <SelectValue placeholder="Todas as campanhas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as campanhas</SelectItem>
+                    {accountCampaigns?.map((campaign) => (
+                      <SelectItem key={campaign.id} value={campaign.id}>
+                        {campaign.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </>
+          )}
 
         <Dialog open={showConfigDialog} onOpenChange={setShowConfigDialog}>
           <DialogTrigger asChild>
@@ -455,6 +534,7 @@ export default function MetaAdsConfig() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Show message if not connected */}
@@ -478,17 +558,24 @@ export default function MetaAdsConfig() {
       {/* Metrics Content - Only show if connected */}
       {hasActiveConnection && (
         <>
-          {/* Interactive Filters */}
-          <MetaAdsFilters filters={filters} onFiltersChange={setFilters} />
-
           {/* Filtered KPI Cards */}
-          <MetaAdsKPICards summary={metaSummary} isLoading={summaryLoading} />
+          <MetaAdsKPICards
+            summary={metaSummary}
+            isLoading={summaryLoading}
+            currencyOptions={currencyOptions}
+            highlightCAC={highlightCAC}
+          />
 
           {/* Charts Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Histórico de Métricas */}
             <div className="lg:col-span-2">
-              <MetaAdsChart data={metaInsights || []} isLoading={insightsLoading} />
+              <MetaAdsChart
+                data={metaInsights || []}
+                isLoading={insightsLoading}
+                currencyOptions={currencyOptions}
+                highlightCAC={highlightCAC}
+              />
             </div>
 
             {/* Campaign Performance */}

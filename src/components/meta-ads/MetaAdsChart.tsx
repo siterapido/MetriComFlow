@@ -1,11 +1,11 @@
 import { useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, type TooltipProps } from 'recharts'
 import { TrendingUp, DollarSign, MousePointerClick } from 'lucide-react'
-import { formatCurrency, formatNumber } from '@/lib/formatters'
+import { formatCurrency, type CurrencyFormatOptions } from '@/lib/formatters'
 import { format, parseISO } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
+import { ptBR, enUS } from 'date-fns/locale'
 
 type ChartData = {
   date: string
@@ -21,30 +21,52 @@ type ChartData = {
 type MetaAdsChartProps = {
   data: ChartData[]
   isLoading?: boolean
+  currencyOptions?: CurrencyFormatOptions
+  highlightCAC?: boolean
 }
 
-export function MetaAdsChart({ data, isLoading }: MetaAdsChartProps) {
+export function MetaAdsChart({ data, isLoading, currencyOptions, highlightCAC = false }: MetaAdsChartProps) {
+  const currencyPrefs: CurrencyFormatOptions = currencyOptions ?? { currency: 'BRL' }
+  const locale = currencyPrefs.locale ?? 'pt-BR'
+  const dateLocale = locale.startsWith('en') ? enUS : ptBR
+  const currencySymbol = currencyPrefs.currency === 'USD' ? 'US$' : 'R$'
+  const numberFormatter = useMemo(() => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }), [locale])
+
   // Transform data for chart display
   const chartData = useMemo(() => {
     return data.map((item) => ({
       ...item,
-      dateFormatted: format(parseISO(item.date), 'dd/MMM', { locale: ptBR }),
-      dateFull: format(parseISO(item.date), 'PP', { locale: ptBR }),
+      dateFormatted: format(parseISO(item.date), locale.startsWith('en') ? 'MMM/dd' : 'dd/MMM', { locale: dateLocale }),
+      dateFull: format(parseISO(item.date), 'PP', { locale: dateLocale }),
     }))
-  }, [data])
+  }, [data, locale, dateLocale])
 
   // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
           <p className="text-sm font-medium text-foreground mb-2">{payload[0]?.payload?.dateFull}</p>
-          {payload.map((entry: any, index: number) => (
-            <p key={index} className="text-sm text-muted-foreground">
-              <span style={{ color: entry.color }}>{entry.name}: </span>
-              <span className="font-medium text-foreground">{entry.value.toLocaleString('pt-BR')}</span>
-            </p>
-          ))}
+          {payload.map((entry, index) => {
+            if (!entry) return null
+            const value = entry.value ?? 0
+            let formattedValue: string
+
+            if (entry.dataKey === 'spend' || entry.dataKey === 'cpl' || entry.dataKey === 'cpc') {
+              formattedValue = formatCurrency(value, currencyPrefs)
+            } else if (entry.dataKey === 'ctr') {
+              formattedValue = `${value.toFixed(2)}%`
+            } else {
+              formattedValue = numberFormatter.format(value)
+            }
+
+            return (
+              <p key={index} className="text-sm text-muted-foreground">
+                <span style={{ color: entry.color }}>{entry.name}: </span>
+                <span className="font-medium text-foreground">{formattedValue}</span>
+              </p>
+            )
+          })}
         </div>
       )
     }
@@ -132,13 +154,13 @@ export function MetaAdsChart({ data, isLoading }: MetaAdsChartProps) {
                 <YAxis
                   stroke="#9CA3AF"
                   style={{ fontSize: '12px' }}
-                  tickFormatter={(value) => `R$ ${value.toLocaleString('pt-BR')}`}
+                  tickFormatter={(value) => formatCurrency(value, currencyPrefs)}
                 />
                 <Tooltip content={<CustomTooltip />} />
                 <Area
                   type="monotone"
                   dataKey="spend"
-                  name="Investimento"
+                  name={`Investimento (${currencySymbol})`}
                   stroke="#2DA7FF"
                   strokeWidth={2}
                   fillOpacity={1}
@@ -164,7 +186,7 @@ export function MetaAdsChart({ data, isLoading }: MetaAdsChartProps) {
                   yAxisId="left"
                   stroke="#9CA3AF"
                   style={{ fontSize: '12px' }}
-                  tickFormatter={(value) => `R$ ${value.toFixed(2)}`}
+                  tickFormatter={(value) => formatCurrency(value, currencyPrefs)}
                 />
                 <YAxis
                   yAxisId="right"
@@ -179,16 +201,16 @@ export function MetaAdsChart({ data, isLoading }: MetaAdsChartProps) {
                   yAxisId="left"
                   type="monotone"
                   dataKey="cpl"
-                  name="CPL (R$)"
+                  name={`CPL (${currencySymbol})`}
                   stroke="#F59E0B"
-                  strokeWidth={2}
+                  strokeWidth={highlightCAC ? 3 : 2}
                   dot={{ r: 3 }}
                 />
                 <Line
                   yAxisId="left"
                   type="monotone"
                   dataKey="cpc"
-                  name="CPC (R$)"
+                  name={`CPC (${currencySymbol})`}
                   stroke="#8B5CF6"
                   strokeWidth={2}
                   dot={{ r: 3 }}

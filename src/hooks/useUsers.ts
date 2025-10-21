@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/lib/database.types";
 
 type UserType = Database["public"]["Enums"]["user_type"];
@@ -26,19 +27,61 @@ export interface UpdateUserData {
   avatar_url?: string;
 }
 
-// Hook para buscar todos os usuários
+// Hook para buscar usuários da mesma organização
 export const useUsers = () => {
+  const { user } = useAuth();
+
   return useQuery({
-    queryKey: ["users"],
+    queryKey: ["users", user?.id],
     queryFn: async () => {
+      if (!user?.id) return [];
+
+      // 1. Buscar organizações do usuário atual
+      const { data: memberships, error: membershipsError } = await supabase
+        .from("organization_memberships")
+        .select("organization_id")
+        .eq("profile_id", user.id)
+        .eq("is_active", true);
+
+      if (membershipsError) throw membershipsError;
+
+      // 2. Se o usuário não pertence a nenhuma organização, mostrar apenas ele mesmo
+      if (!memberships || memberships.length === 0) {
+        const { data: ownProfile, error: profileError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+
+        if (profileError) throw profileError;
+        return [ownProfile] as User[];
+      }
+
+      // 3. Buscar IDs das organizações
+      const orgIds = memberships.map(m => m.organization_id);
+
+      // 4. Buscar todos os membros dessas organizações
+      const { data: orgMembers, error: orgMembersError } = await supabase
+        .from("organization_memberships")
+        .select("profile_id")
+        .in("organization_id", orgIds)
+        .eq("is_active", true);
+
+      if (orgMembersError) throw orgMembersError;
+
+      // 5. Buscar perfis desses membros
+      const profileIds = [...new Set(orgMembers.map(m => m.profile_id))];
+
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
+        .in("id", profileIds)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data as User[];
     },
+    enabled: !!user?.id,
   });
 };
 
@@ -67,6 +110,10 @@ export const useCreateUser = () => {
 
   return useMutation({
     mutationFn: async (userData: CreateUserData) => {
+      // Snapshot da sessão atual para evitar troca de usuário após o signUp
+      const { data: currentSessionData } = await supabase.auth.getSession();
+      const currentSession = currentSessionData?.session;
+
       // 1. Verificar se o email já existe
       const { data: existingUser } = await supabase
         .from("profiles")
@@ -107,10 +154,32 @@ export const useCreateUser = () => {
 
       if (!authData.user) throw new Error("Falha ao criar usuário");
 
+      // 3. Restaurar sessão anterior (proprietário) para evitar login automático no novo usuário
+      if (currentSession) {
+        const { error: restoreError } = await supabase.auth.setSession({
+          access_token: currentSession.access_token,
+          refresh_token: currentSession.refresh_token,
+        });
+
+        if (restoreError) {
+          toast({
+            title: "Sessão restaurada parcialmente",
+            description:
+              "Usuário criado, mas houve um problema ao restaurar sua sessão. Faça login novamente, se necessário.",
+          });
+        }
+      } else {
+        await supabase.auth.signOut();
+      }
+
       return authData.user;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      // Atualiza lista de usuários disponíveis no CRM quando um responsável elegível é criado
+      if (variables?.user_type === "sales" || variables?.user_type === "owner") {
+        queryClient.invalidateQueries({ queryKey: ["assignable-users"] });
+      }
       toast({
         title: "Usuário criado",
         description: "O usuário foi criado com sucesso.",

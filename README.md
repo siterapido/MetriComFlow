@@ -85,6 +85,7 @@ metricom-flow/
 ├── supabase/
 │   └── migrations/      # Database schema
 ├── DATABASE.md          # Database docs
+├── AGENTS.md            # Contributor guidelines
 ├── SETUP_SUPABASE.md    # Setup guide
 └── CLAUDE.md            # AI instructions
 ```
@@ -103,6 +104,7 @@ Resumo:
 ## 📚 Documentação
 
 - **[DATABASE.md](./DATABASE.md)** - Schema completo e API reference
+- **[AGENTS.md](./AGENTS.md)** - Guia para contribuidores e agentes
 - **[SETUP_SUPABASE.md](./SETUP_SUPABASE.md)** - Guia de setup passo a passo
 - **[CLAUDE.md](./CLAUDE.md)** - Instruções para Claude Code
 

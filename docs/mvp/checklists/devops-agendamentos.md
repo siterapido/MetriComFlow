@@ -7,9 +7,9 @@ Referências
 - docs/mvp/integracoes/checklist-implementacao.md
 
 Migrations e Ambientes
-- Supabase CLI: criar branch de desenvolvimento; aplicar migrations (portar migracoes-propostas.sql).
-- Gerar tipos TypeScript pós-migrations e sincronizar no frontend.
-- Política de merge de branch para produção após validação.
+- Supabase CLI: aplicar migrations oficiais (`supabase/migrations/*`) + complementos (`docs/mvp/base-de-dados/migracoes-propostas.sql`) em branch de dev antes do merge.
+- Gerar tipos TypeScript (`supabase gen types typescript --linked`) e atualizar `src/lib/database.types.ts`.
+- Registrar versão do banco (tag + commit) e validar drift com `supabase db diff`.
 
 Agendamentos (Cron)
 - Agendar meta-insights-sync em horários definidos (UTC); documentar janela e timezone.
@@ -17,8 +17,9 @@ Agendamentos (Cron)
 - Suportar time_range custom (retrocoleta) manual quando necessário.
 
 Segredos e Config
-- Confirmar presença de META_PAGE_ACCESS_TOKEN, META_ADS_ACCESS_TOKEN, META_AD_ACCOUNT_ID, SUPABASE_SERVICE_ROLE_KEY.
-- Rotação de tokens e alerta de expiração.
+- Checar secrets obrigatórios: `META_CLIENT_ID`, `META_APP_SECRET`, `META_REDIRECT_URI`, `META_PAGE_ACCESS_TOKEN`, `META_SYSTEM_USER_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`.
+- Rotacionar tokens antes do vencimento; adicionar alerta (Supabase + monitor externo).
+- `scripts/sync-envs.sh` precisa refletir variáveis novas para ambientes locais.
 
 Observabilidade
 - Logs sanitizados; métricas de execução (tempo, volume, erros).

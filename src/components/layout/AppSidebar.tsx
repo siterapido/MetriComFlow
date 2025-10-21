@@ -52,6 +52,11 @@ const items: NavItem[] = [
     icon: UserCog,
     requiresOwner: true,
   },
+  {
+    title: "Meu Perfil",
+    url: "/meu-perfil",
+    icon: Settings,
+  },
 ];
 
 export function AppSidebar() {

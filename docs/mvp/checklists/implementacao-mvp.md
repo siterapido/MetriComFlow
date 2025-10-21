@@ -13,28 +13,26 @@ Referências:
 Checklist Geral (por área)
 
 Setup/Segredos
-- Registrar em Supabase Secrets: META_PAGE_ACCESS_TOKEN, META_ADS_ACCESS_TOKEN (user/system), META_AD_ACCOUNT_ID (act_...), SUPABASE_SERVICE_ROLE_KEY.
-- Validar que tokens não trafegam no frontend; logs sem dados sensíveis.
+- Registrar em Supabase Secrets: `META_CLIENT_ID`, `META_APP_SECRET`, `META_REDIRECT_URI`, `META_PAGE_ACCESS_TOKEN`, `META_SYSTEM_USER_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`.
+- Validar que tokens não trafegam no frontend; logs sem dados sensíveis; atualizar `scripts/sync-envs.sh`.
 
 Banco de Dados
-- Portar migracoes-propostas.sql para migrations do Supabase CLI (branch de desenvolvimento):
-  - Atualizar enum de status em leads.
-  - Adicionar campos: source, closed_won_at, closed_lost_at, lost_reason, external_lead_id, ad_id, adset_id, campaign_id.
-  - Índices: idx_leads_campaign; índice único parcial em external_lead_id (WHERE external_lead_id IS NOT NULL).
+- Aplicar migrations oficiais (`supabase/migrations/*.sql`) e, se necessário, portar complementos de `docs/mvp/base-de-dados/migracoes-propostas.sql` (branch de desenvolvimento):
+  - Atualizar constraint de `source` para contemplar novos canais (meta_ads, manual, google_ads, whatsapp, indicacao, site, telefone, email, evento).
+  - Garantir enum de status completo (`novo_lead`, `qualificacao`, `proposta`, `negociacao`, `follow_up`, `aguardando_resposta`, `fechado_ganho`, `fechado_perdido`).
+  - Criar índices de follow-up (`idx_leads_next_follow_up_date`, `idx_leads_assignee_priority`).
 - Criar/validar tabelas:
-  - ad_accounts (RLS habilitado; policies SELECT admin/manager).
-  - ad_campaigns (índice ad_account_id; RLS habilitado).
-  - campaign_daily_insights (índice (campaign_id, date); RLS habilitado).
+  - `tasks`, `interactions`, `ad_accounts`, `ad_campaigns`, `campaign_daily_insights` (todas já em migrations 008-010).
 - Views e RPCs:
-  - business_kpis e campaign_financials.
-  - Criar RPCs (security definer) para filtros por período e validação de role.
+  - `business_kpis` e `campaign_financials`; caso precise de filtros adicionais, criar RPCs (security definer) que aproveitem `campaign_daily_insights`.
 - Triggers/Auditoria:
-  - Preencher closed_won_at/closed_lost_at ao transicionar status.
+  - Preencher closed_won_at/closed_lost_at e atualizar counters (`comments_count`, `attachments_count`, `interactions_count`, `tasks_count`).
   - Registrar lead_activity nas mudanças de status.
 
 Edge Functions (Integração Meta Ads)
 - Conexão inicial:
-  - Endpoint para receber act_id, validar GET /{act_id}?fields=name,account_status e armazenar em ad_accounts + secrets.
+  - `meta-auth`: OAuth + storage de tokens em secrets (state e verify).
+  - `connect-ad-account`: receber `act_id`, validar `GET /act_{id}?fields=id,name,business_name`, registrar conta e iniciar importação de campanhas.
 - Importar campanhas:
   - GET /{act_id}/campaigns?fields=name,status,objective,start_time,stop_time&effective_status=['ACTIVE','PAUSED'].
   - Upsert em ad_campaigns (external_id).
@@ -49,20 +47,20 @@ Edge Functions (Integração Meta Ads)
 
 Frontend
 - Kanban:
-  - Exibir source, campanha (nome), external_lead_id, datas de fechamento.
-  - Modal de lost_reason na transição para venda_perdida.
-  - Criação automática de cards em novo_lead via eventos do webhook.
-  - Hooks: useLeads (transitionLeadStatus), useLeadIngestion (eventos em tempo real).
+  - Exibir source, campanha (nome), priority, lead_score, datas de follow-up/fechamento, external_lead_id.
+  - Modal de lost_reason na transição para `fechado_perdido`.
+  - Criação automática de cards em `novo_lead` via webhook; mostrar badge “Lead Meta”.
+  - Hooks: alinhar `LeadStatus` em `useLeads`, implementar `transitionLeadStatus` e `useLeadIngestion`.
 - Relatórios por campanha:
-  - Tabela com filtros de período, ordenação por ROAS, export CSV.
-  - Data source: campaign_financials e business_kpis; consistência de timezone/granularidade.
+  - Tabela com filtros (conta, campanha, período), ordenação por ROAS/Faturamento, export CSV.
+  - Data source: `campaign_financials` (agregado) + `campaign_daily_insights` (dados brutos) para consistência de timezone/granularidade.
   - Fallback: usar SUM(campaign_daily_insights.leads_count) quando não houver webhook ativo.
 - Admin (Configuração):
-  - Tela para conectar conta (act_id) e acionar importação de campanhas.
+  - Tela para conectar conta, renomear, ativar/desativar, exibir status dos tokens/webhooks e disparar refresh.
 
 Segurança e RLS
-- Validar policies: SELECT restrito em ad_accounts/ad_campaigns/campaign_daily_insights; inserts/updates via Edge.
-- Expor métricas financeiras via RPC com checagem de role; ocultar para role user.
+- Validar policies: SELECT restrito em `ad_accounts`/`ad_campaigns`/`campaign_daily_insights` (somente `has_metrics_access`); mutações via Edge.
+- Expor métricas financeiras via RPC com checagem de role; ocultar para `sales`.
 - Confirmar escopos e tokens: ads_read, pages_manage_ads, leads_retrieval; PAGE_ACCESS_TOKEN e User/System User token.
 - App Review: preparar política de privacidade e testers; planejar submissão.
 

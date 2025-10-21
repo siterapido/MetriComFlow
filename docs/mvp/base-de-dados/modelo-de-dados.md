@@ -1,82 +1,46 @@
-# Modelo de Dados Proposto (MVP)
+# Modelo de Dados (Estado Pós-Migrations 010)
 
-Objetivo: suportar cálculo de Investimento, Leads Gerados, CPL, Clientes Fechados, Faturamento Realizado/Previsto e ROAS, com rastreio por campanha de Meta Ads.
+Consolidação do schema adotado pelo MVP após as migrations `001_initial_schema.sql` até `010_crm_essential_features.sql` e `20251020_unified_goals_system.sql`.
 
-## Alterações em tabelas existentes
+## Leads e entidades CRM
+- `leads`
+  - Status (`leads_status_check`): `novo_lead`, `qualificacao`, `proposta`, `negociacao`, `follow_up`, `aguardando_resposta`, `fechado_ganho`, `fechado_perdido`.
+  - Campos chave: `value`, `priority` (`low|medium|high|urgent`), `expected_close_date`, `last_contact_date`, `next_follow_up_date`, `lead_score`, `conversion_probability`, `product_interest`, `lead_source_detail`.
+  - Integração Meta: `source`, `campaign_id`, `external_lead_id`, `ad_id`, `adset_id`.
+  - Fechamento: `closed_won_at`, `closed_lost_at`, `lost_reason`.
+  - Índices: status, priority, expected_close_date, last_contact_date, next_follow_up_date, lead_score, campaign; `UNIQUE(external_lead_id) WHERE NOT NULL`.
+- `lead_activity`: histórico de transições/atribuições (trigger em `leads`).
+- `labels`, `lead_labels`, `checklist_items`, `comments`, `attachments` continuam com RLS via `has_crm_access`.
+- `tasks`: tarefas relacionadas a leads (`task_type`, `status`, `priority`, `due_date`, `reminder_date`, `assigned_to`, `created_by`).
+- `interactions`: log de contatos (tipo, direção, outcome, follow_up).
 
-### `leads`
-- Atualizar enum de `status` para refletir funil comercial:
-  - `novo_lead` | `em_negociacao` | `proposta_enviada` | `venda_ganha` | `venda_perdida`
-- Campos novos:
-  - `source` TEXT CHECK (source IN ('meta_ads','manual')) DEFAULT 'manual'
-  - `campaign_id` UUID NULL REFERENCES `ad_campaigns`(id) ON DELETE SET NULL
-  - `closed_won_at` TIMESTAMP WITH TIME ZONE NULL
-  - `closed_lost_at` TIMESTAMP WITH TIME ZONE NULL
-  - `lost_reason` TEXT NULL
-  - `external_lead_id` TEXT NULL (ID do lead no Meta – para deduplicação)
-  - `ad_id` TEXT NULL (ID do anúncio no Meta)
-  - `adset_id` TEXT NULL (ID do conjunto de anúncios no Meta)
-  - Observação: o campo existente `value` passa a ser formalmente "Valor do Contrato (R$)".
+## Usuários e permissões
+- `profiles` possui `user_type` enum (`owner`, `traffic_manager`, `sales`).
+- Funções auxiliares:
+  - `is_owner(uuid)`
+  - `has_crm_access(uuid)` → owner + sales
+  - `has_metrics_access(uuid)` → owner + traffic_manager
+  - `has_meta_access(uuid)` (migre 007+)
+- `team_members` vincula usuários a equipes, usado para atribuições.
 
-### `revenue_records`
-- Opcional: alocar categoria `clientes` para faturamento realizado e `oportunidades` para previsto, porém o MVP deve calcular faturamento direto de `leads.value` por status.
+## Meta Ads
+- `ad_accounts`: contas conectadas (`external_id act_...`, `business_name`, `connected_by`).
+- `ad_campaigns`: campanhas da conta (`external_id`, `objective`, `status`, datas, FK `ad_account_id`).
+- `campaign_daily_insights`: métricas diárias (`spend`, `impressions`, `clicks`, `leads_count`, UNIQUE `campaign_id + date`).
+- Views:
+  - `business_kpis`: KPIs mensais (investimento, leads, clientes fechados, faturamento previsto/realizado, CPL, ROAS, conversão).
+  - `campaign_financials`: agregado por campanha (investimento, leads, fechamentos, faturamento, ROAS, CPL, conversão).
 
-## Novas tabelas
+## Metas e relatórios
+- `client_goals` remodelada na migration `20251020_unified_goals_system.sql` com tipos flexíveis (faturamento, clientes, ROAS) e períodos.
+- Views legadas `dashboard_kpis`, `monthly_revenue` permanecem para o dashboard antigo.
 
-### `ad_accounts`
-- `id` UUID PK
-- `provider` TEXT CHECK (provider IN ('meta')) DEFAULT 'meta'
-- `external_id` TEXT NOT NULL (ex: act_123456789)
-- `business_name` TEXT
-- `connected_by` UUID REFERENCES `profiles`(id)
-- `created_at`, `updated_at`
-- RLS: Admin/Manager leitura; criação somente por usuários autenticados via fluxo de conexão.
+## Políticas RLS e segurança
+- RLS em `leads`, `tasks`, `interactions`, `comments`, `attachments`, `checklist_items`, `labels`, `lead_labels` exige `has_crm_access`.
+- `ad_accounts`, `ad_campaigns`, `campaign_daily_insights` expõem SELECT para `has_metrics_access`; mutações via Edge Functions com serviço.
+- Views financeiras são consumidas através de RPCs (security definer) que validam `has_metrics_access` antes de retornar dados.
+- Triggers preenchem contadores (`comments_count`, `attachments_count`, `interactions_count`, `tasks_count`) e datas de fechamento.
 
-### `ad_campaigns`
-- `id` UUID PK
-- `ad_account_id` UUID REFERENCES `ad_accounts`(id)
-- `external_id` TEXT NOT NULL (ex: 1234567890)
-- `name` TEXT NOT NULL
-- `objective` TEXT NULL
-- `status` TEXT NULL
-- `start_time` TIMESTAMP WITH TIME ZONE NULL
-- `stop_time` TIMESTAMP WITH TIME ZONE NULL
-- `created_at`, `updated_at`
-
-### `campaign_daily_insights`
-- `id` UUID PK
-- `campaign_id` UUID REFERENCES `ad_campaigns`(id)
-- `date` DATE NOT NULL
-- `spend` DECIMAL(15,2) DEFAULT 0
-- `impressions` BIGINT DEFAULT 0
-- `clicks` BIGINT DEFAULT 0
- - `leads_count` BIGINT DEFAULT 0 (derivado de `actions` com `action_type='lead'` na API de Insights)
-- `created_at`
-- Índices: (`campaign_id`,`date`)
-
-## Views e materializações
-
-### `business_kpis`
-- KPIs por período (mês atual):
-  - `investimento_total`: SUM(spend) de `campaign_daily_insights` (mês atual)
-  - `leads_gerados`: COUNT(*) de `leads` com `source='meta_ads'` (mês atual)
-  - `cpl`: investimento_total / leads_gerados (proteger divisão por zero)
-  - `clientes_fechados`: COUNT(*) de `leads` com `status='venda_ganha'` (mês atual)
-  - `faturamento_realizado`: SUM(value) onde `status='venda_ganha'` (mês atual)
-  - `faturamento_previsto`: SUM(value) onde `status IN ('em_negociacao','proposta_enviada')` (mês atual)
-  - `roas`: faturamento_realizado / investimento_total
-
-### `campaign_financials`
-- Agregação por campanha:
-  - `campaign_id`, `campaign_name`
-  - `investimento` (SUM(spend))
-  - `leads_gerados` (COUNT `leads.campaign_id`) – quando houver `leads` registrados via webhook/polling
-    - Alternativa: usar `SUM(campaign_daily_insights.leads_count)` quando apenas Insights estiverem disponíveis
-  - `vendas_fechadas` (COUNT `leads.status='venda_ganha'`)
-  - `faturamento` (SUM `leads.value` com `status='venda_ganha'`)
-  - `roas` (faturamento / investimento)
-
-## Considerações de RLS
-- `leads`: leitura para Admin/Manager de todos; para `user` apenas dos próprios (created_by) ou atribuídos (assignee_id vinculado ao seu `team_members.profile_id`).
-- Views financeiras (`business_kpis`, `campaign_financials`): acesso restrito a `admin` por padrão. Versões limitadas podem ser expostas a `manager`.
- - Deduplicação de leads Meta: manter índice único opcional em `external_lead_id` (permitir NULLs) e lógica de upsert na ingestão.
+## Migrações futuras
+- Revisar se novos campos (ex.: `deal_probability_reason`) serão necessários ao evoluir scoring.
+- Caso surjam filtros adicionais (p.ex. por `next_follow_up_date`), avaliar criação de índices compostos específicos.

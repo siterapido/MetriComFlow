@@ -16,7 +16,8 @@ import { useCreateLead } from "@/hooks/useLeads";
 import { useLabels, useAddLabelToLead } from "@/hooks/useLabels";
 import { useAdCampaigns } from "@/hooks/useMetaMetrics";
 import { useToast } from "@/hooks/use-toast";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useAssignableUsers } from "@/hooks/useAssignableUsers";
+import { USER_TYPE_LABELS } from "@/hooks/useUserPermissions";
 
 interface NewLeadModalProps {
   open: boolean;
@@ -42,7 +43,7 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
   const { data: labels } = useLabels();
   const addLabelToLead = useAddLabelToLead();
   const { data: campaigns } = useAdCampaigns();
-  const { data: teamMembers } = useTeamMembers();
+  const { data: assignableUsers } = useAssignableUsers();
 
   const [formData, setFormData] = useState({
     title: "",
@@ -81,7 +82,7 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
         ? parseInt(formData.contractValue.replace(/\D/g, '')) / 100
         : 0;
 
-      const selectedAssigneeName = teamMembers?.find(m => m.id === formData.assigneeId)?.name ?? null;
+      const selectedAssigneeName = assignableUsers?.find((user) => user.id === formData.assigneeId)?.full_name ?? null;
 
       // Calcular o valor total do contrato (para exibição no pipeline)
       const totalContractValue = formData.contractType === 'monthly'
@@ -309,15 +310,20 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
                   <SelectValue placeholder="Selecione o responsável" />
                 </SelectTrigger>
                 <SelectContent>
-                  {teamMembers && teamMembers.length > 0 ? (
-                    teamMembers.map((member) => (
-                      <SelectItem key={member.id} value={member.id}>
-                        {member.name}
+                  {assignableUsers && assignableUsers.length > 0 ? (
+                    assignableUsers.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        <div className="flex flex-col">
+                          <span>{user.full_name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {USER_TYPE_LABELS[user.user_type]}
+                          </span>
+                        </div>
                       </SelectItem>
                     ))
                   ) : (
                     <SelectItem value="none" disabled>
-                      Nenhum membro disponível
+                      Nenhum usuário disponível
                     </SelectItem>
                   )}
                 </SelectContent>

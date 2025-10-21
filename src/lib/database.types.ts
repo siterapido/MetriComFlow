@@ -239,6 +239,9 @@ export type Database = {
           created_by: string | null
           goal_amount: number
           id: string
+          metric_category: string | null
+          metric_key: string | null
+          metric_label: string | null
           percentage: number | null
           period_end: string
           period_start: string
@@ -252,6 +255,9 @@ export type Database = {
           created_by?: string | null
           goal_amount: number
           id?: string
+          metric_category?: string | null
+          metric_key?: string | null
+          metric_label?: string | null
           percentage?: number | null
           period_end: string
           period_start: string
@@ -265,6 +271,9 @@ export type Database = {
           created_by?: string | null
           goal_amount?: number
           id?: string
+          metric_category?: string | null
+          metric_key?: string | null
+          metric_label?: string | null
           percentage?: number | null
           period_end?: string
           period_start?: string

@@ -123,3 +123,40 @@
     box-shadow: var(--shadow-glow);
   }
 }
+
+@layer utilities {
+  /* Subtle grid background used in hero and sections */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--border) / 0.25) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border) / 0.25) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  /* Gradient mesh accents for contemporary look */
+  .mesh-gradient {
+    background-image:
+      radial-gradient(600px 300px at 90% -10%, hsl(var(--primary) / 0.25), transparent 60%),
+      radial-gradient(500px 250px at -10% 30%, hsl(var(--secondary) / 0.25), transparent 60%);
+  }
+
+  /* Text gradient utility */
+  .gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Elevated card with gradient background */
+  .gradient-card {
+    background: linear-gradient(145deg, hsl(var(--card)), hsl(var(--muted) / 0.3));
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Accent ring on hover for interactive elements */
+  .accent-ring:hover {
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.25);
+  }
+}

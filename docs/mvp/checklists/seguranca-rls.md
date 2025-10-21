@@ -7,21 +7,19 @@ Referências
 - docs/mvp/seguranca/segredos-e-config.md
 - docs/mvp/base-de-dados/modelo-de-dados.md
 
-Políticas de RLS (Row-Level Security)
-- Habilitar RLS nas tabelas:
-  - ad_accounts: permitir SELECT apenas para roles admin/manager; INSERT/UPDATE apenas via Edge Functions (service role).
-  - ad_campaigns: SELECT admin/manager; filtro por ad_account_id se necessário; INSERT/UPDATE via Edge.
-  - campaign_daily_insights: SELECT admin/manager; acesso preferencial via RPC (security definer) para filtrar período.
-  - leads: revisar visibilidade por papel; writes vindos do webhook/polling via service role.
+- Políticas de RLS (Row-Level Security)
+  - `ad_accounts`, `ad_campaigns`, `campaign_daily_insights`: SELECT somente para `has_metrics_access` (owner + traffic_manager); mutações apenas via Edge Functions.
+  - `leads`, `tasks`, `interactions`, `comments`, `attachments`, `checklist_items`, `labels`, `lead_labels`: SELECT/INSERT/UPDATE permitem apenas `has_crm_access` (owner + sales); DELETE restrito a `is_owner`.
+  - Validar funções auxiliares (`has_meta_access`, `has_task_access`) se novas tabelas forem adicionadas.
 - Views e RPCs:
   - Expor business_kpis e campaign_financials via RPCs com security definer (checagem de role antes de executar).
-  - Garantir que usuários com role=user não vejam métricas financeiras.
+  - Garantir que perfis `sales` (user_type) não vejam métricas financeiras.
 
 Tokens e Segredos
 - Armazenar em Supabase Secrets:
-  - META_PAGE_ACCESS_TOKEN (escopo pages_manage_ads)
-  - META_ADS_ACCESS_TOKEN (escopo ads_read, e leads_retrieval quando aplicável)
-  - META_AD_ACCOUNT_ID (act_...)
+  - `META_CLIENT_ID`, `META_APP_SECRET`, `META_REDIRECT_URI`
+  - `META_PAGE_ACCESS_TOKEN`, `META_SYSTEM_USER_TOKEN`
+  - `SUPABASE_SERVICE_ROLE_KEY`
 - Rotação: implementar checagem de expiração, notificação a admin e rotação segura.
 - Não trafegar tokens no frontend; sanitizar logs.
 

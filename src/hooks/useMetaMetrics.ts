@@ -43,7 +43,7 @@ export interface CampaignFinancials {
 /**
  * Fetch all connected ad accounts
  */
-export function useAdAccounts() {
+export function useAdAccounts(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['ad-accounts'],
     queryFn: async () => {
@@ -57,6 +57,7 @@ export function useAdAccounts() {
       return data as AdAccount[]
     },
     staleTime: 60000, // 1 minute
+    enabled: options?.enabled ?? true,
   })
 }
 
@@ -64,7 +65,7 @@ export function useAdAccounts() {
  * Fetch campaigns for a specific ad account
  * @param accountId - Ad account ID (optional, fetches all if not provided)
  */
-export function useAdCampaigns(accountId?: string) {
+export function useAdCampaigns(accountId?: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['ad-campaigns', accountId],
     queryFn: async () => {
@@ -83,6 +84,7 @@ export function useAdCampaigns(accountId?: string) {
       return data as AdCampaign[]
     },
     staleTime: 60000,
+    enabled: options?.enabled ?? true,
   })
 }
 
@@ -286,7 +288,7 @@ export function useFilteredInsights(filters?: {
   accountId?: string
   campaignId?: string
   dateRange?: { start: string; end: string }
-}) {
+}, options?: { enabled?: boolean }) {
   const { accountId, campaignId, dateRange } = filters || {}
 
   return useQuery({
@@ -302,9 +304,10 @@ export function useFilteredInsights(filters?: {
             status,
             objective,
             ad_account_id,
-            ad_accounts(id, business_name)
+            ad_accounts!inner(id, business_name, is_active)
           )
         `)
+        .eq('ad_campaigns.ad_accounts.is_active', true)
         .order('date', { ascending: true })
 
       // Apply campaign filter
@@ -358,6 +361,7 @@ export function useFilteredInsights(filters?: {
       }))
     },
     staleTime: 30000,
+    enabled: options?.enabled ?? true,
   })
 }
 
@@ -368,7 +372,7 @@ export function useMetricsSummary(filters?: {
   accountId?: string
   campaignId?: string
   dateRange?: { start: string; end: string }
-}) {
+}, options?: { enabled?: boolean }) {
   const { accountId, campaignId, dateRange } = filters || {}
   const range = dateRange || getLastNDaysDateRange(30)
 
@@ -380,10 +384,14 @@ export function useMetricsSummary(filters?: {
         .from('campaign_daily_insights')
         .select(`
           *,
-          ad_campaigns!inner(ad_account_id)
+          ad_campaigns!inner(
+            ad_account_id,
+            ad_accounts!inner(is_active)
+          )
         `)
         .gte('date', range.start)
         .lte('date', range.end)
+        .eq('ad_campaigns.ad_accounts.is_active', true)
 
       if (campaignId) {
         currentQuery = currentQuery.eq('campaign_id', campaignId)
@@ -420,10 +428,14 @@ export function useMetricsSummary(filters?: {
         .from('campaign_daily_insights')
         .select(`
           *,
-          ad_campaigns!inner(ad_account_id)
+          ad_campaigns!inner(
+            ad_account_id,
+            ad_accounts!inner(is_active)
+          )
         `)
         .gte('date', prevStartDate.toISOString().split('T')[0])
         .lte('date', prevEndDate.toISOString().split('T')[0])
+        .eq('ad_campaigns.ad_accounts.is_active', true)
 
       if (campaignId) {
         prevQuery = prevQuery.eq('campaign_id', campaignId)
@@ -468,6 +480,7 @@ export function useMetricsSummary(filters?: {
       }
     },
     staleTime: 30000,
+    enabled: options?.enabled ?? true,
   })
 }
 
@@ -476,7 +489,7 @@ export function useCampaignFinancialsFiltered(filters?: {
   accountId?: string
   campaignId?: string
   dateRange?: { start: string; end: string }
-}) {
+}, options?: { enabled?: boolean }) {
   const { accountId, campaignId, dateRange } = filters || {}
   const range = dateRange || getLastNDaysDateRange(90)
 
@@ -486,7 +499,8 @@ export function useCampaignFinancialsFiltered(filters?: {
       // 1) Fetch campaigns matching filters (ensures zero rows are represented)
       let campaignsQuery = supabase
         .from('ad_campaigns')
-        .select('id, name, status, objective, ad_account_id, ad_accounts(business_name)')
+        .select('id, name, status, objective, ad_account_id, ad_accounts!inner(business_name, is_active)')
+        .eq('ad_accounts.is_active', true)
         .order('created_at', { ascending: false })
 
       if (accountId) {
@@ -620,5 +634,6 @@ export function useCampaignFinancialsFiltered(filters?: {
       return result.sort((a, b) => b.investimento - a.investimento)
     },
     staleTime: 30000,
+    enabled: options?.enabled ?? true,
   })
 }

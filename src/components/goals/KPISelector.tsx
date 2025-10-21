@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 import {
   DollarSign, Users, CheckCircle, TrendingUp, Layers, BarChart3,
   Wallet, Eye, MousePointer, Target, PieChart, Settings, Search
@@ -13,6 +14,8 @@ import { GOAL_TYPE_METADATA } from '@/types/goals'
 interface KPISelectorProps {
   value: GoalType
   onChange: (value: GoalType) => void
+  allowedCategories?: Array<'crm' | 'meta' | 'revenue' | 'custom'>
+  className?: string
 }
 
 const ICON_MAP: Record<string, any> = {
@@ -30,12 +33,18 @@ const ICON_MAP: Record<string, any> = {
   Settings,
 }
 
-export function KPISelector({ value, onChange }: KPISelectorProps) {
+export function KPISelector({ value, onChange, allowedCategories, className }: KPISelectorProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'crm' | 'meta' | 'revenue' | 'custom'>('all')
 
+  const allowedCategorySet = new Set(allowedCategories ?? ['crm', 'meta', 'revenue', 'custom'])
+
   // Filter KPIs by search term and category
   const filteredKPIs = Object.entries(GOAL_TYPE_METADATA).filter(([key, metadata]) => {
+    if (!allowedCategorySet.has(metadata.category)) {
+      return false
+    }
+
     const matchesSearch =
       metadata.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
       metadata.description.toLowerCase().includes(searchTerm.toLowerCase())
@@ -52,10 +61,10 @@ export function KPISelector({ value, onChange }: KPISelectorProps) {
     { id: 'meta', label: 'Meta Ads', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
     { id: 'revenue', label: 'Receita', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
     { id: 'custom', label: 'Custom', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
-  ]
+  ].filter((category) => category.id === 'all' || allowedCategorySet.has(category.id as any))
 
   return (
-    <div className="space-y-4">
+    <div className={cn("space-y-4", className)}>
       {/* Search */}
       <div className="space-y-2">
         <Label htmlFor="kpi-search" className="text-foreground">Buscar KPI</Label>
@@ -90,7 +99,7 @@ export function KPISelector({ value, onChange }: KPISelectorProps) {
       </div>
 
       {/* KPI Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[500px] overflow-y-auto pr-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[420px] lg:max-h-[520px] overflow-y-auto pr-2">
         {filteredKPIs.map(([key, metadata]) => {
           const Icon = ICON_MAP[metadata.icon] || Target
           const isSelected = value === key

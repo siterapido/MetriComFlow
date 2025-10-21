@@ -31,7 +31,8 @@ const createUserSchema = z.object({
   email: z.string().email("Email inválido"),
   password: z.string().min(6, "A senha deve ter no mínimo 6 caracteres"),
   full_name: z.string().min(1, "Nome é obrigatório"),
-  user_type: z.enum(["owner", "traffic_manager", "sales"]),
+  // Restrição: proprietários não podem criar outros proprietários
+  user_type: z.enum(["traffic_manager", "sales"]),
 });
 
 const updateUserSchema = z.object({
@@ -53,6 +54,8 @@ export function UserFormDialog({ open, onOpenChange, user, mode }: UserFormDialo
 
   const isEdit = mode === "edit";
   const schema = isEdit ? updateUserSchema : createUserSchema;
+  // Limitar opções disponíveis no seletor (não permitir 'owner')
+  const allowedUserTypes: UserType[] = ["traffic_manager", "sales"];
 
   const form = useForm({
     resolver: zodResolver(schema),
@@ -193,17 +196,22 @@ export function UserFormDialog({ open, onOpenChange, user, mode }: UserFormDialo
                 setSelectedUserType(value as UserType);
               }}
             >
-              <SelectTrigger className="bg-card border-border">
+              <SelectTrigger className="bg-card border-border" disabled={form.watch("user_type") === "owner"}>
                 <SelectValue placeholder="Selecione o tipo de usuário" />
               </SelectTrigger>
               <SelectContent>
-                {(Object.keys(USER_TYPE_LABELS) as UserType[]).map((type) => (
+                {allowedUserTypes.map((type) => (
                   <SelectItem key={type} value={type}>
                     {USER_TYPE_LABELS[type]}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {isEdit && selectedUserType === "owner" && (
+              <p className="text-sm text-muted-foreground">
+                Usuários proprietários não podem ter seu tipo alterado.
+              </p>
+            )}
             {form.formState.errors.user_type && (
               <p className="text-sm text-destructive">
                 {form.formState.errors.user_type.message}

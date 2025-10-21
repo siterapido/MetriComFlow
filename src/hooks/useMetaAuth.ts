@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface MetaConnection {
   id: string;
@@ -23,6 +24,7 @@ interface AdAccount {
 
 export function useMetaAuth() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [connections, setConnections] = useState<MetaConnection[]>([]);
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,6 +98,12 @@ export function useMetaAuth() {
         console.error('Error fetching connections:', connectionsError);
       } else {
         setConnections(connectionsData || []);
+        if (user) {
+          queryClient.setQueryData(
+            ['meta-connection-status', user.id],
+            { hasActiveConnection: (connectionsData?.length ?? 0) > 0 }
+          );
+        }
       }
 
       // Fetch ad accounts (both active and inactive)
@@ -255,6 +263,33 @@ export function useMetaAuth() {
     }
   };
 
+  // Find duplicate account by external_id
+  const findDuplicateAccount = async (externalId: string): Promise<AdAccount | null> => {
+    if (!user) return null;
+
+    try {
+      // Normalize external_id
+      let normalizedId = externalId.trim();
+      if (normalizedId.startsWith('act_')) {
+        normalizedId = normalizedId.substring(4);
+      }
+
+      const { data, error } = await supabase
+        .from('ad_accounts')
+        .select('*')
+        .eq('external_id', normalizedId)
+        .eq('connected_by', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return data as AdAccount | null;
+    } catch (error) {
+      console.error('Error finding duplicate account:', error);
+      return null;
+    }
+  };
+
   // Add a new ad account manually
   const addAdAccount = async (accountData: {
     external_id: string;
@@ -264,12 +299,44 @@ export function useMetaAuth() {
     if (!user) throw new Error('User not authenticated');
 
     try {
+      // Normalize external_id: remove "act_" prefix if present
+      let normalizedId = accountData.external_id.trim();
+      if (normalizedId.startsWith('act_')) {
+        normalizedId = normalizedId.substring(4);
+      }
+
+      // Validate external_id format for Meta accounts
+      if (accountData.provider === 'meta' || !accountData.provider) {
+        // Meta Ad Account IDs should be numeric and at least 10 digits
+        if (!/^\d{10,}$/.test(normalizedId)) {
+          throw new Error('ID da conta Meta inválido. Deve conter apenas números com pelo menos 10 dígitos (ex: 1558732224693082).');
+        }
+      }
+
+      // Check if account already exists (including inactive ones)
+      const { data: existingAccounts, error: checkError } = await supabase
+        .from('ad_accounts')
+        .select('id, business_name, is_active, external_id')
+        .eq('external_id', normalizedId)
+        .eq('connected_by', user.id);
+
+      if (checkError) throw checkError;
+
+      if (existingAccounts && existingAccounts.length > 0) {
+        const existing = existingAccounts[0];
+        if (existing.is_active) {
+          throw new Error(`Esta conta "${existing.business_name}" já está conectada e ativa.`);
+        } else {
+          throw new Error(`Esta conta "${existing.business_name}" já existe mas está inativa. Reative-a ao invés de criar uma nova.`);
+        }
+      }
+
       const { data, error } = await supabase
         .from('ad_accounts')
         .insert([
           {
-            external_id: accountData.external_id,
-            business_name: accountData.business_name,
+            external_id: normalizedId,
+            business_name: accountData.business_name.trim(),
             provider: accountData.provider || 'meta',
             connected_by: user.id,
             is_active: true,
@@ -391,6 +458,40 @@ export function useMetaAuth() {
     }
   };
 
+  // Merge/unify duplicate ad accounts
+  const mergeAdAccounts = async (sourceAccountId: string, targetAccountId: string): Promise<{
+    campaigns_migrated: number;
+    insights_migrated: number;
+    leads_migrated: number;
+    success: boolean;
+    message: string;
+  }> => {
+    if (!user) throw new Error('User not authenticated');
+
+    try {
+      console.log('🔄 Merging accounts:', { sourceAccountId, targetAccountId });
+
+      const { data, error } = await supabase.rpc('merge_ad_accounts', {
+        p_source_account_id: sourceAccountId,
+        p_target_account_id: targetAccountId,
+      });
+
+      if (error) throw error;
+
+      const result = Array.isArray(data) ? data[0] : data;
+
+      console.log('✅ Accounts merged successfully:', result);
+
+      // Refresh data
+      await fetchData();
+
+      return result;
+    } catch (error) {
+      console.error('Error merging ad accounts:', error);
+      throw error;
+    }
+  };
+
   // Handle OAuth callback
   const handleOAuthCallback = async () => {
     const url = new URL(window.location.href);
@@ -474,6 +575,8 @@ export function useMetaAuth() {
     activateAdAccount,
     renameAdAccount,
     deleteAdAccount,
+    mergeAdAccounts,
+    findDuplicateAccount,
     refreshData: fetchData,
     hasActiveConnection: connections.length > 0,
     totalAdAccounts: adAccounts.filter(a => a.is_active).length,

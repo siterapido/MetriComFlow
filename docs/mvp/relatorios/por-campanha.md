@@ -19,9 +19,9 @@ Filtros
  - Consistência de período: alinhar timezone e granularidade (dia) entre `date` dos Insights e timestamps dos Leads.
 
 Frontend
-- Nova página "Relatórios" com tabela paginada e export CSV.
-- Ordenação por ROAS/Faturamento.
-- Gráfico de barras (Investimento vs Faturamento) por campanha.
+- Página `MetricsPage.tsx` já lista campanhas (`CampaignTable`) com filtros de conta/campanha/período.
+- Pendências: adicionar export CSV, ordenação configurável (ROAS/Faturamento) e badge de data do último sync.
+- Gráfico de barras e pizza implementados (`MetaAdsChart`, `CampaignTable` + `ResponsiveContainer`).
 
 Considerações
 - Divisão por zero (ROAS): exibir "—" quando investimento = 0.

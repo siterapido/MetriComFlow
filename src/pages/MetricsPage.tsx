@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, PieChart } from "lucide-react";
 import { BarChart, Bar, PieChart as RePieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 // Removed MetricCard import; keeping CampaignTable
@@ -9,7 +11,8 @@ import { MetaAdsFilters, type FilterValues } from "@/components/meta-ads/MetaAds
 import { MetaAdsChart } from "@/components/meta-ads/MetaAdsChart";
 import { MetaAdsKPICards } from "@/components/meta-ads/MetaAdsKPICards";
 import { useFilteredInsights, useMetricsSummary, useCampaignFinancialsFiltered, useAdCampaigns, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
-import { formatCurrency, formatNumber } from "@/lib/formatters";
+import { formatCurrency } from "@/lib/formatters";
+import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
 
 export default function MetricsPage() {
   // Replace simple date range with richer filters (account, campaign, period)
@@ -18,15 +21,23 @@ export default function MetricsPage() {
     dateRange: getLastNDaysDateRange(90),
   });
 
+  const {
+    hasActiveConnection: hasMetaConnection,
+    isLoading: metaStatusLoading,
+    isFetching: metaStatusFetching,
+  } = useMetaConnectionStatus();
+  const metaStatusPending = metaStatusLoading || metaStatusFetching;
+  const metaQueriesEnabled = hasMetaConnection;
+
   // Fetch filtered Meta Ads data
-  const { data: metaInsights, isLoading: insightsLoading } = useFilteredInsights(filters);
-  const { data: metaSummary, isLoading: summaryLoading } = useMetricsSummary(filters);
+  const { data: metaInsights, isLoading: insightsLoading } = useFilteredInsights(filters, { enabled: metaQueriesEnabled });
+  const { data: metaSummary, isLoading: summaryLoading } = useMetricsSummary(filters, { enabled: metaQueriesEnabled });
   const { data: campaignFinancials, isLoading: financialsLoading } = useCampaignFinancialsFiltered({
     accountId: filters.accountId,
     campaignId: filters.campaignId,
     dateRange: filters.dateRange,
-  });
-  const { data: accountCampaigns } = useAdCampaigns(filters.accountId);
+  }, { enabled: metaQueriesEnabled });
+  const { data: accountCampaigns } = useAdCampaigns(filters.accountId, { enabled: metaQueriesEnabled });
 
   const isLoading = summaryLoading || financialsLoading || insightsLoading;
 
@@ -62,6 +73,33 @@ export default function MetricsPage() {
   }, [filteredCampaignFinancials]);
 
   const COLORS = ['#2DA7FF', '#0D9DFF', '#0B7FCC', '#096199', '#074366'];
+
+  if (metaStatusPending) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!hasMetaConnection) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Métricas Meta Ads</h1>
+          <p className="text-muted-foreground">As métricas ficam disponíveis após conectar sua conta Meta.</p>
+        </div>
+        <Alert>
+          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>Conecte-se ao Meta Business Manager para visualizar relatórios e KPIs das campanhas.</span>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/meta-ads-config">Configurar Meta Ads</a>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

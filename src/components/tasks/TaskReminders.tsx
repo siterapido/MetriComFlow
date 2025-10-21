@@ -10,14 +10,16 @@ import { Label } from '@/components/ui/label'
 import { useTasks, useUpdateTask } from '@/hooks/useTasks'
 import { useTeamMembers } from '@/hooks/useTeamMembers'
 import { cn } from '@/lib/utils'
+import { useUserSettings } from '@/hooks/useUserSettings'
 
 interface TaskRemindersProps {
   assignedTo?: string
 }
 
 export function TaskReminders({ assignedTo }: TaskRemindersProps) {
+  const { data: settings } = useUserSettings()
   const [notifications, setNotifications] = useState<any[]>([])
-  const [enableNotifications, setEnableNotifications] = useState(true)
+  const [enableNotifications, setEnableNotifications] = useState(settings?.crm.remindTasks ?? true)
   const [showOverdue, setShowOverdue] = useState(true)
   const [showUpcoming, setShowUpcoming] = useState(true)
 
@@ -27,6 +29,10 @@ export function TaskReminders({ assignedTo }: TaskRemindersProps) {
   })
   const { data: teamMembers = [] } = useTeamMembers()
   const updateTask = useUpdateTask()
+
+  useEffect(() => {
+    setEnableNotifications(settings?.crm.remindTasks ?? true)
+  }, [settings?.crm.remindTasks])
 
   // Gerar notificações baseadas nas tarefas
   useEffect(() => {
@@ -170,6 +176,24 @@ export function TaskReminders({ assignedTo }: TaskRemindersProps) {
       case 'negociacao': return '💼'
       default: return '📝'
     }
+  }
+
+  if (!settings?.crm.remindTasks) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bell className="h-5 w-5" />
+            Lembretes desativados
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Ative os lembretes nas preferências de CRM em <strong>Meu Perfil &amp; Configurações</strong> para receber avisos de follow-up.
+          </p>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (

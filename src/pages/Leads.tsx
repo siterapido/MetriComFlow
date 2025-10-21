@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { useLeads, useUpdateLead, type LeadWithLabels } from "@/hooks/useLeads";
 import { useLeadActivity } from "@/hooks/useLeads";
 import type { Database } from "@/lib/database.types";
+import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
 
 const getLabelColor = (label: string) => {
   const colors: { [key: string]: string } = {
@@ -59,6 +61,20 @@ export default function Leads() {
   const [sourceFilter, setSourceFilter] = useState<'all' | 'meta_ads' | 'manual'>('all');
   const { toast } = useToast();
 
+  const {
+    hasActiveConnection: hasMetaConnection,
+    isLoading: metaStatusLoading,
+    isFetching: metaStatusFetching,
+  } = useMetaConnectionStatus();
+  const metaStatusPending = metaStatusLoading || metaStatusFetching;
+  const hideMetaLeads = !metaStatusPending && !hasMetaConnection;
+
+  useEffect(() => {
+    if (hideMetaLeads && sourceFilter === 'meta_ads') {
+      setSourceFilter('all');
+    }
+  }, [hideMetaLeads, sourceFilter]);
+
   // Fetch data
   const { data: leads, isLoading, error } = useLeads();
   type LeadActivity = Database['public']['Tables']['lead_activity']['Row']
@@ -84,14 +100,18 @@ export default function Leads() {
         ? true
         : lead.source === sourceFilter;
 
-      return matchesSearch && matchesSource;
+      const matchesVisibility = hideMetaLeads
+        ? (lead.source !== 'meta_ads' && !lead.campaign_id)
+        : true;
+
+      return matchesSearch && matchesSource && matchesVisibility;
     });
 
     return BOARD_CONFIG.map(config => ({
       ...config,
       cards: filteredLeads.filter(lead => lead.status === config.id)
     }));
-  }, [leads, searchTerm, sourceFilter]);
+  }, [leads, searchTerm, sourceFilter, hideMetaLeads]);
 
   const handleNewLead = () => {
     setIsNewLeadModalOpen(false);
@@ -242,13 +262,16 @@ export default function Leads() {
           />
         </div>
 
-        <Select value={sourceFilter} onValueChange={(value: any) => setSourceFilter(value)}>
+        <Select
+          value={sourceFilter}
+          onValueChange={(value) => setSourceFilter(value as 'all' | 'meta_ads' | 'manual')}
+        >
           <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="Filtrar por origem" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas as Origens</SelectItem>
-            <SelectItem value="meta_ads">
+            <SelectItem value="meta_ads" disabled={hideMetaLeads}>
               <div className="flex items-center gap-2">
                 <Facebook className="w-4 h-4" />
                 Meta Ads
@@ -258,6 +281,17 @@ export default function Leads() {
           </SelectContent>
         </Select>
       </div>
+
+      {hideMetaLeads && (
+        <Alert>
+          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>Leads vinculados a campanhas do Meta Ads estão ocultos até que a integração seja reativada. Eles permanecem salvos para uso futuro.</span>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/meta-ads-config">Reativar Meta Ads</a>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Loading State */}
       {isLoading && (

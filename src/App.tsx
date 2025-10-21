@@ -7,6 +7,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { AuthProvider } from "@/context/AuthContext";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import Auth from "./pages/Auth";
+import Index from "./pages/Index";
 import SetupAdmin from "./pages/SetupAdmin";
 import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
@@ -19,6 +20,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import UpdatePassword from "./pages/UpdatePassword";
 import AuthCallback from "./pages/AuthCallback";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import Profile from "./pages/Profile";
 
 const queryClient = new QueryClient();
 
@@ -35,7 +37,8 @@ const App = () => (
           }}
         >
           <Routes>
-            <Route path="/" element={<Auth />} />
+            <Route path="/" element={<Index />} />
+            <Route path="/login" element={<Auth />} />
             <Route path="/setup-admin" element={<SetupAdmin />} />
             <Route path="/auth/forgot-password" element={<ForgotPassword />} />
             <Route path="/auth/update-password" element={<UpdatePassword />} />
@@ -51,6 +54,7 @@ const App = () => (
                 <Route path="/metrics" element={<Navigate to="/meta-ads-config" replace />} />
                 <Route path="/meta-ads-config" element={<MetaAdsConfig />} />
                 <Route path="/usuarios" element={<Users />} />
+                <Route path="/meu-perfil" element={<Profile />} />
               </Route>
             </Route>
             <Route path="*" element={<NotFound />} />

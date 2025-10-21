@@ -1,62 +1,37 @@
-# Mapeamento: Funcionalidades Existentes vs. Módulos do MVP
+# Mapeamento: Implementado vs. Próximos Ajustes (MVP)
 
-Objetivo: alinhar o que já existe no frontend/backend com as necessidades do MVP "Painel de Controle Comercial via Meta Ads" e listar adaptações.
+Objetivo: comparar o escopo do MVP de "Painel Comercial + Meta Ads" com o que já está entregue no código e destacar lacunas residuais.
 
-## Páginas atuais
+## Páginas e fluxos
+- **Dashboard (`src/pages/Dashboard.tsx`)**  
+  Mantém KPIs financeiros legados (receita consolidada). O fluxo Meta Ads migrou para `MetricsPage.tsx`; somente ajustes menores de copy/internacionalização são pendentes.
+- **MetricsPage (`src/pages/MetricsPage.tsx`)**  
+  Já exibe investimenti, leads, faturamento, CPL e ROAS por campanha com filtros de conta/campanha/período. Falta alinhar tooltips e export CSV.
+- **MetaAdsConfig (`src/pages/MetaAdsConfig.tsx`)**  
+  Integração completa: conexão via OAuth, ativação/desativação de contas, refresh manual. Próximos passos: expor status dos webhooks e última execução do cron.
+- **Leads (`src/pages/Leads.tsx`)**  
+  Kanban com drag-and-drop usando status `novo_lead`, `qualificacao`, `proposta`, `negociacao`, `fechado_ganho`, `fechado_perdido`. Campos avançados exibidos parcialmente; ainda precisamos mostrar prioridades, follow-up e motivo de perda nos cards.
+- **LeadsLinear (`src/pages/LeadsLinear.tsx`)**  
+  Lista filtrável por status, origem, prioridade, responsável e campanha já integrada a `useLeads`.
+- **Metas (`src/pages/Metas.tsx` / `MetasNew.tsx`)**  
+  Suporta criação de metas por categoria; migração `20251020_unified_goals_system.sql` já consolida metas anuais/mensais. Falta amarrar metas de ROAS com dados de Meta Ads.
+- **Users & SetupAdmin**  
+  Fluxos de onboarding e gestão de perfis usam `user_type` (`owner`, `traffic_manager`, `sales`) com guards (`useUserPermissions`).
 
-- Dashboard (`src/pages/Dashboard.tsx`)
-  - Hoje: KPIs (Receita Mensal/Anual, Oportunidades Ativas) + gráficos "New Up" e "Client Revenue" via `useDashboard`/`useRevenueRecords`.
-  - MVP: deve exibir métricas de negócio conectadas a Meta Ads: Investimento Total, Leads Gerados, CPL, Clientes Fechados, Faturamento Realizado, Faturamento Previsto e ROAS.
-  - Ação: adicionar hook `useBusinessKPIs` consultando view `business_kpis`; atualizar cards e layout para novas métricas.
+## Hooks e serviços
+- Implementados: `useLeads`, `useMetaMetrics`, `useMetaAuth`, `useSalesReports`, `useInteractions`, `useTasks`. Todos invalidam cache via canais Realtime.
+- Pendências: alinhar o tipo `LeadStatus` em `useLeads` ao enum real e documentar convenções de prioridades/origens para não divergir das migrations.
 
-- Metas (`src/pages/Metas.tsx`)
-  - Hoje: CRUD de metas em `client_goals` + gráficos de evolução/ distribuição.
-  - MVP: manter, e adicionar suporte à meta de ROAS (tipo de meta ou campo específico). Integração com cálculo atual de `business_kpis.roas`.
-  - Ação: estender modelo `client_goals` com tipos (ex.: `revenue`, `roas`, `new_customers`) ou usar `category/target_type` para distinguir.
+## Backend / Supabase
+- Migrações `006`–`010` + `20251020` já adicionaram:
+  - Status e campos avançados em `leads`.
+  - Tabelas `tasks`, `interactions`, `ad_accounts`, `ad_campaigns`, `campaign_daily_insights`.
+- Views `business_kpis`, `campaign_financials`.
+  - Funções de permissão (`has_crm_access`, `has_metrics_access`, `has_meta_access`) e políticas alinhadas.
+- Falta: revisar índices se novas consultas pesadas surgirem (ex.: filtros por `next_follow_up_date`) e garantir que o cron `sync-daily-insights` está registrado no Scheduler.
 
-- Leads / Kanban (`src/pages/Leads.tsx`)
-  - Hoje: colunas baseadas em `status` (`todo`, `doing`, `done`), com valor, prazo, checklist, comentários, anexos.
-  - MVP: funil comercial com colunas: `novo_lead` → `em_negociacao` → `proposta_enviada` → `venda_ganha` | `venda_perdida`. Campo chave: "Valor do Contrato (R$)".
-  - Ação: atualizar enum de `status`, exibir/editar `value` sempre; criar `closed_won_at`/`closed_lost_at` e `lost_reason` na mudança de coluna; adicionar `source` e `campaign_id` no lead.
-
-- Setup Admin (`src/pages/SetupAdmin.tsx`)
-  - Hoje: criação de admin via Edge Function `create-admin` com `service_role`.
-  - MVP: manter; após admin criado, exibir fluxo de conexão da conta Meta Ads (ver Integrações).
-
-## Hooks atuais
-
-- `useDashboard.ts`: obter `dashboard_kpis`, `monthly_revenue`, `revenue_records`.
-  - Ação: criar `useBusinessKPIs` e `useCampaignFinancials` para consumir `business_kpis` e `campaign_financials`.
-
-- `useLeads.ts`: CRUD de leads, labels e checklist.
-  - Ação: suportar novos campos (`source`, `campaign_id`, `closed_*`, `lost_reason`) e novos `status`; endpoint específico para transição que preencha datas/razões.
-
-- `useClientGoals.ts`: CRUD de metas.
-  - Ação: permitir metas de ROAS e novos tipos; ligar aos cálculos de `business_kpis`.
-
-- `useLabels.ts`: rótulos
-  - Ação: manter; opcionalmente usar labels para classificar leads por origem.
-
-## Novos módulos do MVP
-
-- Dashboard de Performance Comercial
-  - Implementar visual baseado em `business_kpis` com cards e gráfico simples.
-
-- Gestão de Vendas (CRM Kanban)
-  - Atualizar colunas e lógica de transições; criar cards automaticamente ao receber leads de Meta Ads.
-
-- Metas de Negócio
-  - Estender metas para ROAS e clientes; manter visual atual.
-
-- Relatórios de Faturamento por Campanha
-  - Nova página com tabela agregada por campanha usando `campaign_financials` e filtros de período.
-
-- Gestão de Equipe
-  - Usar `profiles` + `team_members` existentes; reforçar RLS e permissão de acesso.
-
-## Impactos no Frontend
-
-- Rotas: adicionar rota "Relatórios" (por campanha) e "Configurações > Meta Ads".
-- Estado/UI: adaptar componentes Kanban às novas colunas; componentes de cartão com campo "Valor do Contrato" sempre visível.
-- Hooks: novos hooks para views; ajustes nos existentes para novos campos.
-- Proteção de rotas: Admin pode ver métricas financeiras; Vendedor restrito ao Kanban.
+## Lacunas prioritárias
+1. **Experiência do Kanban**: expor prioridade, próximo follow-up e motivo de perda; modal de transição com captura obrigatória de `lost_reason`.
+2. **Relatórios**: adicionar export CSV/Excel e badges de status de atualização nas páginas `MetricsPage` e `MetaAdsConfig`.
+3. **Metas + Métricas**: conectar metas de ROAS/Clientes às views da Meta Ads para permitir tracking direto.
+4. **Documentação**: alinhar exemplos de `.env` e scripts com `scripts/sync-envs.sh` (já reflete chaves Meta), além de registrar como monitorar Edge Functions no Supabase.

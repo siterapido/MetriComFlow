@@ -3,13 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Plus, TrendingUp, AlertCircle, Loader2, Pencil, Trash2 } from "lucide-react";
-import { LineChart, Line, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useClientGoals, useDeleteClientGoal } from "@/hooks/useClientGoals";
-import { useRevenueRecords } from "@/hooks/useDashboard";
 import { NewGoalModal } from "@/components/goals/NewGoalModal";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import type { Database } from "@/lib/database.types";
+import type { GoalType } from "@/types/goals";
+import { GOAL_TYPE_METADATA, formatGoalValue } from "@/types/goals";
 
 type ClientGoal = Database['public']['Tables']['client_goals']['Row'];
 
@@ -23,12 +24,16 @@ const getStatusColor = (status: string) => {
   return colors[status] || "bg-muted text-muted-foreground";
 };
 
+const isGoalType = (key: string | null | undefined): key is GoalType => {
+  if (!key) return false;
+  return Object.prototype.hasOwnProperty.call(GOAL_TYPE_METADATA, key);
+};
+
 export default function Metas() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<ClientGoal | null>(null);
 
   const { data: clientGoals, isLoading: goalsLoading } = useClientGoals();
-  const { data: revenueRecords, isLoading: revenueLoading } = useRevenueRecords('new_up', new Date().getFullYear());
   const deleteGoal = useDeleteClientGoal();
 
   const handleEdit = (goal: ClientGoal) => {
@@ -57,34 +62,12 @@ export default function Metas() {
     setEditingGoal(null);
   };
 
-  // Transform revenue into monthly evolution
-  const monthlyEvolution = useMemo(() => {
-    if (!revenueRecords) return [];
-
-    const monthOrder = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-    const grouped = revenueRecords.reduce((acc, record) => {
-      if (!acc[record.month]) {
-        acc[record.month] = {
-          month: record.month,
-          faturamento: 0
-        };
-      }
-      acc[record.month].faturamento += record.amount;
-      return acc;
-    }, {} as Record<string, any>);
-
-    return monthOrder
-      .filter(month => grouped[month])
-      .map(month => grouped[month]);
-  }, [revenueRecords]);
-
   // Calculate goal achievement
   const goalAchievement = useMemo(() => {
     if (!clientGoals || clientGoals.length === 0) return [];
 
-    const totalGoal = clientGoals.reduce((sum, goal) => sum + goal.goal_amount, 0);
-    const totalAchieved = clientGoals.reduce((sum, goal) => sum + goal.achieved_amount, 0);
+    const totalGoal = clientGoals.reduce((sum, goal) => sum + Number(goal.goal_amount || 0), 0);
+    const totalAchieved = clientGoals.reduce((sum, goal) => sum + Number(goal.achieved_amount || 0), 0);
     const achievedPercentage = totalGoal > 0 ? (totalAchieved / totalGoal * 100) : 0;
 
     return [
@@ -93,7 +76,7 @@ export default function Metas() {
     ];
   }, [clientGoals]);
 
-  const isLoading = goalsLoading || revenueLoading;
+  const isLoading = goalsLoading;
 
   if (isLoading) {
     return (
@@ -120,99 +103,134 @@ export default function Metas() {
       {/* Cliente Goals Grid */}
       {clientGoals && clientGoals.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {clientGoals.map((client) => (
-            <Card key={client.id} className="border-border bg-card hover-lift">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-semibold text-foreground">
-                    {client.company_name}
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Badge className={getStatusColor(client.status)}>
-                      {client.status}
-                    </Badge>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => handleEdit(client)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(client.id, client.company_name)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
+          {clientGoals.map((client) => {
+            const metricMetadata = isGoalType(client.metric_key) ? GOAL_TYPE_METADATA[client.metric_key] : undefined;
+            const goalAmountNumber = Number(client.goal_amount ?? 0);
+            const achievedAmountNumber = Number(client.achieved_amount ?? 0);
+            const progress = client.percentage ? Number(client.percentage) : 0;
+            const formattedGoalAmount = metricMetadata
+              ? formatGoalValue(goalAmountNumber, metricMetadata.unit)
+              : `R$ ${goalAmountNumber.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+            const formattedAchievedAmount = metricMetadata
+              ? formatGoalValue(achievedAmountNumber, metricMetadata.unit)
+              : `R$ ${achievedAmountNumber.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+            const metricCategoryLabel = metricMetadata?.category === 'meta'
+              ? 'Meta Ads'
+              : metricMetadata?.category === 'crm'
+                ? 'CRM'
+                : metricMetadata?.category
+                  ? metricMetadata.category.toUpperCase()
+                  : null;
+            const periodStart = new Date(client.period_start).toLocaleDateString('pt-BR');
+            const periodEnd = new Date(client.period_end).toLocaleDateString('pt-BR');
 
-              <CardContent className="space-y-4">
-                {/* Values */}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Meta:</span>
-                    <span className="font-medium text-foreground">
-                      R$ {client.goal_amount.toLocaleString("pt-BR")}
+            return (
+              <Card key={client.id} className="border-border bg-card hover-lift">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <CardTitle className="text-lg font-semibold text-foreground">
+                        {client.company_name}
+                      </CardTitle>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        {metricMetadata ? (
+                          <>
+                            {metricCategoryLabel && (
+                              <Badge variant="outline" className="uppercase">
+                                {metricCategoryLabel}
+                              </Badge>
+                            )}
+                            <span>{client.metric_label ?? metricMetadata.label}</span>
+                          </>
+                        ) : (
+                          <span>Métrica não definida</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className={getStatusColor(client.status)}>
+                        {client.status}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleEdit(client)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(client.id, client.company_name)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                  {/* Values */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Meta:</span>
+                      <span className="font-medium text-foreground">
+                        {formattedGoalAmount}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Atingido:</span>
+                      <span className="font-medium text-primary">
+                        {formattedAchievedAmount}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Progress */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Progresso</span>
+                      <span className="font-medium text-foreground">{Math.round(progress)}%</span>
+                    </div>
+                    <Progress value={progress} className="h-2" />
+                  </div>
+
+                  {/* Status Indicator */}
+                  <div className="flex items-center gap-2 text-xs">
+                    {progress >= 90 ? (
+                      <TrendingUp className="w-4 h-4 text-success" />
+                    ) : progress >= 50 ? (
+                      <TrendingUp className="w-4 h-4 text-primary" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-destructive" />
+                    )}
+                    <span className="text-muted-foreground">
+                      {progress >= 90
+                        ? "Performance excelente"
+                        : progress >= 50
+                          ? "No caminho certo"
+                          : "Precisa de atenção"
+                      }
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Atingido:</span>
-                    <span className="font-medium text-primary">
-                      R$ {client.achieved_amount.toLocaleString("pt-BR")}
-                    </span>
+
+                  {/* Period */}
+                  <div className="text-xs text-muted-foreground pt-2 border-t border-border">
+                    Período: {periodStart} - {periodEnd}
                   </div>
-                </div>
-
-                {/* Progress */}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Progresso</span>
-                    <span className="font-medium text-foreground">{client.percentage.toFixed(0)}%</span>
-                  </div>
-                  <Progress
-                    value={client.percentage}
-                    className="h-2"
-                  />
-                </div>
-
-                {/* Status Indicator */}
-                <div className="flex items-center gap-2 text-xs">
-                  {client.percentage >= 90 ? (
-                    <TrendingUp className="w-4 h-4 text-success" />
-                  ) : client.percentage >= 50 ? (
-                    <TrendingUp className="w-4 h-4 text-primary" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-destructive" />
-                  )}
-                  <span className="text-muted-foreground">
-                    {client.percentage >= 90
-                      ? "Performance excelente"
-                      : client.percentage >= 50
-                        ? "No caminho certo"
-                        : "Precisa de atenção"
-                    }
-                  </span>
-                </div>
-
-                {/* Period */}
-                <div className="text-xs text-muted-foreground pt-2 border-t border-border">
-                  Período: {new Date(client.period_start).toLocaleDateString('pt-BR')} - {new Date(client.period_end).toLocaleDateString('pt-BR')}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       ) : (
         <Card className="border-border bg-card">
           <CardContent className="flex items-center justify-center h-48">
             <div className="text-center">
               <p className="text-muted-foreground mb-4">
-                Nenhuma meta cadastrada ainda.
+                Nenhuma meta cadastrada ainda. Escolha um KPI de CRM ou Meta Ads para criar a primeira meta.
               </p>
               <Button className="gap-2 bg-primary hover:bg-primary/90" onClick={handleNewGoal}>
                 <Plus className="w-4 h-4" />
@@ -223,96 +241,56 @@ export default function Metas() {
         </Card>
       )}
 
-      {/* Analytics Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {/* Evolution Chart */}
-        {monthlyEvolution.length > 0 && (
-          <Card className="lg:col-span-2 xl:col-span-1 border-border bg-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">Evolução do Faturamento</CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Faturamento mensal dos últimos meses
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={monthlyEvolution}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="month" stroke="#9CA3AF" />
-                  <YAxis stroke="#9CA3AF" />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#1F2937",
-                      border: "1px solid #374151",
-                      borderRadius: "8px",
-                      color: "#F9FAFB"
-                    }}
+      {goalAchievement.length > 0 && goalAchievement[0].value > 0 && (
+        <Card className="border-border bg-card">
+          <CardHeader>
+            <CardTitle className="text-foreground">Metas Atingidas</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Porcentagem de metas cumpridas entre os clientes
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={goalAchievement}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {goalAchievement.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#1F2937",
+                    border: "1px solid #374151",
+                    borderRadius: "8px",
+                    color: "#F9FAFB"
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="flex justify-center gap-6 mt-4">
+              {goalAchievement.map((entry, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: entry.color }}
                   />
-                  <Line
-                    type="monotone"
-                    dataKey="faturamento"
-                    stroke="#2DA7FF"
-                    strokeWidth={3}
-                    dot={{ fill: "#2DA7FF", strokeWidth: 2, r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Goal Achievement Pie Chart */}
-        {goalAchievement.length > 0 && goalAchievement[0].value > 0 && (
-          <Card className="border-border bg-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">Metas Atingidas</CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Porcentagem de metas cumpridas
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={goalAchievement}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {goalAchievement.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#1F2937",
-                      border: "1px solid #374151",
-                      borderRadius: "8px",
-                      color: "#F9FAFB"
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex justify-center gap-6 mt-4">
-                {goalAchievement.map((entry, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: entry.color }}
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      {entry.name}: {entry.value.toFixed(1)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+                  <span className="text-sm text-muted-foreground">
+                    {entry.name}: {entry.value.toFixed(1)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* New Goal Modal */}
       <NewGoalModal

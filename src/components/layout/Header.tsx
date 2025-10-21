@@ -35,10 +35,15 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-muted rounded-lg">
+        <button
+          type="button"
+          onClick={() => navigate("/meu-perfil")}
+          className="hidden sm:flex items-center gap-2 px-3 py-1 bg-muted rounded-lg hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          title="Ir para minhas configurações"
+        >
           <User className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-medium text-foreground">{displayName}</span>
-        </div>
+        </button>
 
         <Button variant="outline" size="sm" className="gap-2" onClick={handleSignOut}>
           <LogOut className="w-4 h-4" />

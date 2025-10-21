@@ -1,64 +1,42 @@
-# Integração com Meta Ads (Facebook Ads)
+# Integração com Meta Ads
 
-Objetivo: conectar a conta de anúncios, coletar investimento e gerar cards de leads automaticamente no Kanban.
+Objetivo: operar a conexão entre o CRM Metricom Flow e a Graph API para sincronizar contas, campanhas, insights e leads (Lead Ads).
 
-## Estratégia de MVP
+## Escopos e segurança
+- Permissões mínimas: `ads_read`, `pages_manage_ads`, `leads_retrieval`.
+- Tokens nunca trafegam no frontend; todos os fluxos passam por Edge Functions com `SUPABASE_SERVICE_ROLE_KEY`.
+- Secrets necessários em `supabase secrets`: `META_CLIENT_ID`, `META_APP_SECRET`, `META_REDIRECT_URI`, `META_PAGE_ACCESS_TOKEN`, tokens de sistema/usuário para ads, e `SUPABASE_SERVICE_ROLE_KEY`.
+- As funções fazem validação de `state` e verificam assinatura (`X-Hub-Signature`) dos webhooks.
 
-- Conexão inicial simples: Admin informa `Ad Account ID (act_...)` e um Access Token com escopos mínimos. Escopos/Permissões necessárias:
-  - `ads_read` (Insights da conta/campanha/adset/ad)
-  - `pages_manage_ads` (gestão de anúncios da Página e assinatura de webhooks de Página)
-  - `leads_retrieval` (receber/ler Leads de Lead Ads)
-- Segurança: token nunca no frontend; armazenar como secret do projeto e usar Edge Functions para chamadas à Graph API.
+## Fluxos implementados
+1. **OAuth Meta Business (`meta-auth`)**
+   - `GET /auth/meta` gera `state`, redireciona para o consent screen.
+   - Callback grava tokens em secrets (`meta_access_token_{connectionId}`) e cria registro em `meta_connections`.
+2. **Conectar conta de anúncios (`connect-ad-account`)**
+   - Recebe `ad_account_id` e opcionalmente um token; valida via Graph API `act_{id}?fields=id,name,business_name`.
+   - Upserta em `ad_accounts`, atribui `connected_by` com o usuário autenticado e injeta secrets (`META_AD_ACCOUNT_ID`, `META_ACCOUNT_TOKEN`).
+3. **Sincronizar campanhas (`connect-ad-account` & `useMetaAuth`)**
+   - `GET /act_{id}/campaigns?fields=id,name,status,objective,start_time,stop_time&effective_status=['ACTIVE','PAUSED']`.
+   - Persiste em `ad_campaigns` (upsert por `external_id`).
+4. **Insights diários (`sync-daily-insights`)**
+   - Scheduler (Supabase cron) chama Edge Function diariamente.
+   - Para cada campanha ativa, consulta `/{campaign_id}/insights?level=campaign&time_increment=1&fields=spend,impressions,clicks,actions`.
+   - Converte `actions[*].action_type='lead'` para `leads_count`, upserta em `campaign_daily_insights` com `UNIQUE(campaign_id,date)`.
+   - Agregações (KPIs e tabelas) usam `business_kpis` e `campaign_financials` ou são calculadas no frontend a partir da tabela bruta.
+5. **Webhook Lead Ads (`webhook-lead-ads`)**
+   - Assinatura: `POST /{page_id}/subscribed_apps?subscribed_fields=leadgen&access_token={PAGE_ACCESS_TOKEN}`.
+   - Recebe payload `leadgen` com `leadgen_id`, `campaign_id`, `adset_id`, `ad_id`, `created_time`, `field_data`.
+   - Deduplica por `external_lead_id` e insere em `leads` com `source='meta_ads'`, `campaign_id` resolvido a partir de `ad_campaigns`.
+   - Opcional: chama `/{leadgen_id}?fields=field_data,created_time` para enriquecer dados.
 
-## Fluxos
+## Consumo no frontend
+- `useMetaAuth` lista conexões (`meta_connections` + `ad_accounts`), permite ativar/desativar contas e dispara refresh (`refreshData` → `sync-daily-insights`).
+- `useMetaMetrics` lê `campaign_daily_insights`, `business_kpis` e `campaign_financials` via React Query com validação de `has_metrics_access`.
+- `MetaAdsConfig` exibe status das contas (ativas/inativas), datas do último sync e erros de OAuth.
+- `MetricsPage` aplica filtros combinados (conta, campanha, período) e renderiza KPIs, série temporal e tabela (`CampaignTable`).
 
-1) Conectar Conta
-- Tela de Configuração: form para `ad_account_id` e envio do token (Edge Function armazena em secret e registra `ad_accounts`).
-- Validação: GET `/{act_id}?fields=name,account_status`.
-
-2) Importar Campanhas
-- Edge Function: GET `/{act_id}/campaigns?fields=name,status,objective,start_time,stop_time&effective_status=['ACTIVE','PAUSED']`.
-- Persistir em `ad_campaigns` (upsert por `external_id`).
-
-3) Ingestão de Insights Diários
-- Tarefa agendada (cron) em Edge Function:
-  - Por campanha: `GET /{campaign_id}/insights?fields=spend,impressions,clicks,actions&time_increment=1&date_preset=today`
-  - Alternativamente, por conta: `GET /act_{ad_account_id}/insights?level=campaign&fields=spend,impressions,clicks,actions&time_increment=1&date_preset=today`
-  - Mapear `leads_count` a partir de `actions` filtrando `action_type='lead'` (valor inteiro). Persistir em `campaign_daily_insights` como:
-    - `date` (dia do insight)
-    - `spend`, `impressions`, `clicks`, `leads_count`
-    - `ad_campaign_id` (chave para `ad_campaigns.external_id`)
-  - Suportar `time_range` custom (ex.: retrocoleta) e paginação.
-
-4) Leads Automáticos (Lead Ads)
-- Preferencial: Webhook de Lead Ads (app Meta)
-  - Assinar a Página: `POST /{page_id}/subscribed_apps?subscribed_fields=leadgen&access_token={PAGE_ACCESS_TOKEN}`
-  - Receber payload `leadgen` (contendo `leadgen_id`, `ad_id`, `adset_id`, `campaign_id`, `created_time` e `field_data`) no endpoint Edge Function `meta-leads-webhook`.
-  - Buscar detalhes do Lead se necessário: `GET /{LEAD_ID}?fields=field_data,created_time`.
-  - Persistir em `leads` com:
-    - `source='meta_ads'`
-    - `external_lead_id=leadgen_id`
-    - `ad_campaign_id` (via `campaign_id` do payload)
-    - opcional: `ad_id`, `adset_id`
-  - Deduplicação: chave única por `external_lead_id`.
-
-  Alternativa (Polling):
-  - `GET /{form_id}/leads?fields=created_time,field_data` ou `GET /{ad_id}/leads` caso webhook não esteja disponível.
-  - Exige resolver mapeamentos form→ad→adset→campaign; aplicar deduplicação por `external_lead_id`.
-
-  Observações:
-  - Em Development Mode, o app entrega webhooks/leads apenas de usuários/testers autorizados.
-  - Requer `pages_manage_ads` e `leads_retrieval`; tokens de Página (PAGE_ACCESS_TOKEN) para assinatura de webhooks.
-
-## Modelo de Dados
-- `ad_accounts`: conta conectada
-- `ad_campaigns`: campanhas da conta
-- `campaign_daily_insights`: gastos e contagens por dia (leads_count derivado de `actions[action_type='lead']`)
-- `leads`: vínculo `ad_campaign_id` + `source='meta_ads'` + `external_lead_id` + opcional `ad_id`/`adset_id`
-
-## Considerações
-- Limites de API: respeitar `rate limits` e paginação.
-- Timezone: normalizar datas para UTC e `date` local do cliente.
-- Consentimento LGPD: armazenar apenas dados de lead necessários (nome, contato) e permitir exclusão.
- - Segurança/Permissões: tokens guardados em Supabase Secrets; Edge Functions com `service_role` para persistência; RLS limita leitura a papéis adequados.
- - Métricas: ROAS/custos calculados com base em `campaign_daily_insights` + receita interna; evitar double-count de leads (usar `external_lead_id`).
+## Considerações operacionais
+- **Rate limits**: Edge Functions implementam backoff exponencial; evitar refetch agressivo no frontend (React Query `staleTime` > 5 min).
+- **Timezone**: insights são gravados em UTC e convertidos para a data local via helpers (`getLastNDaysDateRange`); alinhar cron para fuso do cliente (atualmente 03:00 UTC).
+- **LGPD**: armazenar somente dados essenciais do lead; permitir exclusão sob demanda; registrar política de privacidade (ver `src/pages/PrivacyPolicy.tsx`).
+- **Monitoramento**: configurar notificações no Supabase para falhas em `sync-daily-insights` e `webhook-lead-ads`; persistir logs enxutos (sem tokens/personais).

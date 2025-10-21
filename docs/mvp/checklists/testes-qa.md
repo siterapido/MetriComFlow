@@ -10,16 +10,19 @@ Referências
 Unitários
 - Mapear leads_count: actions[action_type='lead'] → soma correta.
 - Deduplicação: inserção de lead com external_lead_id repetido deve falhar/ser ignorada conforme índice único parcial.
-- Triggers: preenchimento automático de closed_won_at/closed_lost_at em transições.
+- Triggers: preenchimento automático de closed_won_at/closed_lost_at e atualização de lead_activity/contadores.
+- Enum: garantir que status aceitos (`novo_lead`, `qualificacao`, `proposta`, `negociacao`, `follow_up`, `aguardando_resposta`, `fechado_ganho`, `fechado_perdido`) estão sincronizados com o frontend.
 - Métricas: proteção contra divisão por zero em CPL/ROAS.
 
 Integração
 - meta-insights-sync: coleta diária, paginação e retrocoleta; persistência em campaign_daily_insights.
 - meta-leads-webhook: verificação de X-Hub-Signature, verify token; persistência de payload; deduplicação.
 - Fallback GET /{LEAD_ID}?fields=field_data,created_time para complementar dados.
+- Atualização manual: garantir que `refreshData` em `MetaAdsConfig` dispara o sync e reflete status no UI.
 
 E2E
-- Do recebimento do lead até criação de card no Kanban; transições de status e registro de auditoria.
+- Do recebimento do lead até criação de card no Kanban; transições de status e registro de auditoria (lost_reason obrigatório).
+- Visão `LeadsLinear` com filtros combinados (status + prioridade + origem).
 - Relatórios por campanha com filtros e export CSV.
 
 Segurança/RLS

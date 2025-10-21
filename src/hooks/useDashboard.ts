@@ -162,7 +162,10 @@ export type MetaKPIs = {
   has_data: boolean
 }
 
-export function useMetaKPIs(filters?: { accountId?: string; campaignId?: string; dateRange?: { start: string; end: string } }) {
+export function useMetaKPIs(
+  filters?: { accountId?: string; campaignId?: string; dateRange?: { start: string; end: string } },
+  options?: { enabled?: boolean }
+) {
   const queryClient = useQueryClient()
 
   // Real-time: refetch KPIs when campaign insights or leads close change
@@ -312,6 +315,7 @@ export function useMetaKPIs(filters?: { accountId?: string; campaignId?: string;
     refetchOnMount: true,
     refetchOnWindowFocus: true,
     retry: 1,
+    enabled: options?.enabled ?? true,
   })
 }
 
@@ -587,11 +591,14 @@ export type CombinedFunnelData = {
   won_value: number
 }
 
-export function useCombinedFunnelData(filters?: {
+export function useCombinedFunnelData(
+  filters?: {
   dateRange?: { start: string; end: string }
   accountId?: string
   campaignId?: string
-}) {
+},
+  options?: { enabled?: boolean }
+) {
   const queryClient = useQueryClient()
 
   // Real-time: refetch when insights or leads change
@@ -730,5 +737,6 @@ export function useCombinedFunnelData(filters?: {
     staleTime: 0, // Sempre buscar dados frescos para tempo real
     refetchOnMount: true,
     refetchOnWindowFocus: true,
+    enabled: options?.enabled ?? true,
   })
 }

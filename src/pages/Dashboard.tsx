@@ -1,4 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TrendingUp, DollarSign, Target, Loader2, Users, BarChart3, GitBranch, Award, TrendingDown } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, FunnelChart, Funnel, LabelList } from "recharts";
@@ -10,6 +12,7 @@ import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
 import { MetaAdsChart } from "@/components/meta-ads/MetaAdsChart";
 import { useFilteredInsights, getLastNDaysDateRange, useAdAccounts, useAdCampaigns } from "@/hooks/useMetaMetrics";
 import { ConversionFunnel } from "@/components/dashboard/ConversionFunnel";
+import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
 
 export default function Dashboard() {
   const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
@@ -20,27 +23,35 @@ export default function Dashboard() {
     dateRange: getLastNDaysDateRange(90),
   });
 
+  const {
+    hasActiveConnection: hasMetaConnection,
+    isLoading: metaStatusLoading,
+    isFetching: metaStatusFetching,
+  } = useMetaConnectionStatus();
+  const metaStatusPending = metaStatusLoading || metaStatusFetching;
+  const metaQueriesEnabled = hasMetaConnection;
+
   // Meta KPIs com período filtrado
-  const { data: metaKPIs, isLoading: metaLoading } = useMetaKPIs(metaFilters);
-  const hasMetaData = !!metaKPIs?.has_data;
+  const { data: metaKPIs, isLoading: metaLoading } = useMetaKPIs(metaFilters, { enabled: metaQueriesEnabled });
+  const hasMetaData = metaQueriesEnabled && !!metaKPIs?.has_data;
 
   // Fetch accounts and campaigns for filters
-  const { data: accounts } = useAdAccounts();
-  const { data: campaigns } = useAdCampaigns(metaFilters.accountId);
+  const { data: accounts } = useAdAccounts({ enabled: metaQueriesEnabled });
+  const { data: campaigns } = useAdCampaigns(metaFilters.accountId, { enabled: metaQueriesEnabled });
 
   // Fetch filtered Meta Ads data
-  const { data: metaInsights, isLoading: insightsLoading } = useFilteredInsights(metaFilters);
+  const { data: metaInsights, isLoading: insightsLoading } = useFilteredInsights(metaFilters, { enabled: metaQueriesEnabled });
 
   // Pipeline metrics (CRM em tempo real)
   const { data: pipelineMetrics, isLoading: pipelineLoading } = usePipelineMetrics({ dateRange: metaFilters.dateRange });
   const { data: pipelineEvolution, isLoading: evolutionLoading } = usePipelineEvolution(metaFilters.dateRange);
 
   // Combined funnel data (Meta Ads + CRM)
-  const { data: funnelData, isLoading: funnelLoading } = useCombinedFunnelData({
+  const { data: funnelData } = useCombinedFunnelData({
     dateRange: metaFilters.dateRange,
     accountId: metaFilters.accountId,
     campaignId: metaFilters.campaignId,
-  });
+  }, { enabled: metaQueriesEnabled });
 
   // Transform revenue records into chart data
   const chartData = useMemo(() => {
@@ -76,7 +87,7 @@ export default function Dashboard() {
       .map(month => grouped[month]);
   }, [revenueRecords]);
 
-  const isLoading = summaryLoading || metaLoading || revenueLoading;
+  const isLoading = summaryLoading || revenueLoading || (metaQueriesEnabled && metaLoading);
 
   if (isLoading) {
     return (
@@ -96,59 +107,72 @@ export default function Dashboard() {
         </div>
 
         {/* Filtros minimalistas inline */}
-        <div className="flex flex-wrap gap-2">
-          <DateRangeFilter
-            value={metaFilters.dateRange}
-            onChange={(dateRange) => setMetaFilters({ ...metaFilters, dateRange })}
-          />
+        {hasMetaConnection && (
+          <div className="flex flex-wrap gap-2">
+            <DateRangeFilter
+              value={metaFilters.dateRange}
+              onChange={(dateRange) => setMetaFilters({ ...metaFilters, dateRange })}
+            />
 
-          <Select
-            value={metaFilters.accountId || 'all'}
-            onValueChange={(value) => setMetaFilters({
-              ...metaFilters,
-              accountId: value === 'all' ? undefined : value,
-              campaignId: undefined
-            })}
-          >
-            <SelectTrigger className="w-[180px] bg-background">
-              <SelectValue placeholder="Todas as contas" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as contas</SelectItem>
-              {accounts?.map((account) => (
-                <SelectItem key={account.id} value={account.id}>
-                  {account.business_name || account.external_id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {metaFilters.accountId && (
             <Select
-              value={metaFilters.campaignId || 'all'}
+              value={metaFilters.accountId || 'all'}
               onValueChange={(value) => setMetaFilters({
                 ...metaFilters,
-                campaignId: value === 'all' ? undefined : value
+                accountId: value === 'all' ? undefined : value,
+                campaignId: undefined
               })}
             >
-              <SelectTrigger className="w-[200px] bg-background">
-                <SelectValue placeholder="Todas as campanhas" />
+              <SelectTrigger className="w-[180px] bg-background">
+                <SelectValue placeholder="Todas as contas" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas as campanhas</SelectItem>
-                {campaigns?.map((campaign) => (
-                  <SelectItem key={campaign.id} value={campaign.id}>
-                    {campaign.name}
+                <SelectItem value="all">Todas as contas</SelectItem>
+                {accounts?.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>
+                    {account.business_name || account.external_id}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          )}
-        </div>
+
+            {metaFilters.accountId && (
+              <Select
+                value={metaFilters.campaignId || 'all'}
+                onValueChange={(value) => setMetaFilters({
+                  ...metaFilters,
+                  campaignId: value === 'all' ? undefined : value
+                })}
+              >
+                <SelectTrigger className="w-[200px] bg-background">
+                  <SelectValue placeholder="Todas as campanhas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as campanhas</SelectItem>
+                  {campaigns?.map((campaign) => (
+                    <SelectItem key={campaign.id} value={campaign.id}>
+                      {campaign.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* KPIs Unificados - Grid 7 colunas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+      {!metaStatusPending && !hasMetaConnection && (
+        <Alert>
+          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>Conecte-se ao Meta Business Manager para visualizar métricas e funis de campanhas.</span>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/meta-ads-config">Configurar Meta Ads</a>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* KPIs Principais */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Faturamento Mensal */}
         <Card className="bg-gradient-to-br from-card to-accent/20 border-border hover-lift">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -200,79 +224,83 @@ export default function Dashboard() {
             </p>
           </CardContent>
         </Card>
-
-        {/* Investimento Meta Ads */}
-        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-border hover-lift">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Investimento Meta
-            </CardTitle>
-            <DollarSign className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              {hasMetaData ? formatCurrency(metaKPIs?.investimento_total || 0) : 'Sem dados'}
-            </div>
-            <p className="text-xs text-blue-500">Período selecionado</p>
-          </CardContent>
-        </Card>
-
-        {/* Leads Gerados */}
-        <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-border hover-lift">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Leads Gerados
-            </CardTitle>
-            <Users className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              {hasMetaData ? metaKPIs?.leads_gerados || 0 : 'Sem contatos'}
-            </div>
-            <p className="text-xs text-green-500">Via Meta Ads</p>
-          </CardContent>
-        </Card>
-
-        {/* CPL */}
-        <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-border hover-lift">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              CPL Médio
-            </CardTitle>
-            <Target className="h-4 w-4 text-purple-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              {hasMetaData ? formatCurrency(metaKPIs?.cpl || 0) : 'Sem dados'}
-            </div>
-            {hasMetaData && (
-              <p className="text-xs text-purple-500">
-                {metaKPIs?.cpl && metaKPIs.cpl < 50 ? 'Excelente' : 'Monitorar'}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ROAS */}
-        <Card className="bg-gradient-to-br from-orange-500/10 to-orange-600/5 border-border hover-lift">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              ROAS
-            </CardTitle>
-            <BarChart3 className="h-4 w-4 text-orange-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              {hasMetaData ? `${(metaKPIs?.roas ?? 0).toFixed(2)}x` : 'Sem dados'}
-            </div>
-            {hasMetaData && (
-              <p className={`text-xs ${metaKPIs?.roas && metaKPIs.roas >= 3 ? 'text-success' : 'text-warning'}`}>
-                {metaKPIs?.roas && metaKPIs.roas >= 3 ? 'Saudável (≥3)' : 'Melhorar'}
-              </p>
-            )}
-          </CardContent>
-        </Card>
       </div>
+
+      {hasMetaConnection && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Investimento Meta Ads */}
+          <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-border hover-lift">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Investimento Meta
+              </CardTitle>
+              <DollarSign className="h-4 w-4 text-blue-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-foreground">
+                {hasMetaData ? formatCurrency(metaKPIs?.investimento_total || 0) : 'Sem dados'}
+              </div>
+              <p className="text-xs text-blue-500">Período selecionado</p>
+            </CardContent>
+          </Card>
+
+          {/* Leads Gerados */}
+          <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-border hover-lift">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Leads Gerados
+              </CardTitle>
+              <Users className="h-4 w-4 text-green-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-foreground">
+                {hasMetaData ? metaKPIs?.leads_gerados || 0 : 'Sem contatos'}
+              </div>
+              <p className="text-xs text-green-500">Via Meta Ads</p>
+            </CardContent>
+          </Card>
+
+          {/* CPL */}
+          <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-border hover-lift">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                CPL Médio
+              </CardTitle>
+              <Target className="h-4 w-4 text-purple-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-foreground">
+                {hasMetaData ? formatCurrency(metaKPIs?.cpl || 0) : 'Sem dados'}
+              </div>
+              {hasMetaData && (
+                <p className={`text-xs ${metaKPIs?.cpl && metaKPIs.cpl < 50 ? 'text-success' : 'text-warning'}`}>
+                  {metaKPIs?.cpl && metaKPIs.cpl < 50 ? 'Excelente' : 'Monitorar'}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ROAS */}
+          <Card className="bg-gradient-to-br from-orange-500/10 to-orange-600/5 border-border hover-lift">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                ROAS
+              </CardTitle>
+              <BarChart3 className="h-4 w-4 text-orange-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-foreground">
+                {hasMetaData ? `${(metaKPIs?.roas ?? 0).toFixed(2)}x` : 'Sem dados'}
+              </div>
+              {hasMetaData && (
+                <p className={`text-xs ${metaKPIs?.roas && metaKPIs.roas >= 3 ? 'text-success' : 'text-warning'}`}>
+                  {metaKPIs?.roas && metaKPIs.roas >= 3 ? 'Saudável (≥3)' : 'Melhorar'}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Pipeline CRM - Métricas em Tempo Real */}
       <div className="space-y-3">
@@ -361,20 +389,24 @@ export default function Dashboard() {
       </div>
 
       {/* Gráficos - 2 linhas */}
-      <div className="space-y-6">
-        {/* Linha 1: Gráfico de Meta Ads */}
-         <div>
-           <h2 className="text-xl font-bold text-foreground mb-4">Evolução Temporal - Meta Ads</h2>
-           <MetaAdsChart data={metaInsights || []} isLoading={insightsLoading} />
-         </div>
+      {hasMetaConnection && (
+        <div className="space-y-6">
+          {/* Linha 1: Gráfico de Meta Ads */}
+          <div>
+            <h2 className="text-xl font-bold text-foreground mb-4">Evolução Temporal - Meta Ads</h2>
+            <MetaAdsChart data={metaInsights || []} isLoading={insightsLoading} />
+          </div>
 
-        {/* Linha 2 removida: Gráficos de Faturamento (New Up e Oportunidades) conforme solicitação */}
-      </div>
+          {/* Linha 2 removida: Gráficos de Faturamento (New Up e Oportunidades) conforme solicitação */}
+        </div>
+      )}
 
       {/* Funil de Conversão Completo (Meta Ads + CRM) */}
-      <div className="space-y-6">
-        <ConversionFunnel data={funnelData || null} />
-      </div>
+      {hasMetaConnection && (
+        <div className="space-y-6">
+          <ConversionFunnel data={funnelData ?? null} />
+        </div>
+      )}
 
       {/* Evolução do Pipeline */}
       <div className="space-y-6">

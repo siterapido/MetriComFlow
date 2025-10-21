@@ -16,6 +16,7 @@ import {
   FormField,
   FormItem,
   FormLabel,
+  FormDescription,
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -36,8 +37,17 @@ import { cn } from "@/lib/utils";
 import { useCreateClientGoal, useUpdateClientGoal } from "@/hooks/useClientGoals";
 import { toast } from "sonner";
 import type { Database } from "@/lib/database.types";
+import { KPISelector } from "@/components/goals/KPISelector";
+import type { GoalType } from "@/types/goals";
+import { GOAL_TYPE_METADATA } from "@/types/goals";
 
 type ClientGoal = Database['public']['Tables']['client_goals']['Row'];
+
+const ALLOWED_METRIC_CATEGORIES = ["crm", "meta"] as const;
+const ALLOWED_METRIC_KEYS = (Object.keys(GOAL_TYPE_METADATA) as GoalType[]).filter(
+  (key) => ALLOWED_METRIC_CATEGORIES.includes(GOAL_TYPE_METADATA[key].category as typeof ALLOWED_METRIC_CATEGORIES[number])
+);
+const DEFAULT_METRIC_KEY = ALLOWED_METRIC_KEYS[0];
 
 const goalSchema = z.object({
   company_name: z.string().min(1, "Nome da empresa é obrigatório"),
@@ -50,6 +60,9 @@ const goalSchema = z.object({
     required_error: "Data de término é obrigatória",
   }),
   status: z.enum(["Excelente", "Em dia", "Atrasado", "Crítico"]).default("Em dia"),
+  metric_key: z.string().refine((value) => ALLOWED_METRIC_KEYS.includes(value as GoalType), {
+    message: "Selecione uma métrica válida",
+  }),
 }).refine((data) => data.period_end > data.period_start, {
   message: "Data de término deve ser posterior à data de início",
   path: ["period_end"],
@@ -80,12 +93,41 @@ export function NewGoalModal({ open, onOpenChange, goal, onSuccess }: NewGoalMod
       period_start: goal?.period_start ? new Date(goal.period_start) : new Date(),
       period_end: goal?.period_end ? new Date(goal.period_end) : new Date(),
       status: (goal?.status as any) || "Em dia",
+      metric_key: goal?.metric_key && ALLOWED_METRIC_KEYS.includes(goal.metric_key as GoalType)
+        ? goal.metric_key as GoalType
+        : DEFAULT_METRIC_KEY,
     },
   });
+
+  const selectedMetricKey = form.watch("metric_key") as GoalType | undefined;
+  const selectedMetric = selectedMetricKey && GOAL_TYPE_METADATA[selectedMetricKey]
+    ? GOAL_TYPE_METADATA[selectedMetricKey]
+    : undefined;
+  const selectedUnit = selectedMetric?.unit ?? "number";
+  const goalAmountLabel = selectedMetric
+    ? `Meta (${selectedUnit === "currency" ? "R$" : selectedUnit === "percentage" ? "%" : "valor"}) *`
+    : "Meta *";
+  const achievedAmountLabel = selectedMetric
+    ? `Valor atual (${selectedUnit === "currency" ? "R$" : selectedUnit === "percentage" ? "%" : "valor"})`
+    : "Valor atual";
+  const amountStep = selectedUnit === "currency" ? 0.01 : selectedUnit === "percentage" ? 0.1 : 1;
+  const amountPlaceholder = selectedUnit === "currency"
+    ? "Ex.: 5.000"
+    : selectedUnit === "percentage"
+      ? "Ex.: 75"
+      : "Ex.: 100";
+  const achievedPlaceholder = selectedUnit === "currency"
+    ? "Ex.: 2.500"
+    : selectedUnit === "percentage"
+      ? "Ex.: 40"
+      : "Ex.: 80";
 
   const onSubmit = async (data: GoalFormData) => {
     try {
       setIsSubmitting(true);
+
+      const metricKey = data.metric_key as GoalType;
+      const metricMetadata = GOAL_TYPE_METADATA[metricKey];
 
       const goalData = {
         company_name: data.company_name,
@@ -95,6 +137,9 @@ export function NewGoalModal({ open, onOpenChange, goal, onSuccess }: NewGoalMod
         period_end: format(data.period_end, 'yyyy-MM-dd'),
         status: data.status,
         percentage: (data.achieved_amount / data.goal_amount) * 100,
+        metric_key: metricKey,
+        metric_category: metricMetadata?.category ?? null,
+        metric_label: metricMetadata?.label ?? null,
       };
 
       if (isEditMode && goal) {
@@ -121,7 +166,7 @@ export function NewGoalModal({ open, onOpenChange, goal, onSuccess }: NewGoalMod
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="w-full max-w-4xl p-4 sm:p-6 lg:p-8">
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'Editar Meta' : 'Nova Meta do Cliente'}</DialogTitle>
           <DialogDescription>
@@ -133,175 +178,209 @@ export function NewGoalModal({ open, onOpenChange, goal, onSuccess }: NewGoalMod
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="company_name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nome da Empresa *</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ex: Acme Corporation" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,0.6fr)_minmax(0,0.4fr)]">
               <FormField
                 control={form.control}
-                name="goal_amount"
+                name="metric_key"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Meta (R$) *</FormLabel>
+                  <FormItem className="flex h-full flex-col gap-3">
+                    <FormLabel>Métrica (CRM ou Meta Ads) *</FormLabel>
                     <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        {...field}
-                      />
+                      <div className="rounded-lg border border-border bg-background p-3 sm:p-4 lg:p-5">
+                        <KPISelector
+                          value={(field.value as GoalType) || DEFAULT_METRIC_KEY}
+                          onChange={(value) => field.onChange(value)}
+                          allowedCategories={["crm", "meta"]}
+                        />
+                      </div>
                     </FormControl>
+                    <FormDescription>
+                      Escolha o KPI que servirá de base para esta meta do cliente.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="achieved_amount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Valor Atingido (R$)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="company_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome da Empresa *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ex: Acme Corporation" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="goal_amount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{goalAmountLabel}</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={amountStep}
+                            placeholder={amountPlaceholder}
+                            {...field}
+                          />
+                        </FormControl>
+                        {selectedMetric && (
+                          <FormDescription>
+                            Defina a meta para {selectedMetric.label}.
+                          </FormDescription>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="achieved_amount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{achievedAmountLabel}</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={amountStep}
+                            placeholder={achievedPlaceholder}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="period_start"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Data de Início *</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "pl-3 text-left font-normal",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                                ) : (
+                                  <span>Selecione a data</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              disabled={(date) =>
+                                date > new Date() || date < new Date("1900-01-01")
+                              }
+                              initialFocus
+                              locale={ptBR}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="period_end"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Data de Término *</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "pl-3 text-left font-normal",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                                ) : (
+                                  <span>Selecione a data</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              disabled={(date) => date < new Date("1900-01-01")}
+                              initialFocus
+                              locale={ptBR}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o status" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Excelente">Excelente</SelectItem>
+                          <SelectItem value="Em dia">Em dia</SelectItem>
+                          <SelectItem value="Atrasado">Atrasado</SelectItem>
+                          <SelectItem value="Crítico">Crítico</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="period_start"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Data de Início *</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "dd/MM/yyyy", { locale: ptBR })
-                            ) : (
-                              <span>Selecione a data</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) =>
-                            date > new Date() || date < new Date("1900-01-01")
-                          }
-                          initialFocus
-                          locale={ptBR}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="period_end"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Data de Término *</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "dd/MM/yyyy", { locale: ptBR })
-                            ) : (
-                              <span>Selecione a data</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => date < new Date("1900-01-01")}
-                          initialFocus
-                          locale={ptBR}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <FormField
-              control={form.control}
-              name="status"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Status</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o status" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="Excelente">Excelente</SelectItem>
-                      <SelectItem value="Em dia">Em dia</SelectItem>
-                      <SelectItem value="Atrasado">Atrasado</SelectItem>
-                      <SelectItem value="Crítico">Crítico</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <DialogFooter>
+            <DialogFooter className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="outline"

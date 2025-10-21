@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Loader2, Mail, Lock, User } from "lucide-react";
 import { authHelpers } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
+import { mergeUserSettings, resolveDefaultHomePath, type UserSettings } from "@/hooks/useUserSettings";
 
 export function RegisterForm() {
   const [fullName, setFullName] = useState("");
@@ -52,13 +53,17 @@ export function RegisterForm() {
         description: "Verifique seu email para confirmar a conta.",
       });
 
-      // Redirect to login or dashboard
-      navigate("/dashboard");
-    } catch (error: any) {
+      const settings = mergeUserSettings(
+        (data.user?.user_metadata?.settings as Partial<UserSettings> | null) ?? undefined
+      );
+      const homePath = resolveDefaultHomePath(settings);
+
+      navigate(homePath);
+    } catch (error) {
       console.error("Registration error:", error);
       toast({
         title: "Erro ao criar conta",
-        description: error.message || "Ocorreu um erro ao criar sua conta",
+        description: error instanceof Error ? error.message : "Ocorreu um erro ao criar sua conta",
         variant: "destructive",
       });
     } finally {

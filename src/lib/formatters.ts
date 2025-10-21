@@ -2,33 +2,65 @@
  * Utility functions for formatting data in the UI
  */
 
-/**
- * Format currency in BRL (Brazilian Real)
- */
-export function formatCurrency(value: number | null | undefined): string {
-  if (value === null || value === undefined) return 'R$ 0,00';
+export interface CurrencyFormatOptions {
+  currency?: "BRL" | "USD";
+  locale?: string;
+  minimumFractionDigits?: number;
+  maximumFractionDigits?: number;
+}
 
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+/**
+ * Format currency with support for different locales and currencies (default BRL)
+ */
+export function formatCurrency(
+  value: number | null | undefined,
+  options: CurrencyFormatOptions = {}
+): string {
+  if (value === null || value === undefined) {
+    return options.currency === "USD" ? "$0.00" : "R$ 0,00";
+  }
+
+  const {
+    currency = "BRL",
+    locale = currency === "USD" ? "en-US" : "pt-BR",
+    minimumFractionDigits = 2,
+    maximumFractionDigits = 2,
+  } = options;
+
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    minimumFractionDigits,
+    maximumFractionDigits,
   }).format(value);
 }
 
 /**
  * Format currency in a compact form (K for thousands, M for millions)
  */
-export function formatCurrencyCompact(value: number | null | undefined): string {
-  if (value === null || value === undefined) return 'R$ 0';
+export function formatCurrencyCompact(
+  value: number | null | undefined,
+  options: CurrencyFormatOptions = {}
+): string {
+  if (value === null || value === undefined) {
+    return options.currency === "USD" ? "$0" : "R$ 0";
+  }
 
   if (value >= 1000000) {
-    return `R$ ${(value / 1000000).toFixed(1)}M`;
+    return formatCurrency(value / 1000000, {
+      ...options,
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 2,
+    }) + "M";
   }
   if (value >= 1000) {
-    return `R$ ${(value / 1000).toFixed(1)}K`;
+    return formatCurrency(value / 1000, {
+      ...options,
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 2,
+    }) + "K";
   }
-  return formatCurrency(value);
+  return formatCurrency(value, options);
 }
 
 /**
