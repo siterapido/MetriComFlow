@@ -1,4 +1,4 @@
-import { BarChart3, Users, Target, LayoutDashboard, Settings, TrendingUp, UserCog } from "lucide-react";
+import { BarChart3, Users, Target, LayoutDashboard, TrendingUp, UserCog, FileText } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -32,6 +32,12 @@ const items: NavItem[] = [
     title: "Leads",
     url: "/leads",
     icon: Users,
+    requiresCRM: true,
+  },
+  {
+    title: "Formulários",
+    url: "/formularios",
+    icon: FileText,
     requiresCRM: true,
   },
   {
