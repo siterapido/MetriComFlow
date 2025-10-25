@@ -22,6 +22,8 @@ import UpdatePassword from "./pages/UpdatePassword";
 import AuthCallback from "./pages/AuthCallback";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Profile from "./pages/Profile";
+import Team from "./pages/Team";
+import AcceptInvitation from "./pages/AcceptInvitation";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +47,7 @@ const App = () => (
             <Route path="/auth/update-password" element={<UpdatePassword />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/accept-invitation" element={<AcceptInvitation />} />
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
@@ -56,6 +59,7 @@ const App = () => (
                 <Route path="/metrics" element={<Navigate to="/meta-ads-config" replace />} />
                 <Route path="/meta-ads-config" element={<MetaAdsConfig />} />
                 <Route path="/usuarios" element={<Users />} />
+                <Route path="/team" element={<Team />} />
                 <Route path="/meu-perfil" element={<Profile />} />
               </Route>
             </Route>

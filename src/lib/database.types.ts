@@ -676,6 +676,111 @@ export type Database = {
         }
         Relationships: []
       }
+      organization_memberships: {
+        Row: {
+          created_at: string | null
+          id: string
+          invited_by: string | null
+          is_active: boolean
+          joined_at: string
+          left_at: string | null
+          organization_id: string
+          profile_id: string
+          role: "owner" | "admin" | "manager" | "member"
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          invited_by?: string | null
+          is_active?: boolean
+          joined_at?: string
+          left_at?: string | null
+          organization_id: string
+          profile_id: string
+          role?: "owner" | "admin" | "manager" | "member"
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          invited_by?: string | null
+          is_active?: boolean
+          joined_at?: string
+          left_at?: string | null
+          organization_id?: string
+          profile_id?: string
+          role?: "owner" | "admin" | "manager" | "member"
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_memberships_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_memberships_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_memberships_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          billing_email: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean
+          metadata: Json | null
+          name: string
+          owner_id: string
+          slug: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          billing_email?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          metadata?: Json | null
+          name: string
+          owner_id: string
+          slug?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          billing_email?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          metadata?: Json | null
+          name?: string
+          owner_id?: string
+          slug?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organizations_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -884,6 +989,76 @@ export type Database = {
           },
         ]
       }
+      team_invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string | null
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string
+          metadata: Json | null
+          organization_id: string
+          role: "owner" | "admin" | "manager" | "member"
+          status: "pending" | "accepted" | "expired" | "revoked"
+          token: string
+          user_type: Database["public"]["Enums"]["user_type"]
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string | null
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by: string
+          metadata?: Json | null
+          organization_id: string
+          role?: "owner" | "admin" | "manager" | "member"
+          status?: "pending" | "accepted" | "expired" | "revoked"
+          token: string
+          user_type?: Database["public"]["Enums"]["user_type"]
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string
+          metadata?: Json | null
+          organization_id?: string
+          role?: "owner" | "admin" | "manager" | "member"
+          status?: "pending" | "accepted" | "expired" | "revoked"
+          token?: string
+          user_type?: Database["public"]["Enums"]["user_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_invitations_accepted_by_fkey"
+            columns: ["accepted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_invitations_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_invitations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_members: {
         Row: {
           active: boolean | null
@@ -1013,6 +1188,23 @@ export type Database = {
       get_vault_secret: {
         Args: { secret_name: string }
         Returns: string
+      }
+      get_invitation_by_token: {
+        Args: { invitation_token: string }
+        Returns: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string
+          organization_id: string
+          organization_name: string
+          role: "owner" | "admin" | "manager" | "member"
+          status: "pending" | "accepted" | "expired" | "revoked"
+          user_type: Database["public"]["Enums"]["user_type"]
+        }[]
       }
       has_crm_access: {
         Args: { user_id: string }

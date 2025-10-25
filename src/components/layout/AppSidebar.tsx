@@ -1,4 +1,4 @@
-import { BarChart3, Users, Target, LayoutDashboard, TrendingUp, UserCog, FileText } from "lucide-react";
+import { BarChart3, Users, Target, LayoutDashboard, TrendingUp, UserCog, FileText, Settings, UserPlus } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -51,6 +51,12 @@ const items: NavItem[] = [
     url: "/meta-ads-config",
     icon: TrendingUp,
     requiresMetrics: true,
+  },
+  {
+    title: "Equipe",
+    url: "/team",
+    icon: UserPlus,
+    requiresOwner: true,
   },
   {
     title: "Usuários",
