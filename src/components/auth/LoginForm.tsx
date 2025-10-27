@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,11 +32,15 @@ export function LoginForm() {
         );
         const homePath = resolveDefaultHomePath(settings);
 
+        // Redirecionamento pós-login, se fornecido via query (?next=/planos?plan=slug)
+        const params = new URLSearchParams(location.search);
+        const next = params.get("next");
+
         toast({
           title: "Login realizado com sucesso!",
           description: `Bem-vindo de volta, ${data.user.email}!`,
         });
-        navigate(homePath);
+        navigate(next || homePath);
       }
     } catch (error) {
       console.error("Login error:", error);

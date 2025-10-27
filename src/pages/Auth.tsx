@@ -1,9 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { RegisterForm } from "@/components/auth/RegisterForm";
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
+  const location = useLocation();
+
+  // Ajusta modo inicial via querystring: ?mode=register|login
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const mode = params.get("mode");
+    if (mode === "register") setIsLogin(false);
+    else if (mode === "login") setIsLogin(true);
+  }, [location.search]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/20 flex items-center justify-center px-4 sm:px-6 py-6">

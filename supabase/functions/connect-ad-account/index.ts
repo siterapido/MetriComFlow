@@ -81,6 +81,23 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Get user's active organization
+    const { data: orgMembership, error: orgError } = await supabase
+      .from('organization_memberships')
+      .select('organization_id')
+      .eq('profile_id', user.id)
+      .eq('is_active', true)
+      .single();
+
+    if (orgError || !orgMembership) {
+      return new Response(
+        JSON.stringify({ error: 'No active organization found for user' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const organizationId = orgMembership.organization_id;
+
     // Verificar se a conta já existe
     const { data: existingAccount, error: existingError } = await supabase
       .from('ad_accounts')
@@ -101,6 +118,7 @@ Deno.serve(async (req: Request) => {
         .update({
           business_name: accountData.business_name || accountData.name,
           connected_by: user.id,
+          organization_id: organizationId,
           updated_at: new Date().toISOString()
         })
         .eq('id', existingAccount.id)
@@ -119,7 +137,8 @@ Deno.serve(async (req: Request) => {
         .insert({
           external_id: ad_account_id,
           business_name: accountData.business_name || accountData.name,
-          connected_by: user.id
+          connected_by: user.id,
+          organization_id: organizationId
         })
         .select()
         .single();

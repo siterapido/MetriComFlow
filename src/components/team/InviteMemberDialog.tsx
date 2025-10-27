@@ -18,8 +18,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader2, AlertTriangle, TrendingUp } from "lucide-react";
 import { useInvitations } from "@/hooks/useInvitations";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
+import { useOrganizationPlanLimits } from "@/hooks/useSubscription";
 
 const inviteSchema = z.object({
   email: z.string().email("Informe um email válido"),
@@ -36,6 +39,11 @@ interface InviteMemberDialogProps {
 
 export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogProps) {
   const { sendInvitation, isSending } = useInvitations();
+  const { data: permissions } = useUserPermissions();
+  const { data: limits } = useOrganizationPlanLimits();
+
+  const canAddUser = permissions?.canAddUser ?? true;
+  const usersLimitReached = limits?.users_limit_reached ?? false;
 
   const form = useForm<InviteFormValues>({
     resolver: zodResolver(inviteSchema),
@@ -65,6 +73,32 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
             Envie um convite por email e defina o nível de acesso do colaborador.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Limit Reached Warning */}
+        {usersLimitReached && (
+          <Alert className="bg-destructive/10 border-destructive">
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+            <AlertDescription className="text-destructive">
+              <p className="font-semibold">Limite de usuários atingido!</p>
+              <p className="text-sm mt-1">
+                Você atingiu o limite de {limits?.max_users} usuários do seu plano atual (
+                {limits?.plan_name}). Faça upgrade para adicionar mais membros.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 border-destructive text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  onOpenChange(false);
+                  window.location.href = "/planos";
+                }}
+              >
+                <TrendingUp className="w-4 h-4 mr-1" />
+                Ver Planos
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
@@ -149,9 +183,9 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSending}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSending}>
+              <Button type="submit" disabled={isSending || usersLimitReached}>
                 {isSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Enviar convite
+                {usersLimitReached ? "Limite atingido" : "Enviar convite"}
               </Button>
             </div>
           </form>

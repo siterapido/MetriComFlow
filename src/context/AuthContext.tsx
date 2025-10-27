@@ -51,6 +51,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Fallback: ao obter primeira sessão autenticada, garantir promoção a owner/org
+  useEffect(() => {
+    const run = async () => {
+      if (!user) return
+      const key = `mf_promote_owner_done_${user.id}`
+      if (localStorage.getItem(key)) return
+      try {
+        await supabase.functions.invoke('promote-owner', { body: {} })
+      } catch (err) {
+        // Ignora silenciosamente; função requer JWT e service role configurado
+        console.warn('promote-owner (fallback) falhou:', err)
+      } finally {
+        // Evita chamar novamente nesta máquina
+        localStorage.setItem(key, '1')
+      }
+    }
+    run()
+  }, [user])
+
   const value = useMemo<AuthContextValue>(() => ({
     user,
     session,

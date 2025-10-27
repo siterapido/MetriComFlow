@@ -3,15 +3,24 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import { useToast } from "@/hooks/use-toast";
-import type { Database, Tables } from "@/lib/database.types";
+// Tipos locais para evitar dependência de arquivos de tipos inconsistentes
+type UserType = "owner" | "traffic_manager" | "sales";
 
-type ProfileRow = Tables<"profiles">;
-type MembershipRow = Tables<"organization_memberships">;
+type MembershipRole = "owner" | "admin" | "manager" | "member";
+
+type ProfileRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  avatar_url: string | null;
+  user_type?: UserType | null;
+};
+// Removido uso de Tables<...> para evitar erros de importação
 
 export interface TeamMember {
   membershipId: string;
   organizationId: string;
-  role: MembershipRow["role"];
+  role: MembershipRole;
   joinedAt: string;
   profile: Pick<
     ProfileRow,
@@ -21,7 +30,7 @@ export interface TeamMember {
 
 interface UpdateMemberRolePayload {
   membershipId: string;
-  role: MembershipRow["role"];
+  role: MembershipRole;
 }
 
 export function useTeam() {
@@ -33,7 +42,7 @@ export function useTeam() {
   const membersQuery = useQuery({
     queryKey: ["organization-team", organization?.id],
     queryFn: async (): Promise<TeamMember[]> => {
-      if (!organization) return [];
+      if (!organization?.id) return [];
 
       const { data, error } = await supabase
         .from("organization_memberships")
@@ -44,7 +53,7 @@ export function useTeam() {
           role,
           joined_at,
           is_active,
-          profiles (
+          profiles!organization_memberships_profile_id_fkey!inner (
             id,
             full_name,
             email,
@@ -59,22 +68,22 @@ export function useTeam() {
 
       if (error) {
         console.error("Erro ao buscar membros da organização:", error);
-        throw error;
+        // Don't throw, return empty array to prevent page crash
+        return [];
       }
 
       return (
         data?.map((row) => ({
           membershipId: row.id,
           organizationId: row.organization_id,
-          role: row.role as MembershipRow["role"],
+          role: row.role as MembershipRole,
           joinedAt: row.joined_at,
           profile: {
             id: row.profiles?.id ?? "",
             full_name: row.profiles?.full_name ?? "Usuário",
             email: row.profiles?.email ?? "sem-email",
             avatar_url: row.profiles?.avatar_url ?? null,
-            user_type:
-              (row.profiles?.user_type as Database["public"]["Enums"]["user_type"]) ?? "sales",
+            user_type: (row.profiles?.user_type as UserType) ?? "sales",
           },
         })) ?? []
       );
@@ -143,7 +152,7 @@ export function useTeam() {
       userType,
     }: {
       profileId: string;
-      userType: Database["public"]["Enums"]["user_type"];
+      userType: UserType;
     }) => {
       const { error } = await supabase
         .from("profiles")

@@ -1,28 +1,14 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { supabase } from "@/lib/supabase";
-import { useToast } from "@/hooks/use-toast";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import { PlanCard } from "@/components/subscription/PlanCard";
+import type { SubscriptionPlan, BillingPeriod } from "@/hooks/useSubscription";
+import { useSubscriptionPlans } from "@/hooks/useSubscription";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const schema = z.object({
-  name: z.string().min(2, "Informe seu nome"),
-  email: z.string().email("E-mail inválido"),
-  company: z.string().optional(),
-  role: z.string().optional(),
-  team_size: z.string().optional(),
-  objective: z.string().optional(),
-  message: z.string().optional(),
-  consent: z.boolean().refine((v) => v === true, { message: "É necessário aceitar a Política de Privacidade (LGPD)" }),
-});
-
-type FormValues = z.infer<typeof schema>;
+// Landing page sem formulário: removido schema e validação
 
 type DataLayerEvent = { event: string; [key: string]: any };
 
@@ -57,7 +43,7 @@ function HeaderLanding() {
           </Button>
           <Button onClick={() => {
             track({ event: "lp_header_cta_click", label: "comece_gratis" });
-            document.getElementById("cta")?.scrollIntoView({ behavior: "smooth" });
+            document.getElementById("planos")?.scrollIntoView({ behavior: "smooth" });
           }}>Comece grátis</Button>
         </div>
       </div>
@@ -96,11 +82,11 @@ function Hero() {
             <div className="mt-6 flex flex-wrap gap-3">
               <Button className="accent-ring" size="lg" onClick={() => {
                 track({ event: "lp_hero_cta_click", label: "comece_gratis" });
-                document.getElementById("cta")?.scrollIntoView({ behavior: "smooth" });
+                document.getElementById("planos")?.scrollIntoView({ behavior: "smooth" });
               }}>Comece grátis</Button>
               <Button className="accent-ring" size="lg" variant="outline" onClick={() => {
                 track({ event: "lp_hero_cta_click", label: "agendar_demo" });
-                document.getElementById("cta")?.scrollIntoView({ behavior: "smooth" });
+                document.getElementById("planos")?.scrollIntoView({ behavior: "smooth" });
               }}>Agendar demo</Button>
             </div>
             <div className="mt-6 text-sm text-muted-foreground">Sem cartão de crédito. 5 minutos para começar.</div>
@@ -348,7 +334,7 @@ function PricingTeaser() {
         <div className="mt-6">
           <Button size="lg" onClick={() => {
             track({ event: "lp_pricing_cta_click" });
-            document.getElementById("cta")?.scrollIntoView({ behavior: "smooth" });
+            document.getElementById("planos")?.scrollIntoView({ behavior: "smooth" });
           }}>Ver opções</Button>
         </div>
       </div>
@@ -380,107 +366,133 @@ function FAQ() {
   );
 }
 
-function DemoForm() {
-  const { toast } = useToast();
+function PricingPlansSection() {
   const track = useTracker();
-  const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: { consent: false },
-  });
+  const [period, setPeriod] = useState<BillingPeriod>("monthly");
+  // Buscar planos oficiais diretamente do Supabase para manter sincronização com /planos
+  const { data: allPlans, isLoading, error } = useSubscriptionPlans();
 
-  const utms = useMemo(() => {
-    const params = new URLSearchParams(window.location.search);
-    return {
-      utm_source: params.get("utm_source") || undefined,
-      utm_medium: params.get("utm_medium") || undefined,
-      utm_campaign: params.get("utm_campaign") || undefined,
-      utm_term: params.get("utm_term") || undefined,
-      utm_content: params.get("utm_content") || undefined,
-    };
-  }, []);
+  const monthlyPlans = (allPlans || [])
+    .filter((p) => p.billing_period === "monthly")
+    .sort((a, b) => a.display_order - b.display_order);
+  const yearlyPlans = (allPlans || [])
+    .filter((p) => p.billing_period === "yearly")
+    .sort((a, b) => a.display_order - b.display_order);
 
-  const onSubmit = async (values: FormValues) => {
-    track({ event: "lp_form_submit_attempt" });
-    const payload = {
-      name: values.name,
-      email: values.email,
-      company: values.company,
-      role: values.role,
-      team_size: values.team_size,
-      objective: values.objective || values.message,
-      source: "landing",
-      ...utms,
-      consent: true,
-      user_agent: navigator.userAgent,
-    };
+  // Se o período selecionado não tiver planos disponíveis, mostramos mensagem amigável
+  const plans = period === "monthly" ? monthlyPlans : yearlyPlans;
 
-    const { error } = await supabase.from("site_requests" as any).insert(payload);
-    if (error) {
-      toast({ title: "Não foi possível enviar", description: error.message, variant: "destructive" });
-      track({ event: "lp_form_submit", status: "error", message: error.message });
-      return;
-    }
-
-    toast({ title: "Recebido!", description: "Entraremos em contato em breve." });
-    track({ event: "lp_form_submit", status: "success" });
-    reset();
+  const handleSelect = (planId: string) => {
+    track({ event: "lp_plan_select", planId, period });
+    const plan = plans.find((p) => p.id === planId);
+    const planSlugOrId = plan?.slug || planId;
+    // Nova navegação: checkout público direto, sem redirecionar para login
+    const next = `/checkout?plan=${encodeURIComponent(planSlugOrId)}`;
+    window.location.href = next;
   };
 
   return (
-    <section id="cta" className="container mx-auto px-4 py-16">
-      <div className="grid md:grid-cols-2 gap-10 items-start">
+    <section id="planos" className="container mx-auto px-4 py-16">
+      <div className="grid md:grid-cols-2 gap-10 items-start mb-8">
         <div>
-          <h2 className="text-3xl font-bold">Pronto para começar?</h2>
-          <p className="mt-2 text-muted-foreground">Solicite um acesso gratuito ou agende uma demo guiada.</p>
+          <h2 className="text-3xl font-bold">Escolha o plano ideal</h2>
+          <p className="mt-2 text-muted-foreground">
+            Planos organizados por necessidade: básico, intermediário e premium.
+          </p>
           <ul className="mt-6 space-y-2 text-sm text-muted-foreground list-disc pl-5">
-            <li>Sem cartão de crédito</li>
-            <li>Integração rápida com Meta Ads</li>
-            <li>Suporte humano quando precisar</li>
+            <li>Preços mensais e anuais com desconto</li>
+            <li>Recursos claros e limites por plano</li>
+            <li>Contratação simples e rápida</li>
           </ul>
         </div>
+        <div className="flex md:justify-end">
+          <Tabs value={period} onValueChange={(v) => setPeriod(v as BillingPeriod)} className="w-full md:w-auto">
+            <TabsList className="grid grid-cols-2 w-full md:w-auto">
+              <TabsTrigger value="monthly" className="transition-all duration-200" disabled={!monthlyPlans.length}>Mensal</TabsTrigger>
+              <TabsTrigger value="yearly" className="transition-all duration-200" disabled={!yearlyPlans.length}>Anual</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-6 border rounded-lg space-y-4">
-          <div>
-            <Label htmlFor="name">Nome</Label>
-            <Input id="name" placeholder="Seu nome" {...register("name")} />
-            {errors.name && <p className="text-sm text-red-600 mt-1">{errors.name.message}</p>}
-          </div>
-          <div>
-            <Label htmlFor="email">E-mail</Label>
-            <Input id="email" type="email" placeholder="seu@email.com" {...register("email")} />
-            {errors.email && <p className="text-sm text-red-600 mt-1">{errors.email.message}</p>}
-          </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="company">Empresa</Label>
-              <Input id="company" placeholder="Nome da empresa" {...register("company")} />
+      {/* Cards dos planos */}
+      {isLoading ? (
+        <div className="grid gap-6 md:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="p-6 border rounded-lg">
+              <Skeleton className="h-6 w-32 mb-4" />
+              <Skeleton className="h-8 w-24 mb-6" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+                <Skeleton className="h-4 w-4/6" />
+              </div>
+              <Skeleton className="h-10 w-full mt-6" />
             </div>
-            <div>
-              <Label htmlFor="role">Cargo</Label>
-              <Input id="role" placeholder="Seu cargo" {...register("role")} />
-            </div>
+          ))}
+        </div>
+      ) : error ? (
+        <div className="p-4 border rounded-lg text-sm text-destructive">Não foi possível carregar os planos. Tente novamente mais tarde.</div>
+      ) : !plans.length ? (
+        <div className="p-4 border rounded-lg text-sm text-muted-foreground">Nenhum plano disponível para o período selecionado.</div>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-3">
+          {plans.map((plan) => (
+            <PlanCard key={plan.id} plan={plan} onSelect={handleSelect} />
+          ))}
+        </div>
+      )}
+
+      {/* Comparação opcional */}
+      <div className="mt-10 p-6 border rounded-lg">
+        <h3 className="text-xl font-semibold">Comparação rápida</h3>
+        {plans.length ? (
+          <div className="mt-4 grid gap-4 text-sm"
+            style={{ gridTemplateColumns: `repeat(${Math.min(4, plans.length + 1)}, minmax(0, 1fr))`, display: 'grid' }}>
+            <div className="font-semibold text-muted-foreground">Recurso</div>
+            {plans.map((p) => (
+              <div key={p.id} className="font-semibold">{p.name}</div>
+            ))}
+
+            <div className="text-muted-foreground">Contas de anúncio</div>
+            {plans.map((p) => (
+              <div key={`ad-${p.id}`}>{p.max_ad_accounts}</div>
+            ))}
+
+            <div className="text-muted-foreground">Usuários</div>
+            {plans.map((p) => (
+              <div key={`users-${p.id}`}>{p.max_users}</div>
+            ))}
+
+            <div className="text-muted-foreground">CRM</div>
+            {plans.map((p) => (
+              <div key={`crm-${p.id}`}>{p.has_crm_access ? "Incluso" : "—"}</div>
+            ))}
+
+            <div className="text-muted-foreground">Suporte prioritário</div>
+            {plans.map((p) => (
+              <div key={`sup-prio-${p.id}`}>{(p.features || []).some((f) => /priorit/i.test(f)) ? "Sim" : "—"}</div>
+            ))}
+
+            <div className="text-muted-foreground">Suporte dedicado</div>
+            {plans.map((p) => (
+              <div key={`sup-ded-${p.id}`}>{(p.features || []).some((f) => /dedicad/i.test(f)) ? "Sim" : "—"}</div>
+            ))}
           </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="team_size">Tamanho da equipe</Label>
-              <Input id="team_size" placeholder="Ex.: 5-10" {...register("team_size")} />
-            </div>
-            <div>
-              <Label htmlFor="objective">Objetivo</Label>
-              <Input id="objective" placeholder="Ex.: unificar leads e metas" {...register("objective")} />
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="message">Mensagem (opcional)</Label>
-            <Textarea id="message" placeholder="Conte em poucas palavras seu contexto" {...register("message")} />
-          </div>
-          <div className="flex items-start gap-2">
-            <input id="consent" type="checkbox" className="mt-1" {...register("consent")}/>
-            <Label htmlFor="consent" className="text-sm text-muted-foreground">Concordo com a <a href="/privacy-policy" className="underline">Política de Privacidade</a> (LGPD).</Label>
-          </div>
-          {errors.consent && <p className="text-sm text-red-600 -mt-2">{errors.consent.message}</p>}
-          <Button type="submit" className="w-full" disabled={isSubmitting}>{isSubmitting ? "Enviando..." : "Enviar"}</Button>
-        </form>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">Carregue os planos para ver a comparação.</p>
+        )}
+      </div>
+
+      <div className="mt-8 text-center">
+        <Button size="lg" className="accent-ring" onClick={() => {
+          track({ event: "lp_pricing_bottom_cta_click", period });
+          const next = `/planos${plans.length ? `?plan=${encodeURIComponent(plans[0].slug || plans[0].id)}` : ""}`;
+          window.location.href = `/login?next=${encodeURIComponent(next)}&mode=register`;
+        }}>
+          Contratar agora
+        </Button>
+        <div className="mt-2 text-xs text-muted-foreground">Sem cartão de crédito para começar</div>
       </div>
     </section>
   );
@@ -536,7 +548,7 @@ const Index = () => {
       <Testimonials />
       <PricingTeaser />
       <FAQ />
-      <DemoForm />
+      <PricingPlansSection />
       <FooterLanding />
     </div>
   );

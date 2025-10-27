@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import type { Database } from "@/lib/database.types";
 
 type UserType = Database["public"]["Enums"]["user_type"];
@@ -14,13 +15,18 @@ export interface UserPermissions {
   canManageGoals: boolean;
   canDeleteLeads: boolean;
   canManageTeamMembers: boolean;
+  // Subscription plan limits
+  canAddAdAccount: boolean;
+  canAddUser: boolean;
+  planHasCRMAccess: boolean;
 }
 
 export const useUserPermissions = () => {
   const { user } = useAuth();
+  const { data: org } = useActiveOrganization();
 
   return useQuery({
-    queryKey: ["user-permissions", user?.id],
+    queryKey: ["user-permissions", user?.id, org?.id],
     queryFn: async (): Promise<UserPermissions> => {
       if (!user?.id) {
         return {
@@ -32,6 +38,9 @@ export const useUserPermissions = () => {
           canManageGoals: false,
           canDeleteLeads: false,
           canManageTeamMembers: false,
+          canAddAdAccount: false,
+          canAddUser: false,
+          planHasCRMAccess: false,
         };
       }
 
@@ -49,19 +58,40 @@ export const useUserPermissions = () => {
       const isTrafficManager = userType === "traffic_manager";
       const isSales = userType === "sales";
 
+      // Fetch organization plan limits (if org exists)
+      let planLimits = null;
+      if (org?.id) {
+        const { data: limits } = await supabase
+          .from("organization_plan_limits")
+          .select("*")
+          .eq("organization_id", org.id)
+          .maybeSingle();
+
+        planLimits = limits;
+      }
+
+      // Determine CRM access (user_type + plan)
+      const userHasCRMAccess = isOwner || isSales;
+      const planHasCRMAccess = planLimits?.has_crm_access ?? true; // Default to true if no plan
+      const hasCRMAccess = userHasCRMAccess && planHasCRMAccess;
+
       return {
         userType,
         isOwner,
-        hasCRMAccess: isOwner || isSales,
+        hasCRMAccess,
         hasMetricsAccess: isOwner || isTrafficManager,
         canManageUsers: isOwner,
         canManageGoals: isOwner,
         canDeleteLeads: isOwner,
         canManageTeamMembers: isOwner,
+        // Subscription limits
+        canAddAdAccount: planLimits ? !planLimits.ad_accounts_limit_reached : true,
+        canAddUser: planLimits ? !planLimits.users_limit_reached : true,
+        planHasCRMAccess,
       };
     },
     enabled: !!user?.id,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 30 * 1000, // 30 seconds (shorter for plan limit checks)
   });
 };
 

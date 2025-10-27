@@ -107,6 +107,8 @@ Resumo:
 - **[AGENTS.md](./AGENTS.md)** - Guia para contribuidores e agentes
 - **[SETUP_SUPABASE.md](./SETUP_SUPABASE.md)** - Guia de setup passo a passo
 - **[CLAUDE.md](./CLAUDE.md)** - Instruções para Claude Code
+- **[docs/META_OAUTH_SETUP.md](./docs/META_OAUTH_SETUP.md)** - Configuração OAuth Meta Ads (completo)
+- **[CORRIGIR_OAUTH_META.md](./CORRIGIR_OAUTH_META.md)** - 🚨 Correção urgente: URL bloqueada Meta OAuth
 
 ## How can I deploy this project?
 

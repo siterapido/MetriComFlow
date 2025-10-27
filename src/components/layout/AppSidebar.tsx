@@ -1,4 +1,4 @@
-import { BarChart3, Users, Target, LayoutDashboard, TrendingUp, UserCog, FileText, Settings, UserPlus } from "lucide-react";
+import { BarChart3, Users, Target, LayoutDashboard, TrendingUp, FileText, Settings, UsersRound, CreditCard } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -53,15 +53,15 @@ const items: NavItem[] = [
     requiresMetrics: true,
   },
   {
-    title: "Equipe",
-    url: "/team",
-    icon: UserPlus,
+    title: "Gestão de Equipe",
+    url: "/equipe",
+    icon: UsersRound,
     requiresOwner: true,
   },
   {
-    title: "Usuários",
-    url: "/usuarios",
-    icon: UserCog,
+    title: "Planos e Assinatura",
+    url: "/planos",
+    icon: CreditCard,
     requiresOwner: true,
   },
   {

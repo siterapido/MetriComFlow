@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Mail, Lock, User } from "lucide-react";
-import { authHelpers } from "@/lib/supabase";
+import { authHelpers, supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { mergeUserSettings, resolveDefaultHomePath, type UserSettings } from "@/hooks/useUserSettings";
 
@@ -16,6 +16,7 @@ export function RegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -53,12 +54,27 @@ export function RegisterForm() {
         description: "Verifique seu email para confirmar a conta.",
       });
 
+      // Tenta promover o usuário a 'owner' e criar organização pessoal/trial
+      // Obs: se a confirmação de email estiver habilitada, pode não haver sessão ainda
+      // e esta chamada retornará 401. Nesse caso, vamos ignorar silenciosamente.
+      try {
+        await supabase.functions.invoke("promote-owner", {
+          body: { organizationName: fullName },
+        });
+      } catch (fnErr) {
+        // Ignora erro 401 (sem sessão após cadastro) e quaisquer outros não críticos
+        console.warn("promote-owner invoke falhou (não crítico):", fnErr);
+      }
+
       const settings = mergeUserSettings(
         (data.user?.user_metadata?.settings as Partial<UserSettings> | null) ?? undefined
       );
       const homePath = resolveDefaultHomePath(settings);
 
-      navigate(homePath);
+      // Redirecionamento pós-registro, se fornecido via query (?next=/planos?plan=slug)
+      const params = new URLSearchParams(location.search);
+      const next = params.get("next");
+      navigate(next || homePath);
     } catch (error) {
       console.error("Registration error:", error);
       toast({

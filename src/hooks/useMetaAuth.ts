@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useQueryClient } from '@tanstack/react-query';
+import { useActiveOrganization } from '@/hooks/useActiveOrganization';
 
 interface MetaConnection {
   id: string;
@@ -25,6 +26,7 @@ interface AdAccount {
 export function useMetaAuth() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { data: activeOrg } = useActiveOrganization();
   const [connections, setConnections] = useState<MetaConnection[]>([]);
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,7 +84,7 @@ export function useMetaAuth() {
 
   // Fetch existing connections and ad accounts
   const fetchData = async () => {
-    if (!user) return;
+    if (!user || !activeOrg?.id) return;
 
     try {
       setLoading(true);
@@ -106,13 +108,13 @@ export function useMetaAuth() {
         }
       }
 
-      // Fetch ad accounts (both active and inactive)
+      // Fetch ad accounts (both active and inactive) - filter by organization_id
       const { data: adAccountsData, error: adAccountsError } = await supabase
         .from('ad_accounts')
         .select('*')
-        .eq('connected_by', user.id)
+        .eq('organization_id', activeOrg.id)
         .eq('provider', 'meta')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false});
 
       if (adAccountsError) {
         console.error('Error fetching ad accounts:', adAccountsError);
@@ -297,6 +299,7 @@ export function useMetaAuth() {
     provider?: string;
   }): Promise<void> => {
     if (!user) throw new Error('User not authenticated');
+    if (!activeOrg?.id) throw new Error('No active organization');
 
     try {
       // Normalize external_id: remove "act_" prefix if present
@@ -313,12 +316,12 @@ export function useMetaAuth() {
         }
       }
 
-      // Check if account already exists (including inactive ones)
+      // Check if account already exists (including inactive ones) in this organization
       const { data: existingAccounts, error: checkError } = await supabase
         .from('ad_accounts')
         .select('id, business_name, is_active, external_id')
         .eq('external_id', normalizedId)
-        .eq('connected_by', user.id);
+        .eq('organization_id', activeOrg.id);
 
       if (checkError) throw checkError;
 
@@ -339,6 +342,7 @@ export function useMetaAuth() {
             business_name: accountData.business_name.trim(),
             provider: accountData.provider || 'meta',
             connected_by: user.id,
+            organization_id: activeOrg.id,
             is_active: true,
           }
         ])
@@ -547,7 +551,7 @@ export function useMetaAuth() {
 
   useEffect(() => {
     fetchData();
-  }, [user]);
+  }, [user, activeOrg?.id]);
 
   // Check for OAuth callback on mount
   useEffect(() => {

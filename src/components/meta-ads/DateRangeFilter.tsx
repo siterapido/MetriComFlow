@@ -11,36 +11,36 @@ import { cn } from '@/lib/utils'
 import { DateRange } from 'react-day-picker'
 
 type PresetOption =
-  | 'all'
+  | 'last_90_days'
+  | 'last_60_days'
+  | 'last_30_days'
   | 'today'
   | 'yesterday'
   | 'yesterday_today'
   | 'last_7_days'
   | 'last_14_days'
   | 'last_28_days'
-  | 'last_30_days'
   | 'this_week'
   | 'last_week'
   | 'this_month'
   | 'last_month'
-  | 'maximum'
   | 'custom'
 
 type DateRangeFilterProps = {
   value?: { start: string; end: string } | null
-  onChange: (range: { start: string; end: string } | undefined) => void
+  onChange: (range: { start: string; end: string }) => void
 }
 
 const PRESET_OPTIONS: { value: PresetOption; label: string }[] = [
-  { value: 'all', label: 'Todos os períodos' },
-  { value: 'maximum', label: 'Últimos 90 dias' },
+  { value: 'last_90_days', label: 'Últimos 90 dias' },
+  { value: 'last_60_days', label: 'Últimos 60 dias' },
+  { value: 'last_30_days', label: 'Últimos 30 dias' },
   { value: 'today', label: 'Hoje' },
   { value: 'yesterday', label: 'Ontem' },
   { value: 'yesterday_today', label: 'Hoje e ontem' },
   { value: 'last_7_days', label: 'Últimos 7 dias' },
   { value: 'last_14_days', label: 'Últimos 14 dias' },
   { value: 'last_28_days', label: 'Últimos 28 dias' },
-  { value: 'last_30_days', label: 'Últimos 30 dias' },
   { value: 'this_week', label: 'Esta semana' },
   { value: 'last_week', label: 'Semana passada' },
   { value: 'this_month', label: 'Este mês' },
@@ -48,18 +48,19 @@ const PRESET_OPTIONS: { value: PresetOption; label: string }[] = [
   { value: 'custom', label: 'Personalizado' },
 ]
 
-function getDateRangeFromPreset(preset: PresetOption): { start: Date; end: Date } | null {
+function getDateRangeFromPreset(preset: PresetOption): { start: Date; end: Date } {
   const today = new Date()
   const yesterday = subDays(today, 1)
 
   switch (preset) {
-    case 'all':
-      // Sem filtro de data - retorna null
-      return null
-
-    case 'maximum':
-      // Últimos 90 dias
+    case 'last_90_days':
       return { start: subDays(today, 90), end: today }
+
+    case 'last_60_days':
+      return { start: subDays(today, 60), end: today }
+
+    case 'last_30_days':
+      return { start: subDays(today, 30), end: today }
 
     case 'today':
       return { start: today, end: today }
@@ -78,9 +79,6 @@ function getDateRangeFromPreset(preset: PresetOption): { start: Date; end: Date 
 
     case 'last_28_days':
       return { start: subDays(today, 28), end: today }
-
-    case 'last_30_days':
-      return { start: subDays(today, 30), end: today }
 
     case 'this_week':
       return { start: startOfWeek(today, { weekStartsOn: 0 }), end: endOfWeek(today, { weekStartsOn: 0 }) }
@@ -103,13 +101,13 @@ function getDateRangeFromPreset(preset: PresetOption): { start: Date; end: Date 
       return { start: subDays(today, 30), end: today }
 
     default:
-      return { start: subDays(today, 30), end: today }
+      return { start: subDays(today, 90), end: today }
   }
 }
 
 export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
   const [open, setOpen] = useState(false)
-  const [selectedPreset, setSelectedPreset] = useState<PresetOption>('all')
+  const [selectedPreset, setSelectedPreset] = useState<PresetOption>('last_90_days')
   const [customRange, setCustomRange] = useState<DateRange | undefined>()
 
   const handlePresetChange = (preset: PresetOption) => {
@@ -117,16 +115,10 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
 
     if (preset !== 'custom') {
       const range = getDateRangeFromPreset(preset)
-
-      if (range === null) {
-        // Opção "Todos" - remove o filtro de data
-        onChange(undefined)
-      } else {
-        onChange({
-          start: format(range.start, 'yyyy-MM-dd'),
-          end: format(range.end, 'yyyy-MM-dd'),
-        })
-      }
+      onChange({
+        start: format(range.start, 'yyyy-MM-dd'),
+        end: format(range.end, 'yyyy-MM-dd'),
+      })
     }
   }
 
@@ -152,12 +144,11 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
   }
 
   const getDisplayText = () => {
-    if (!value) return 'Todos os períodos'
+    if (!value) return 'Últimos 90 dias'
 
     const preset = PRESET_OPTIONS.find(opt => {
-      if (opt.value === 'custom' || opt.value === 'all') return false
+      if (opt.value === 'custom') return false
       const range = getDateRangeFromPreset(opt.value)
-      if (!range) return false
       const rangeStart = format(range.start, 'yyyy-MM-dd')
       const rangeEnd = format(range.end, 'yyyy-MM-dd')
       return rangeStart === value.start && rangeEnd === value.end
@@ -250,9 +241,7 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
                 <p className="mb-2">
                   <strong className="text-foreground">Período selecionado:</strong>
                 </p>
-                {selectedPreset === 'all' ? (
-                  <p className="text-foreground">Todos os períodos (sem filtro de data)</p>
-                ) : value ? (
+                {value ? (
                   <>
                     <p>{format(new Date(value.start), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
                     <p className="mb-2">até</p>

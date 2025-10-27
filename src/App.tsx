@@ -23,7 +23,11 @@ import AuthCallback from "./pages/AuthCallback";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Profile from "./pages/Profile";
 import Team from "./pages/Team";
+import TeamManagement from "./pages/TeamManagement";
 import AcceptInvitation from "./pages/AcceptInvitation";
+import SubscriptionPlans from "./pages/SubscriptionPlans";
+import PublicCheckout from "./pages/PublicCheckout";
+import FinalizeSignup from "./pages/FinalizeSignup";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +46,9 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Auth />} />
+            {/* Checkout público e finalização de cadastro */}
+            <Route path="/checkout" element={<PublicCheckout />} />
+            <Route path="/finalizar-cadastro" element={<FinalizeSignup />} />
             <Route path="/setup-admin" element={<SetupAdmin />} />
             <Route path="/auth/forgot-password" element={<ForgotPassword />} />
             <Route path="/auth/update-password" element={<UpdatePassword />} />
@@ -58,8 +65,13 @@ const App = () => (
                 {/* Redireciona /metrics para /meta-ads-config (páginas unificadas) */}
                 <Route path="/metrics" element={<Navigate to="/meta-ads-config" replace />} />
                 <Route path="/meta-ads-config" element={<MetaAdsConfig />} />
-                <Route path="/usuarios" element={<Users />} />
-                <Route path="/team" element={<Team />} />
+                {/* Nova página unificada de gestão de equipe */}
+                <Route path="/equipe" element={<TeamManagement />} />
+                {/* Redirects de rotas antigas para nova rota unificada */}
+                <Route path="/usuarios" element={<Navigate to="/equipe" replace />} />
+                <Route path="/team" element={<Navigate to="/equipe" replace />} />
+                {/* Planos e Assinatura */}
+                <Route path="/planos" element={<SubscriptionPlans />} />
                 <Route path="/meu-perfil" element={<Profile />} />
               </Route>
             </Route>

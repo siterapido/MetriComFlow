@@ -1,97 +1,97 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, PieChart } from "lucide-react";
-import { BarChart, Bar, PieChart as RePieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-// Removed MetricCard import; keeping CampaignTable
-import { CampaignTable } from "@/components/metrics/CampaignTable";
-// Meta Ads filters and visualizations
-import { MetaAdsFilters, type FilterValues } from "@/components/meta-ads/MetaAdsFilters";
-import { MetaAdsChart } from "@/components/meta-ads/MetaAdsChart";
-import { MetaAdsKPICards } from "@/components/meta-ads/MetaAdsKPICards";
-import { useFilteredInsights, useMetricsSummary, useCampaignFinancialsFiltered, useAdCampaigns, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
-import { formatCurrency } from "@/lib/formatters";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { EngagementFunnel } from "@/components/metrics/meta/EngagementFunnel";
+import { CreativeInvestmentChart } from "@/components/metrics/meta/CreativeInvestmentChart";
+import { CampaignOverviewTable } from "@/components/metrics/meta/CampaignOverviewTable";
+import { InvestmentByDayPie } from "@/components/metrics/meta/InvestmentByDayPie";
+import { MetricsCardGroup } from "@/components/metrics/meta/MetricsCardGroup";
+import { InvestmentTrendChart } from "@/components/metrics/meta/InvestmentTrendChart";
+import {
+  useMetaCampaignOverview,
+  useMetaCreativeRanking,
+  useMetaInvestmentSlices,
+  useMetaInvestmentTimeline,
+  useMetaSummary,
+} from "@/hooks/useMetaMetricsV2";
 import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
+import type { MetaCampaignOverviewRow } from "@/lib/metaMetrics";
+import { formatDateTime } from "@/lib/formatters";
+
+type CampaignFilter = "all" | string;
+
+const periodOptions = [
+  { value: "7", label: "Últimos 7 dias" },
+  { value: "30", label: "Últimos 30 dias" },
+  { value: "90", label: "Últimos 90 dias" },
+];
 
 export default function MetricsPage() {
-  // Replace simple date range with richer filters (account, campaign, period)
-  const [filters, setFilters] = useState<FilterValues>({
-    period: '90',
-    dateRange: getLastNDaysDateRange(90),
-  });
+  const [period, setPeriod] = useState("90");
+  const [campaignId, setCampaignId] = useState<CampaignFilter>("all");
 
-  const {
-    hasActiveConnection: hasMetaConnection,
-    isLoading: metaStatusLoading,
-    isFetching: metaStatusFetching,
-  } = useMetaConnectionStatus();
-  const metaStatusPending = metaStatusLoading || metaStatusFetching;
-  const metaQueriesEnabled = hasMetaConnection;
+  const { hasActiveConnection, isLoading: statusLoading, isFetching: statusFetching } =
+    useMetaConnectionStatus();
+  const statusPending = statusLoading || statusFetching;
 
-  // Fetch filtered Meta Ads data
-  const { data: metaInsights, isLoading: insightsLoading } = useFilteredInsights(filters, { enabled: metaQueriesEnabled });
-  const { data: metaSummary, isLoading: summaryLoading } = useMetricsSummary(filters, { enabled: metaQueriesEnabled });
-  const { data: campaignFinancials, isLoading: financialsLoading } = useCampaignFinancialsFiltered({
-    accountId: filters.accountId,
-    campaignId: filters.campaignId,
-    dateRange: filters.dateRange,
-  }, { enabled: metaQueriesEnabled });
-  const { data: accountCampaigns } = useAdCampaigns(filters.accountId, { enabled: metaQueriesEnabled });
+  const queryFilters = useMemo(
+    () => ({
+      period,
+      campaignId: campaignId === "all" ? undefined : campaignId,
+    }),
+    [period, campaignId],
+  );
 
-  const isLoading = summaryLoading || financialsLoading || insightsLoading;
+  const summaryQuery = useMetaSummary(queryFilters, { enabled: hasActiveConnection });
+  const creativesQuery = useMetaCreativeRanking(queryFilters, { enabled: hasActiveConnection });
+  const campaignsQuery = useMetaCampaignOverview(queryFilters, { enabled: hasActiveConnection });
+  const investmentSlicesQuery = useMetaInvestmentSlices(queryFilters, { enabled: hasActiveConnection });
+  const investmentTimelineQuery = useMetaInvestmentTimeline(queryFilters, { enabled: hasActiveConnection });
 
-  // Filter campaign financials by selected account and/or campaign
-  const filteredCampaignFinancials = useMemo(() => {
-      return campaignFinancials || [];
-    }, [campaignFinancials]);
+  const isLoading =
+    summaryQuery.isLoading ||
+    creativesQuery.isLoading ||
+    campaignsQuery.isLoading ||
+    investmentSlicesQuery.isLoading ||
+    investmentTimelineQuery.isLoading;
 
-  // Prepare chart data for performance/distribution sections from filtered financials
-  const campaignInvestmentData = useMemo(() => {
-    if (!filteredCampaignFinancials) return [];
-    return filteredCampaignFinancials
-      .filter(c => c.investimento > 0)
-      .slice(0, 10)
-      .map(c => ({
-        name: c.campaign_name.length > 25 ? c.campaign_name.substring(0, 25) + '...' : c.campaign_name,
-        Investimento: c.investimento,
-        Faturamento: c.faturamento,
-      }));
-  }, [filteredCampaignFinancials]);
+  const campaigns = campaignsQuery.data ?? [];
+  const availableCampaigns = campaigns.map((campaign) => ({ id: campaign.id, name: campaign.name }));
 
-  const campaignDistributionData = useMemo(() => {
-    if (!filteredCampaignFinancials) return [];
-    const total = filteredCampaignFinancials.reduce((sum, c) => sum + c.investimento, 0);
-    return filteredCampaignFinancials
-      .filter(c => c.investimento > 0)
-      .slice(0, 5)
-      .map(c => ({
-        name: c.campaign_name,
-        value: c.investimento,
-        percentage: total > 0 ? ((c.investimento / total) * 100).toFixed(1) : '0.0',
-      }));
-  }, [filteredCampaignFinancials]);
+  const filteredCampaigns = useMemo<MetaCampaignOverviewRow[]>(() => {
+    if (campaignId === "all") return campaigns;
+    return campaigns.filter((campaign) => campaign.id === campaignId);
+  }, [campaigns, campaignId]);
 
-  const COLORS = ['#2DA7FF', '#0D9DFF', '#0B7FCC', '#096199', '#074366'];
-
-  if (metaStatusPending) {
+  if (statusPending) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="flex h-96 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
-  if (!hasMetaConnection) {
+  if (!hasActiveConnection) {
     return (
       <div className="space-y-6 animate-fade-in">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Métricas Meta Ads</h1>
-          <p className="text-muted-foreground">As métricas ficam disponíveis após conectar sua conta Meta.</p>
+          <p className="text-muted-foreground">
+            Visualize as métricas das campanhas após conectar sua conta Meta.
+          </p>
         </div>
         <Alert>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>Conecte-se ao Meta Business Manager para visualizar relatórios e KPIs das campanhas.</span>
+            <span>Conecte-se ao Meta Business Manager para acompanhar os indicadores de anúncios.</span>
             <Button variant="outline" size="sm" asChild>
               <a href="/meta-ads-config">Configurar Meta Ads</a>
             </Button>
@@ -101,142 +101,78 @@ export default function MetricsPage() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header with filters */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Métricas Meta Ads</h1>
-          <p className="text-muted-foreground">Performance e ROI das campanhas</p>
+          <h1 className="text-3xl font-bold text-foreground">Relatório de Campanhas de Anúncios - Meta</h1>
+          <p className="text-muted-foreground">Painel consolidado das métricas chave de engajamento e custo.</p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-[200px] bg-card text-foreground">
+              <SelectValue placeholder="Selecionar período" />
+            </SelectTrigger>
+            <SelectContent>
+              {periodOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={campaignId}
+            onValueChange={(value: string) => setCampaignId(value as CampaignFilter)}
+          >
+            <SelectTrigger className="w-[240px] bg-card text-foreground">
+              <SelectValue placeholder="Selecione a campanha" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as campanhas</SelectItem>
+              {availableCampaigns.map((campaign) => (
+                <SelectItem key={campaign.id} value={campaign.id}>
+                  {campaign.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      {/* Interactive Filters */}
-      <MetaAdsFilters filters={filters} onFiltersChange={setFilters} />
+      <MetricsCardGroup
+        primary={summaryQuery.data?.primary ?? []}
+        cost={summaryQuery.data?.cost ?? []}
+        isLoading={summaryQuery.isLoading}
+      />
 
-      {/* Filtered KPI Cards */}
-      <MetaAdsKPICards summary={metaSummary} isLoading={summaryLoading} />
-
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Histórico de Métricas (últimos 3+ meses) */}
-        <div className="lg:col-span-2">
-          <MetaAdsChart data={metaInsights || []} isLoading={insightsLoading} />
-        </div>
-
-        {/* Campaign Performance */}
-        {campaignInvestmentData.length > 0 && (
-          <Card className="border-border bg-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">Performance por Campanha</CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Top 10 campanhas por investimento
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={campaignInvestmentData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis type="number" stroke="#9CA3AF" />
-                  <YAxis type="category" dataKey="name" stroke="#9CA3AF" width={150} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#1F2937",
-                      border: "1px solid #374151",
-                      borderRadius: "8px",
-                      color: "#F9FAFB"
-                    }}
-                    formatter={(value: any) => [formatCurrency(value), '']}
-                  />
-                  <Legend />
-                  <Bar dataKey="Investimento" fill="#2DA7FF" radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="Faturamento" fill="#10B981" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Investment Distribution */}
-        {campaignDistributionData.length > 0 && (
-          <Card className="border-border bg-card">
-            <CardHeader>
-              <CardTitle className="text-foreground flex items-center gap-2">
-                <PieChart className="w-5 h-5" />
-                Distribuição do Investimento
-              </CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Top 5 campanhas por % do orçamento
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={350}>
-                <RePieChart>
-                  <Pie
-                    data={campaignDistributionData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percentage }) => `${percentage}%`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {campaignDistributionData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#1F2937",
-                      border: "1px solid #374151",
-                      borderRadius: "8px",
-                      color: "#F9FAFB"
-                    }}
-                    formatter={(value: any) => [formatCurrency(value), 'Investimento']}
-                  />
-                </RePieChart>
-              </ResponsiveContainer>
-              <div className="mt-4 space-y-2">
-                {campaignDistributionData.map((entry, index) => (
-                  <div key={index} className="flex items-center gap-2 text-sm">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                    />
-                    <span className="text-foreground truncate flex-1">{entry.name}</span>
-                    <span className="text-muted-foreground">{entry.percentage}%</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <EngagementFunnel stages={summaryQuery.data?.funnel ?? []} isLoading={summaryQuery.isLoading} />
+        <CreativeInvestmentChart data={creativesQuery.data ?? []} isLoading={creativesQuery.isLoading} />
       </div>
 
-      {/* Campaign Table */}
-      <Card className="border-border bg-card">
-        <CardHeader>
-          <CardTitle className="text-foreground">Detalhamento de Campanhas</CardTitle>
-          <CardDescription className="text-muted-foreground">
-            Métricas completas de todas as campanhas
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <CampaignTable
-            campaigns={filteredCampaignFinancials || []}
-            loading={financialsLoading}
-          />
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card className="border-border bg-card">
+          <CardHeader>
+            <CardTitle className="text-foreground">Visão geral por campanha</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Impressões, cliques e custos por campanha ativa
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CampaignOverviewTable data={filteredCampaigns} isLoading={campaignsQuery.isLoading} />
+          </CardContent>
+        </Card>
+        <InvestmentByDayPie data={investmentSlicesQuery.data ?? []} isLoading={investmentSlicesQuery.isLoading} />
+      </div>
+
+      <InvestmentTrendChart data={investmentTimelineQuery.data ?? []} isLoading={investmentTimelineQuery.isLoading} />
+
+      <p className="text-xs text-muted-foreground">
+        Data da última atualização:{" "}
+        {summaryQuery.data?.updatedAt ? formatDateTime(summaryQuery.data.updatedAt) : "—"}
+      </p>
     </div>
   );
 }
+

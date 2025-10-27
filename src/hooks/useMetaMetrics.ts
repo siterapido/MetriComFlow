@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/lib/database.types'
+import { useActiveOrganization } from '@/hooks/useActiveOrganization'
 
 // Type definitions
 type AdAccount = Database['public']['Tables']['ad_accounts']['Row']
@@ -41,15 +42,20 @@ export interface CampaignFinancials {
 }
 
 /**
- * Fetch all connected ad accounts
+ * Fetch all connected ad accounts (filtered by organization)
  */
 export function useAdAccounts(options?: { enabled?: boolean }) {
+  const { data: activeOrg } = useActiveOrganization()
+
   return useQuery({
-    queryKey: ['ad-accounts'],
+    queryKey: ['ad-accounts', activeOrg?.id],
     queryFn: async () => {
+      if (!activeOrg?.id) return []
+
       const { data, error } = await supabase
         .from('ad_accounts')
         .select('*')
+        .eq('organization_id', activeOrg.id)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
 
@@ -57,21 +63,29 @@ export function useAdAccounts(options?: { enabled?: boolean }) {
       return data as AdAccount[]
     },
     staleTime: 60000, // 1 minute
-    enabled: options?.enabled ?? true,
+    enabled: (options?.enabled ?? true) && !!activeOrg?.id,
   })
 }
 
 /**
- * Fetch campaigns for a specific ad account
+ * Fetch campaigns for a specific ad account (filtered by organization)
  * @param accountId - Ad account ID (optional, fetches all if not provided)
  */
 export function useAdCampaigns(accountId?: string, options?: { enabled?: boolean }) {
+  const { data: activeOrg } = useActiveOrganization()
+
   return useQuery({
-    queryKey: ['ad-campaigns', accountId],
+    queryKey: ['ad-campaigns', accountId, activeOrg?.id],
     queryFn: async () => {
+      if (!activeOrg?.id) return []
+
       let query = supabase
         .from('ad_campaigns')
-        .select('*')
+        .select(`
+          *,
+          ad_accounts!inner(organization_id)
+        `)
+        .eq('ad_accounts.organization_id', activeOrg.id)
         .order('created_at', { ascending: false })
 
       if (accountId) {
@@ -84,7 +98,7 @@ export function useAdCampaigns(accountId?: string, options?: { enabled?: boolean
       return data as AdCampaign[]
     },
     staleTime: 60000,
-    enabled: options?.enabled ?? true,
+    enabled: (options?.enabled ?? true) && !!activeOrg?.id,
   })
 }
 
@@ -281,7 +295,7 @@ export function getLastNDaysDateRange(days: number): { start: string; end: strin
 }
 
 /**
- * Fetch insights with advanced filtering (account + campaign + date range)
+ * Fetch insights with advanced filtering (account + campaign + date range + organization)
  * @param filters - Combined filters for account, campaign, and date range
  */
 export function useFilteredInsights(filters?: {
@@ -290,10 +304,13 @@ export function useFilteredInsights(filters?: {
   dateRange?: { start: string; end: string }
 }, options?: { enabled?: boolean }) {
   const { accountId, campaignId, dateRange } = filters || {}
+  const { data: activeOrg } = useActiveOrganization()
 
   return useQuery({
-    queryKey: ['filtered-insights', accountId, campaignId, dateRange],
+    queryKey: ['filtered-insights', accountId, campaignId, dateRange, activeOrg?.id],
     queryFn: async () => {
+      if (!activeOrg?.id) return []
+
       let query = supabase
         .from('campaign_daily_insights')
         .select(`
@@ -304,9 +321,10 @@ export function useFilteredInsights(filters?: {
             status,
             objective,
             ad_account_id,
-            ad_accounts!inner(id, business_name, is_active)
+            ad_accounts!inner(id, business_name, is_active, organization_id)
           )
         `)
+        .eq('ad_campaigns.ad_accounts.organization_id', activeOrg.id)
         .eq('ad_campaigns.ad_accounts.is_active', true)
         .order('date', { ascending: true })
 
@@ -361,12 +379,12 @@ export function useFilteredInsights(filters?: {
       }))
     },
     staleTime: 30000,
-    enabled: options?.enabled ?? true,
+    enabled: (options?.enabled ?? true) && !!activeOrg?.id,
   })
 }
 
 /**
- * Fetch aggregated metrics summary with period comparison
+ * Fetch aggregated metrics summary with period comparison (filtered by organization)
  */
 export function useMetricsSummary(filters?: {
   accountId?: string
@@ -375,10 +393,19 @@ export function useMetricsSummary(filters?: {
 }, options?: { enabled?: boolean }) {
   const { accountId, campaignId, dateRange } = filters || {}
   const range = dateRange || getLastNDaysDateRange(30)
+  const { data: activeOrg } = useActiveOrganization()
 
   return useQuery({
-    queryKey: ['metrics-summary', accountId, campaignId, range],
+    queryKey: ['metrics-summary', accountId, campaignId, range, activeOrg?.id],
     queryFn: async () => {
+      if (!activeOrg?.id) {
+        return {
+          current: { spend: 0, impressions: 0, clicks: 0, leads: 0, ctr: 0, cpc: 0, cpl: 0 },
+          previous: { spend: 0, leads: 0, cpl: 0 },
+          changes: { spend: 0, leads: 0, cpl: 0 },
+        }
+      }
+
       // Current period query
       let currentQuery = supabase
         .from('campaign_daily_insights')
@@ -386,11 +413,12 @@ export function useMetricsSummary(filters?: {
           *,
           ad_campaigns!inner(
             ad_account_id,
-            ad_accounts!inner(is_active)
+            ad_accounts!inner(is_active, organization_id)
           )
         `)
         .gte('date', range.start)
         .lte('date', range.end)
+        .eq('ad_campaigns.ad_accounts.organization_id', activeOrg.id)
         .eq('ad_campaigns.ad_accounts.is_active', true)
 
       if (campaignId) {
@@ -430,11 +458,12 @@ export function useMetricsSummary(filters?: {
           *,
           ad_campaigns!inner(
             ad_account_id,
-            ad_accounts!inner(is_active)
+            ad_accounts!inner(is_active, organization_id)
           )
         `)
         .gte('date', prevStartDate.toISOString().split('T')[0])
         .lte('date', prevEndDate.toISOString().split('T')[0])
+        .eq('ad_campaigns.ad_accounts.organization_id', activeOrg.id)
         .eq('ad_campaigns.ad_accounts.is_active', true)
 
       if (campaignId) {
@@ -480,11 +509,11 @@ export function useMetricsSummary(filters?: {
       }
     },
     staleTime: 30000,
-    enabled: options?.enabled ?? true,
+    enabled: (options?.enabled ?? true) && !!activeOrg?.id,
   })
 }
 
-// NEW: Fetch campaign financials aligned to filters and date range
+// NEW: Fetch campaign financials aligned to filters and date range (filtered by organization)
 export function useCampaignFinancialsFiltered(filters?: {
   accountId?: string
   campaignId?: string
@@ -492,14 +521,18 @@ export function useCampaignFinancialsFiltered(filters?: {
 }, options?: { enabled?: boolean }) {
   const { accountId, campaignId, dateRange } = filters || {}
   const range = dateRange || getLastNDaysDateRange(90)
+  const { data: activeOrg } = useActiveOrganization()
 
   return useQuery({
-    queryKey: ['campaign-financials-filtered', accountId, campaignId, range],
+    queryKey: ['campaign-financials-filtered', accountId, campaignId, range, activeOrg?.id],
     queryFn: async () => {
+      if (!activeOrg?.id) return []
+
       // 1) Fetch campaigns matching filters (ensures zero rows are represented)
       let campaignsQuery = supabase
         .from('ad_campaigns')
-        .select('id, name, status, objective, ad_account_id, ad_accounts!inner(business_name, is_active)')
+        .select('id, name, status, objective, ad_account_id, ad_accounts!inner(business_name, is_active, organization_id)')
+        .eq('ad_accounts.organization_id', activeOrg.id)
         .eq('ad_accounts.is_active', true)
         .order('created_at', { ascending: false })
 
@@ -634,6 +667,6 @@ export function useCampaignFinancialsFiltered(filters?: {
       return result.sort((a, b) => b.investimento - a.investimento)
     },
     staleTime: 30000,
-    enabled: options?.enabled ?? true,
+    enabled: (options?.enabled ?? true) && !!activeOrg?.id,
   })
 }
