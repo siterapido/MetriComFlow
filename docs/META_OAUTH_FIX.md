@@ -14,8 +14,8 @@ Este erro ocorre quando as URLs de redirecionamento não correspondem entre:
 ### 1. URLs Configuradas
 
 #### Produção
-- **URL Base**: `https://metri-com-flow-b2jhesmmi-mafcos-projects-ca629a4f.vercel.app`
-- **URL OAuth**: `https://metri-com-flow-b2jhesmmi-mafcos-projects-ca629a4f.vercel.app/meta-ads-config`
+- **URL Base**: `https://www.insightfy.com.br`
+- **URL OAuth**: `https://www.insightfy.com.br/meta-ads-config`
 
 #### Desenvolvimento
 - **URL Base**: `http://localhost:8082`
@@ -33,7 +33,7 @@ Este erro ocorre quando as URLs de redirecionamento não correspondem entre:
 
 3. Adicione as seguintes URLs (uma por linha):
    ```
-   https://metri-com-flow-b2jhesmmi-mafcos-projects-ca629a4f.vercel.app/meta-ads-config
+   https://www.insightfy.com.br/meta-ads-config
    http://localhost:8082/meta-ads-config
    ```
 
@@ -46,8 +46,8 @@ Este erro ocorre quando as URLs de redirecionamento não correspondem entre:
 Já foram atualizadas automaticamente pelo script:
 
 ```bash
-VITE_APP_URL=https://metri-com-flow-b2jhesmmi-mafcos-projects-ca629a4f.vercel.app
-VITE_META_REDIRECT_URI=https://metri-com-flow-b2jhesmmi-mafcos-projects-ca629a4f.vercel.app/meta-ads-config
+VITE_APP_URL=https://www.insightfy.com.br
+VITE_META_REDIRECT_URI=https://www.insightfy.com.br/meta-ads-config
 VITE_META_APP_ID=336112808735379
 VITE_META_APP_SECRET=7e6216e859be7639fa4de061536ce944
 ```

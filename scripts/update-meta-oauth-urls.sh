@@ -8,8 +8,8 @@ set -e
 echo "🔧 Atualizando URLs OAuth do Meta no Vercel..."
 echo ""
 
-# URL de produção atual (mais recente)
-PRODUCTION_URL="https://metri-com-flow-b2jhesmmi-mafcos-projects-ca629a4f.vercel.app"
+# URL de produção atual (domínio customizado)
+PRODUCTION_URL="https://www.insightfy.com.br"
 
 # URLs que devem estar configuradas no Meta OAuth
 echo "📋 URLs que devem ser configuradas no Meta Developer Console:"
