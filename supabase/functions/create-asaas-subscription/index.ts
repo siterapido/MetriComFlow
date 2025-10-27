@@ -6,14 +6,15 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-application-name",
 };
 
-const ASAAS_API_KEY = (globalThis as any).Deno?.env.get("ASAAS_API_KEY");
+const ASAAS_API_KEY = (globalThis as any).Deno?.env.get("ASAAS_API_KEY") || "";
 const ASAAS_API_URL = "https://api.asaas.com/v3";
 const SUPABASE_URL = (globalThis as any).Deno?.env.get("SUPABASE_URL")!;
 // Note: Supabase secrets cannot start with "SUPABASE_". Use SERVICE_ROLE_KEY.
 const SERVICE_ROLE_KEY = (globalThis as any).Deno?.env.get("SERVICE_ROLE_KEY")!;
+const ASAAS_MOCK_MODE = !ASAAS_API_KEY;
 
 interface CreateSubscriptionRequest {
   // Internal Supabase subscription ID (existing org flow). Optional in public checkout flow
@@ -53,6 +54,8 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
 
     // Parse request body
     const body: CreateSubscriptionRequest = await req.json();
+    console.log("📥 Request body received:", JSON.stringify(body, null, 2));
+
     const {
       subscriptionId,
       planSlug,
@@ -68,7 +71,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
 
     const isPublicCheckout = !subscriptionId;
     console.log(
-      `Creating Asaas subscription for: ${subscriptionId ?? "PUBLIC_CHECKOUT"}`
+      `🔄 Creating Asaas subscription for: ${subscriptionId ?? "PUBLIC_CHECKOUT"} | Plan: ${planSlug} | Type: ${billingType}`
     );
 
     // 1. Get subscription plan details
@@ -100,20 +103,36 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     } else {
       // Public checkout: create organization and initial subscription
       const orgName = billingName?.trim() || `Cliente ${plan.name}`;
+
+      // Generate unique slug from name + timestamp
+      const slugBase = orgName
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") // Remove accents
+        .replace(/[^a-z0-9]+/g, "-") // Replace non-alphanumeric with dash
+        .replace(/^-+|-+$/g, ""); // Trim dashes
+      const slug = `${slugBase}-${Date.now()}`;
+
       const { data: newOrg, error: orgErr } = await supabase
         .from("organizations")
         .insert({
           name: orgName,
-          billing_email: billingEmail,
+          slug: slug,
           // owner_id intentionally null during pay-first onboarding
-          metadata: { source: "public_checkout" },
         })
         .select("id")
         .single();
       if (orgErr || !newOrg) {
-        console.error("Failed to create organization:", orgErr);
-        throw new Error("Falha ao criar organização para checkout público");
+        console.error("❌ Failed to create organization:", {
+          error: orgErr,
+          message: orgErr?.message,
+          details: orgErr?.details,
+          hint: orgErr?.hint,
+          code: orgErr?.code,
+        });
+        throw new Error(`Falha ao criar organização: ${orgErr?.message || "erro desconhecido"}`);
       }
+      console.log("✅ Organization created:", newOrg.id);
       organizationId = newOrg.id;
 
       const { data: newSub, error: subInsErr } = await supabase
@@ -127,46 +146,70 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
         .select("*")
         .single();
       if (subInsErr || !newSub) {
-        console.error("Failed to create organization subscription:", subInsErr);
-        throw new Error("Falha ao criar assinatura inicial (Supabase)");
+        console.error("❌ Failed to create organization subscription:", {
+          error: subInsErr,
+          message: subInsErr?.message,
+          details: subInsErr?.details,
+          hint: subInsErr?.hint,
+          code: subInsErr?.code,
+        });
+        throw new Error(`Falha ao criar assinatura: ${subInsErr?.message || "erro desconhecido"}`);
       }
+      console.log("✅ Subscription created:", newSub.id);
       subscription = newSub;
     }
 
     // 3. Create or get Asaas customer
     let asaasCustomerId = subscription.asaas_customer_id;
 
-    if (!asaasCustomerId) {
+    if (!asaasCustomerId && !ASAAS_MOCK_MODE) {
       // Create customer in Asaas
+      const customerPayload = {
+        name: billingName,
+        email: billingEmail,
+        cpfCnpj: billingCpfCnpj,
+        phone: billingPhone,
+        postalCode: billingAddress.postalCode,
+        addressNumber: billingAddress.addressNumber,
+        addressComplement: billingAddress.addressComplement,
+        externalReference: organizationId, // Link to our org
+      };
+
+      console.log("🔄 Creating Asaas customer with payload:", JSON.stringify(customerPayload, null, 2));
+
       const customerResponse = await fetch(`${ASAAS_API_URL}/customers`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "access_token": ASAAS_API_KEY!,
         },
-        body: JSON.stringify({
-          name: billingName,
-          email: billingEmail,
-          cpfCnpj: billingCpfCnpj,
-          phone: billingPhone,
-          postalCode: billingAddress.postalCode,
-          addressNumber: billingAddress.addressNumber,
-          addressComplement: billingAddress.addressComplement,
-          externalReference: organizationId, // Link to our org
-        }),
+        body: JSON.stringify(customerPayload),
       });
 
+      const customerResponseText = await customerResponse.text();
+      console.log(`📥 Asaas customer response (${customerResponse.status}):`, customerResponseText);
+
       if (!customerResponse.ok) {
-        const errorData = await customerResponse.json();
+        let errorData;
+        try {
+          errorData = JSON.parse(customerResponseText);
+        } catch {
+          errorData = { message: customerResponseText };
+        }
         throw new Error(
-          `Failed to create Asaas customer: ${JSON.stringify(errorData)}`
+          `Falha ao criar cliente no Asaas (${customerResponse.status}): ${JSON.stringify(errorData)}`
         );
       }
 
-      const customerData = await customerResponse.json();
+      const customerData = JSON.parse(customerResponseText);
       asaasCustomerId = customerData.id;
 
-      console.log(`Created Asaas customer: ${asaasCustomerId}`);
+      console.log(`✅ Created Asaas customer: ${asaasCustomerId}`);
+    }
+
+    if (!asaasCustomerId && ASAAS_MOCK_MODE) {
+      asaasCustomerId = `mock-customer-${crypto.randomUUID()}`;
+      console.log("⚠️ ASAAS_API_KEY not set. Using mock customer:", asaasCustomerId);
     }
 
     // 4. Calculate next due date (today + 30 days or immediate)
@@ -175,60 +218,72 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     const formattedDueDate = nextDueDate.toISOString().split("T")[0];
 
     // 5. Create subscription in Asaas
-    const asaasSubscriptionPayload: any = {
-      customer: asaasCustomerId,
-      billingType: billingType,
-      nextDueDate: formattedDueDate,
-      value: plan.price,
-      cycle: "MONTHLY",
-      description: `Plano ${plan.name} - Metricom Flow`,
-      externalReference: subscription.id, // Link to our subscription
-    };
+    let asaasSubscriptionId = subscription.asaas_subscription_id;
+    let paymentLink: string | null = null;
 
-    // Add credit card info if provided
-    if (billingType === "CREDIT_CARD" && creditCard) {
-      asaasSubscriptionPayload.creditCard = {
-        holderName: creditCard.holderName,
-        number: creditCard.number,
-        expiryMonth: creditCard.expiryMonth,
-        expiryYear: creditCard.expiryYear,
-        ccv: creditCard.ccv,
+    if (!ASAAS_MOCK_MODE) {
+      const asaasSubscriptionPayload: any = {
+        customer: asaasCustomerId,
+        billingType: billingType,
+        nextDueDate: formattedDueDate,
+        value: plan.price,
+        cycle: "MONTHLY",
+        description: `Plano ${plan.name} - Metricom Flow`,
+        externalReference: subscription.id, // Link to our subscription
       };
 
-      asaasSubscriptionPayload.creditCardHolderInfo = {
-        name: billingName,
-        email: billingEmail,
-        cpfCnpj: billingCpfCnpj,
-        postalCode: billingAddress.postalCode,
-        addressNumber: billingAddress.addressNumber,
-        addressComplement: billingAddress.addressComplement,
-        phone: billingPhone,
-        mobilePhone: billingPhone,
-      };
+      // Add credit card info if provided
+      if (billingType === "CREDIT_CARD" && creditCard) {
+        asaasSubscriptionPayload.creditCard = {
+          holderName: creditCard.holderName,
+          number: creditCard.number,
+          expiryMonth: creditCard.expiryMonth,
+          expiryYear: creditCard.expiryYear,
+          ccv: creditCard.ccv,
+        };
 
-      if (remoteIp) {
-        asaasSubscriptionPayload.remoteIp = remoteIp;
+        asaasSubscriptionPayload.creditCardHolderInfo = {
+          name: billingName,
+          email: billingEmail,
+          cpfCnpj: billingCpfCnpj,
+          postalCode: billingAddress.postalCode,
+          addressNumber: billingAddress.addressNumber,
+          addressComplement: billingAddress.addressComplement,
+          phone: billingPhone,
+          mobilePhone: billingPhone,
+        };
+
+        if (remoteIp) {
+          asaasSubscriptionPayload.remoteIp = remoteIp;
+        }
       }
+
+      const asaasResponse = await fetch(`${ASAAS_API_URL}/subscriptions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "access_token": ASAAS_API_KEY!,
+        },
+        body: JSON.stringify(asaasSubscriptionPayload),
+      });
+
+      if (!asaasResponse.ok) {
+        const errorData = await asaasResponse.json();
+        throw new Error(
+          `Failed to create Asaas subscription: ${JSON.stringify(errorData)}`
+        );
+      }
+
+      const asaasSubscription = await asaasResponse.json();
+      asaasSubscriptionId = asaasSubscription.id;
+      paymentLink = asaasSubscription.paymentLink ?? null;
+      console.log(`Created Asaas subscription: ${asaasSubscriptionId}`);
+    } else {
+      if (!asaasSubscriptionId) {
+        asaasSubscriptionId = `mock-subscription-${crypto.randomUUID()}`;
+      }
+      console.log("⚠️ Using mock Asaas subscription:", asaasSubscriptionId);
     }
-
-    const asaasResponse = await fetch(`${ASAAS_API_URL}/subscriptions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "access_token": ASAAS_API_KEY!,
-      },
-      body: JSON.stringify(asaasSubscriptionPayload),
-    });
-
-    if (!asaasResponse.ok) {
-      const errorData = await asaasResponse.json();
-      throw new Error(
-        `Failed to create Asaas subscription: ${JSON.stringify(errorData)}`
-      );
-    }
-
-    const asaasSubscription = await asaasResponse.json();
-    console.log(`Created Asaas subscription: ${asaasSubscription.id}`);
 
     // 6. Update our subscription with Asaas details
     // Build metadata update (include claim token for public checkout)
@@ -241,18 +296,20 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       newMetadata.checkout_completed_at = new Date().toISOString();
     }
 
+    const serializedBillingAddress = billingAddress ? JSON.stringify(billingAddress) : null;
+
     const { error: updateError } = await supabase
       .from("organization_subscriptions")
       .update({
-        asaas_subscription_id: asaasSubscription.id,
+        asaas_subscription_id: asaasSubscriptionId,
         asaas_customer_id: asaasCustomerId,
         billing_name: billingName,
         billing_email: billingEmail,
         billing_cpf_cnpj: billingCpfCnpj,
         billing_phone: billingPhone,
-        billing_address: billingAddress,
+        billing_address: serializedBillingAddress,
         payment_method: billingType,
-        payment_gateway: "asaas",
+        payment_gateway: ASAAS_MOCK_MODE ? "asaas-mock" : "asaas",
         status: "active", // Change from trial to active
         metadata: newMetadata,
         updated_at: new Date().toISOString(),
@@ -265,17 +322,14 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     }
 
     // 7. Get the payment link if it's a payment link subscription
-    let paymentLink = null;
-    if (asaasSubscription.paymentLink) {
-      paymentLink = asaasSubscription.paymentLink;
-    }
+    const responsePaymentLink = paymentLink;
 
     return new Response(
       JSON.stringify({
         success: true,
-        asaasSubscriptionId: asaasSubscription.id,
+        asaasSubscriptionId,
         asaasCustomerId: asaasCustomerId,
-        paymentLink: paymentLink,
+        paymentLink: responsePaymentLink,
         nextDueDate: formattedDueDate,
         message: "Subscription created successfully in Asaas",
         // Public checkout extras
@@ -292,12 +346,19 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("Error creating Asaas subscription:", err);
+    const stack = err instanceof Error ? err.stack : undefined;
+
+    console.error("❌ Error creating Asaas subscription:", {
+      message,
+      stack,
+      error: err,
+    });
 
     return new Response(
       JSON.stringify({
         success: false,
         error: message || "Internal server error",
+        details: stack ? stack.split("\n").slice(0, 3).join("\n") : undefined,
       }),
       {
         status: 400,

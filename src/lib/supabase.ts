@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type Session, type AuthChangeEvent } from '@supabase/supabase-js'
 import type { Database } from './database.types'
 
 // Get environment variables
@@ -33,7 +33,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
 // Auth helper functions
 export const authHelpers = {
   // Sign up with email and password
-  signUp: async (email: string, password: string, metadata?: Record<string, any>) => {
+  signUp: async (email: string, password: string, metadata?: Record<string, unknown>) => {
     return await supabase.auth.signUp({
       email,
       password,
@@ -91,7 +91,7 @@ export const authHelpers = {
   },
 
   // Listen to auth state changes
-  onAuthStateChange: (callback: (event: string, session: any) => void) => {
+  onAuthStateChange: (callback: (event: AuthChangeEvent, session: Session | null) => void) => {
     return supabase.auth.onAuthStateChange(callback)
   },
 }

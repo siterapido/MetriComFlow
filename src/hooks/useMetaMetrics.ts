@@ -552,7 +552,7 @@ export function useCampaignFinancialsFiltered(filters?: {
       }
 
       // 2) Fetch daily insights within date range for these campaigns
-      let insightsQuery = supabase
+      const insightsQuery = supabase
         .from('campaign_daily_insights')
         .select('campaign_id, date, spend, impressions, clicks, leads_count')
         .gte('date', range.start)
@@ -564,7 +564,7 @@ export function useCampaignFinancialsFiltered(filters?: {
 
       // 3) Fetch leads segmented for metrics within date range
       // 3a) Closed won (faturamento, vendas_fechadas)
-      let wonQuery = supabase
+      const wonQuery = supabase
         .from('leads')
         .select('campaign_id, value')
         .eq('status', 'fechado_ganho')
@@ -576,7 +576,7 @@ export function useCampaignFinancialsFiltered(filters?: {
       if (wonError) throw wonError
 
       // 3b) Closed lost (vendas_perdidas)
-      let lostQuery = supabase
+      const lostQuery = supabase
         .from('leads')
         .select('campaign_id')
         .eq('status', 'fechado_perdido')
@@ -588,7 +588,7 @@ export function useCampaignFinancialsFiltered(filters?: {
       if (lostError) throw lostError
 
       // 3c) In negotiation/proposal (em_negociacao, pipeline_value)
-      let pipelineQuery = supabase
+      const pipelineQuery = supabase
         .from('leads')
         .select('campaign_id, value')
         .in('status', ['negociacao', 'proposta'])

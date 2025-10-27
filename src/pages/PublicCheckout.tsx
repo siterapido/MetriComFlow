@@ -33,11 +33,13 @@ export default function PublicCheckout() {
           return;
         }
         // Try by slug first
-        let { data, error } = await supabase
+        const { data, error } = await supabase
           .from("subscription_plans")
           .select("id, name, slug, price, billing_period")
           .eq("slug", planParam)
           .single();
+
+        let planData: Plan | null = data as Plan | null;
 
         if (error) {
           // Fallback: try by id
@@ -46,14 +48,14 @@ export default function PublicCheckout() {
             .select("id, name, slug, price, billing_period")
             .eq("id", planParam)
             .single();
-          data = res.data as any;
+          planData = res.data as Plan | null;
         }
 
-        if (!data) {
+        if (!planData) {
           toast.error("Plano não encontrado. Volte e selecione um plano.");
           return;
         }
-        setPlan(data as Plan);
+        setPlan(planData);
       } catch (err) {
         console.error(err);
         toast.error("Erro ao carregar plano.");
@@ -109,12 +111,21 @@ export default function PublicCheckout() {
         },
       });
 
+      console.log("📦 API Response:", { data, error });
+
       if (error) {
-        throw error;
+        console.error("Edge Function error:", error);
+        const errorMsg = error.message || "Erro ao comunicar com servidor";
+        toast.error(errorMsg);
+        throw new Error(errorMsg);
       }
 
       if (!data?.success) {
-        throw new Error(data?.error || "Falha ao criar assinatura.");
+        console.error("API returned error:", data);
+        const errorMsg = data?.error || "Falha ao criar assinatura.";
+        const detailsMsg = data?.details ? `\n\nDetalhes técnicos: ${data.details}` : "";
+        toast.error(errorMsg + detailsMsg, { duration: 10000 });
+        throw new Error(errorMsg);
       }
 
       toast.success("Assinatura criada com sucesso! Redirecionando...");

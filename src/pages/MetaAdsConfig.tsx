@@ -24,6 +24,7 @@ import { useMetaAuth } from "@/hooks/useMetaAuth";
 import { useToast } from "@/hooks/use-toast";
 import AdAccountsManager from "@/components/meta-ads/AdAccountsManager";
 import AddAdAccountModal from "@/components/meta-ads/AddAdAccountModal";
+import { AvailableAccountsDialog } from "@/components/meta-ads/AvailableAccountsDialog";
 import { CampaignTable } from "@/components/metrics/CampaignTable";
 import { type FilterValues } from "@/components/meta-ads/MetaAdsFilters";
 import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
@@ -40,14 +41,17 @@ export default function MetaAdsConfig() {
     connections,
     activeAdAccounts,
     inactiveAdAccounts,
+    availableAccounts,
     loading: authLoading,
     connecting,
+    loadingAvailableAccounts,
     connectMetaBusiness,
     disconnectMetaBusiness,
     addAdAccount,
     deactivateAdAccount,
     activateAdAccount,
     renameAdAccount,
+    listAvailableAccounts,
     refreshData,
     hasActiveConnection,
     totalAdAccounts,
@@ -70,6 +74,7 @@ export default function MetaAdsConfig() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
+  const [showAvailableAccountsDialog, setShowAvailableAccountsDialog] = useState(false);
 
   // Metrics filters
   const [filters, setFilters] = useState<FilterValues>(() => ({
@@ -227,6 +232,27 @@ export default function MetaAdsConfig() {
         variant: "destructive",
       });
     }
+  };
+
+  const handleDiscoverAccounts = async () => {
+    try {
+      await listAvailableAccounts();
+      setShowAvailableAccountsDialog(true);
+    } catch (error) {
+      console.error('Error discovering accounts:', error);
+      toast({
+        title: "Erro ao Buscar Contas",
+        description: "Não foi possível buscar as contas disponíveis no Meta Ads.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleConnectAvailableAccount = async (accountData: {
+    external_id: string;
+    business_name: string;
+  }) => {
+    await handleAddAccount(accountData);
   };
 
   // Prepare chart data
@@ -463,14 +489,35 @@ export default function MetaAdsConfig() {
                         <CardTitle className="text-foreground">Contas Publicitárias</CardTitle>
                         <CardDescription>Gerencie suas contas do Meta Ads</CardDescription>
                       </div>
-                      <Button
-                        size="sm"
-                        onClick={() => setShowAddAccountModal(true)}
-                        className="gap-2"
-                      >
-                        <Target className="w-4 h-4" />
-                        Adicionar Conta
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleDiscoverAccounts}
+                          disabled={loadingAvailableAccounts}
+                          className="gap-2"
+                        >
+                          {loadingAvailableAccounts ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Buscando...
+                            </>
+                          ) : (
+                            <>
+                              <BarChart3 className="w-4 h-4" />
+                              Descobrir Contas
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => setShowAddAccountModal(true)}
+                          className="gap-2"
+                        >
+                          <Target className="w-4 h-4" />
+                          Adicionar Manualmente
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -693,6 +740,16 @@ export default function MetaAdsConfig() {
         onAdd={handleAddAccount}
         inactiveAccounts={inactiveAdAccounts}
         onReactivate={handleReactivateAccount}
+      />
+
+      {/* Available Accounts Dialog */}
+      <AvailableAccountsDialog
+        open={showAvailableAccountsDialog}
+        onOpenChange={setShowAvailableAccountsDialog}
+        onConnect={handleConnectAvailableAccount}
+        onRefresh={listAvailableAccounts}
+        accounts={availableAccounts}
+        isLoading={loadingAvailableAccounts}
       />
     </div>
   );

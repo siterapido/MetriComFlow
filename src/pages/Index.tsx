@@ -19,7 +19,11 @@ function useTracker() {
   return (event: DataLayerEvent) => {
     try {
       (window as any).dataLayer.push(event);
-    } catch (_) {}
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("dataLayer push failed", error);
+      }
+    }
   };
 }
 

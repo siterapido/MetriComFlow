@@ -20,7 +20,7 @@ const corsHeaders = {
 };
 
 interface MetaAuthRequest {
-  action: 'get_auth_url' | 'exchange_code';
+  action: 'get_auth_url' | 'exchange_code' | 'list_available_accounts';
   code?: string;
   redirect_uri?: string;
 }
@@ -239,34 +239,107 @@ Deno.serve(async (req) => {
 
       // Get ad accounts accessible to this user
       // List ad accounts (Graph API v24.0)
-      const adAccountsUrl = `https://graph.facebook.com/v24.0/me/adaccounts?access_token=${tokenData.access_token}&fields=id,name,account_status,currency,timezone_name`;
+      const adAccountsUrl = `https://graph.facebook.com/v24.0/me/adaccounts?access_token=${tokenData.access_token}&fields=id,name,account_status,currency,timezone_name,business`;
       const adAccountsResponse = await fetch(adAccountsUrl);
-      
+
+      let availableAccounts = [];
       if (adAccountsResponse.ok) {
         const adAccountsData = await adAccountsResponse.json();
-        
-        // Store ad accounts aligned with current schema (external_id + connected_by)
-        if (adAccountsData.data && adAccountsData.data.length > 0) {
-          const adAccountsToUpsert = adAccountsData.data.map((account: any) => ({
-            external_id: account.id,
-            business_name: account.name,
-            // Align with schema: provider should be 'meta'
-            provider: 'meta',
-            connected_by: user.id,
-            updated_at: new Date().toISOString(),
-          }));
 
-          await supabase
-            .from('ad_accounts')
-            .upsert(adAccountsToUpsert, { onConflict: 'external_id' });
+        if (adAccountsData.data && adAccountsData.data.length > 0) {
+          // Format accounts for frontend display
+          availableAccounts = adAccountsData.data.map((account: any) => ({
+            external_id: account.id.replace('act_', ''), // Remove act_ prefix for storage
+            business_name: account.name,
+            account_status: account.account_status,
+            currency: account.currency,
+            timezone: account.timezone_name,
+            business: account.business,
+          }));
         }
       }
 
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           user: userData,
+          available_accounts: availableAccounts,
           message: 'Successfully connected to Meta Business Manager'
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    }
+
+    if (action === 'list_available_accounts') {
+      // Get active Meta connection for user
+      const { data: connection, error: connError } = await supabase
+        .from('meta_business_connections')
+        .select('access_token')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .single();
+
+      if (connError || !connection) {
+        throw new Error('No active Meta Business connection found');
+      }
+
+      // Fetch available ad accounts from Meta API
+      const adAccountsUrl = `https://graph.facebook.com/v24.0/me/adaccounts?access_token=${connection.access_token}&fields=id,name,account_status,currency,timezone_name,business`;
+      const adAccountsResponse = await fetch(adAccountsUrl);
+
+      if (!adAccountsResponse.ok) {
+        const errorData = await adAccountsResponse.text();
+        console.error('Failed to fetch ad accounts:', errorData);
+        throw new Error('Failed to fetch ad accounts from Meta');
+      }
+
+      const adAccountsData = await adAccountsResponse.json();
+
+      // Format accounts for display
+      const availableAccounts = (adAccountsData.data || []).map((account: any) => ({
+        external_id: account.id.replace('act_', ''), // Remove act_ prefix
+        business_name: account.name,
+        account_status: account.account_status,
+        currency: account.currency,
+        timezone: account.timezone_name,
+        business: account.business,
+      }));
+
+      // Check which accounts are already connected (in user's organization)
+      // Get user's organization
+      const { data: orgMembership } = await supabase
+        .from('organization_memberships')
+        .select('organization_id')
+        .eq('profile_id', user.id)
+        .eq('is_active', true)
+        .single();
+
+      let connectedAccountIds: string[] = [];
+      if (orgMembership) {
+        const { data: connectedAccounts } = await supabase
+          .from('ad_accounts')
+          .select('external_id')
+          .eq('organization_id', orgMembership.organization_id)
+          .eq('provider', 'meta');
+
+        connectedAccountIds = (connectedAccounts || []).map(acc => acc.external_id);
+      }
+
+      // Mark which accounts are already connected
+      const accountsWithStatus = availableAccounts.map((acc: any) => ({
+        ...acc,
+        is_connected: connectedAccountIds.includes(acc.external_id),
+      }));
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          available_accounts: accountsWithStatus,
+          total_count: accountsWithStatus.length,
+          connected_count: connectedAccountIds.length,
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/formatters";
-import { TrendingDown, Users, MousePointerClick, Mail, UserCheck, FileText, Handshake, Trophy, X } from "lucide-react";
+import { TrendingDown, Users, MousePointerClick, Mail, UserCheck, FileText, Handshake, Trophy, X, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 
 export type FunnelData = {
@@ -28,12 +28,15 @@ type FunnelStage = {
   value: number;
   percentage: number;
   color: string;
-  icon: any;
+  icon: LucideIcon;
   description: string;
   displayValue?: string;
 }
 
 export function ConversionFunnel({ data }: { data: FunnelData | null }) {
+  // Hooks must be called unconditionally at the top level of the component
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
   if (!data) {
     return (
       <Card className="border-border bg-card">
@@ -133,7 +136,6 @@ export function ConversionFunnel({ data }: { data: FunnelData | null }) {
 
   // Overall conversion rate
   const overallConversion = topValue > 0 ? (data.fechado_ganho / topValue) * 100 : 0;
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   return (
     <Card className="border-border bg-card">

@@ -50,6 +50,44 @@ export interface OrganizationSubscription {
   plan?: SubscriptionPlan;
 }
 
+const TEST_PLAN_SLUGS = new Set(["teste", "trial"]);
+
+const PRO_PLAN_CAPABILITY_FALLBACK: Pick<SubscriptionPlan, "max_ad_accounts" | "max_users" | "has_crm_access" | "features"> = {
+  max_ad_accounts: 20,
+  max_users: 10,
+  has_crm_access: true,
+  features: [
+    "Dashboard Geral",
+    "Métricas Meta Ads",
+    "CRM Completo",
+    "Gestão de Leads",
+    "Formulários",
+    "Metas Avançadas",
+    "20 Contas de Anúncio",
+    "Equipe de 10 Usuários",
+    "Suporte Prioritário",
+  ],
+};
+
+const normalizePlanCapabilities = (plan: SubscriptionPlan, proTemplate?: SubscriptionPlan | null): SubscriptionPlan => {
+  if (!TEST_PLAN_SLUGS.has(plan.slug)) {
+    return plan;
+  }
+
+  const source = proTemplate ?? PRO_PLAN_CAPABILITY_FALLBACK;
+  const normalizedFeatures = Array.isArray(source.features) && source.features.length > 0
+    ? [...source.features]
+    : [...PRO_PLAN_CAPABILITY_FALLBACK.features];
+
+  return {
+    ...plan,
+    max_ad_accounts: source.max_ad_accounts ?? PRO_PLAN_CAPABILITY_FALLBACK.max_ad_accounts,
+    max_users: source.max_users ?? PRO_PLAN_CAPABILITY_FALLBACK.max_users,
+    has_crm_access: source.has_crm_access ?? PRO_PLAN_CAPABILITY_FALLBACK.has_crm_access,
+    features: normalizedFeatures,
+  };
+};
+
 export interface SubscriptionUsage {
   organization_id: string;
   ad_accounts_count: number;
@@ -96,7 +134,17 @@ export const useSubscriptionPlans = () => {
         .order("display_order", { ascending: true });
 
       if (error) throw error;
-      return (data as SubscriptionPlan[]) || [];
+      const rawPlans = (data as SubscriptionPlan[]) || [];
+      const proPlan = rawPlans.find((plan) => plan.slug === "pro") || null;
+      const sanitizedProPlan = proPlan
+        ? { ...proPlan, features: Array.isArray(proPlan.features) ? proPlan.features : [] }
+        : null;
+
+      return rawPlans.map((plan) => {
+        const safeFeatures = Array.isArray(plan.features) ? plan.features : [];
+        const basePlan = { ...plan, features: safeFeatures };
+        return normalizePlanCapabilities(basePlan, sanitizedProPlan);
+      });
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
@@ -126,7 +174,17 @@ export const useCurrentSubscription = () => {
         .maybeSingle();
 
       if (error) throw error;
-      return (data as unknown as OrganizationSubscription) || null;
+      const subscription = (data as unknown as OrganizationSubscription) || null;
+
+      if (subscription?.plan) {
+        const sanitizedPlan: SubscriptionPlan = {
+          ...subscription.plan,
+          features: Array.isArray(subscription.plan.features) ? subscription.plan.features : [],
+        };
+        subscription.plan = normalizePlanCapabilities(sanitizedPlan);
+      }
+
+      return subscription;
     },
     enabled: !!org?.id,
     staleTime: 1 * 60 * 1000, // 1 minute

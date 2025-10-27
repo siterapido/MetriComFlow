@@ -1,4 +1,4 @@
-import { BarChart3, Users, Target, LayoutDashboard, TrendingUp, FileText, Settings, UsersRound, CreditCard } from "lucide-react";
+import { BarChart3, Users, Target, LayoutDashboard, TrendingUp, FileText, Settings, UsersRound, CreditCard, type LucideIcon } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -16,7 +16,7 @@ import { useUserPermissions } from "@/hooks/useUserPermissions";
 interface NavItem {
   title: string;
   url: string;
-  icon: any;
+  icon: LucideIcon;
   requiresCRM?: boolean;
   requiresMetrics?: boolean;
   requiresOwner?: boolean;

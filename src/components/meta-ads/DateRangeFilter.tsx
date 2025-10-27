@@ -84,18 +84,22 @@ function getDateRangeFromPreset(preset: PresetOption): { start: Date; end: Date 
       return { start: startOfWeek(today, { weekStartsOn: 0 }), end: endOfWeek(today, { weekStartsOn: 0 }) }
 
     case 'last_week':
-      const lastWeekDate = subDays(today, 7)
-      return {
-        start: startOfWeek(lastWeekDate, { weekStartsOn: 0 }),
-        end: endOfWeek(lastWeekDate, { weekStartsOn: 0 })
+      {
+        const lastWeekDate = subDays(today, 7)
+        return {
+          start: startOfWeek(lastWeekDate, { weekStartsOn: 0 }),
+          end: endOfWeek(lastWeekDate, { weekStartsOn: 0 })
+        }
       }
 
     case 'this_month':
       return { start: startOfMonth(today), end: endOfMonth(today) }
 
     case 'last_month':
-      const lastMonth = subMonths(today, 1)
-      return { start: startOfMonth(lastMonth), end: endOfMonth(lastMonth) }
+      {
+        const lastMonth = subMonths(today, 1)
+        return { start: startOfMonth(lastMonth), end: endOfMonth(lastMonth) }
+      }
 
     case 'custom':
       return { start: subDays(today, 30), end: today }

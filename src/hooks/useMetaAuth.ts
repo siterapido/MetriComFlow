@@ -23,14 +23,26 @@ interface AdAccount {
   updated_at: string;
 }
 
+interface AvailableAdAccount {
+  external_id: string;
+  business_name: string;
+  account_status: number;
+  currency: string;
+  timezone: string;
+  business?: any;
+  is_connected: boolean;
+}
+
 export function useMetaAuth() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
   const [connections, setConnections] = useState<MetaConnection[]>([]);
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
+  const [availableAccounts, setAvailableAccounts] = useState<AvailableAdAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
+  const [loadingAvailableAccounts, setLoadingAvailableAccounts] = useState(false);
   const [oauthError, setOauthError] = useState<string | null>(null);
   const lastHandledCodeRef = useRef<string | null>(null);
 
@@ -439,6 +451,69 @@ export function useMetaAuth() {
   // Legacy function for backward compatibility
   const removeAdAccount = deactivateAdAccount;
 
+  // List all available ad accounts from Meta API
+  const listAvailableAccounts = async (): Promise<AvailableAdAccount[]> => {
+    if (!user) throw new Error('User not authenticated');
+
+    try {
+      setLoadingAvailableAccounts(true);
+
+      // Get the access token for authorization
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error('No active session');
+      }
+
+      // Call Edge Function to list available accounts
+      const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/meta-auth`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          action: 'list_available_accounts'
+        })
+      });
+
+      console.log('📥 List accounts response status:', response.status, response.statusText);
+
+      const responseText = await response.text();
+      console.log('📥 List accounts response body (raw):', responseText);
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('📥 List accounts response body (parsed):', data);
+      } catch (parseError) {
+        console.error('❌ Failed to parse response:', parseError);
+        throw new Error(`Invalid response from server: ${responseText}`);
+      }
+
+      if (!response.ok) {
+        console.error('❌ HTTP error:', response.status, data);
+        const errorMessage = data?.error || data?.message || `HTTP ${response.status}: ${response.statusText}`;
+        throw new Error(errorMessage);
+      }
+
+      if (data?.success && data?.available_accounts) {
+        console.log('✅ Successfully fetched available accounts:', data.available_accounts.length);
+        setAvailableAccounts(data.available_accounts);
+        return data.available_accounts;
+      } else {
+        console.error('❌ Failed to fetch accounts:', data);
+        throw new Error(data?.error || data?.message || 'Failed to fetch available accounts');
+      }
+    } catch (error) {
+      console.error('❌ Error listing available accounts:', error);
+      throw error;
+    } finally {
+      setLoadingAvailableAccounts(false);
+    }
+  };
+
   // Permanently delete an ad account
   const deleteAdAccount = async (accountId: string): Promise<void> => {
     if (!user) throw new Error('User not authenticated');
@@ -568,8 +643,10 @@ export function useMetaAuth() {
     adAccounts,
     activeAdAccounts: adAccounts.filter(a => a.is_active),
     inactiveAdAccounts: adAccounts.filter(a => !a.is_active),
+    availableAccounts,
     loading,
     connecting,
+    loadingAvailableAccounts,
     oauthError,
     connectMetaBusiness,
     disconnectMetaBusiness,
@@ -581,6 +658,7 @@ export function useMetaAuth() {
     deleteAdAccount,
     mergeAdAccounts,
     findDuplicateAccount,
+    listAvailableAccounts,
     refreshData: fetchData,
     hasActiveConnection: connections.length > 0,
     totalAdAccounts: adAccounts.filter(a => a.is_active).length,
