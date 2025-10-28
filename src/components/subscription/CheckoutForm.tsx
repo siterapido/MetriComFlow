@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -67,7 +67,12 @@ const checkoutSchema = z
     city: z.string().min(2, "Cidade é obrigatória"),
     state: z.string().length(2, "Estado deve ter 2 letras (ex: SP)"),
     paymentMethod: z.enum(["CREDIT_CARD", "PIX"]),
-    creditCard: creditCardSchema.optional(),
+    creditCard: z.object({
+      holderName: z.string().optional(),
+      number: z.string().optional(),
+      expiry: z.string().optional(),
+      ccv: z.string().optional(),
+    }).optional(),
     accountPassword: z
       .string()
       .min(8, "Senha deve ter pelo menos 8 caracteres")
@@ -81,13 +86,22 @@ const checkoutSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.paymentMethod === "CREDIT_CARD") {
+      // Validate credit card fields only when CREDIT_CARD is selected
+      if (!data.creditCard) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Dados do cartão são obrigatórios",
+          path: ["creditCard"],
+        });
+        return;
+      }
+
       const creditResult = creditCardSchema.safeParse(data.creditCard);
       if (!creditResult.success) {
         for (const issue of creditResult.error.issues) {
           ctx.addIssue({
-            code: issue.code,
-            message: issue.message,
-            path: ["creditCard", ...(issue.path ?? [])],
+            ...issue,
+            path: ["creditCard", ...issue.path],
           });
         }
       }
@@ -101,9 +115,16 @@ interface CheckoutFormProps {
   planPrice: number;
   onSubmit: (data: CheckoutFormData) => Promise<void>;
   isLoading?: boolean;
+  onPaymentMethodChange?: (method: CheckoutFormData["paymentMethod"]) => void;
 }
 
-export function CheckoutForm({ planName, planPrice, onSubmit, isLoading = false }: CheckoutFormProps) {
+export function CheckoutForm({
+  planName,
+  planPrice,
+  onSubmit,
+  isLoading = false,
+  onPaymentMethodChange,
+}: CheckoutFormProps) {
   const [isFetchingAddress, setIsFetchingAddress] = useState(false);
 
   const form = useForm<CheckoutFormData>({
@@ -132,6 +153,10 @@ export function CheckoutForm({ planName, planPrice, onSubmit, isLoading = false 
     },
   });
   const paymentMethod = form.watch("paymentMethod");
+
+  useEffect(() => {
+    onPaymentMethodChange?.(paymentMethod);
+  }, [paymentMethod, onPaymentMethodChange]);
 
   // Auto-fetch address from CEP using ViaCEP API
   const handleCepChange = async (cep: string) => {

@@ -255,6 +255,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     // 5. Create subscription in Asaas
     let asaasSubscriptionId = subscription.asaas_subscription_id;
     let paymentLink: string | null = null;
+    let pixDetails: Record<string, any> | null = null;
 
     if (!ASAAS_MOCK_MODE) {
       const asaasSubscriptionPayload: any = {
@@ -353,11 +354,89 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       asaasSubscriptionId = asaasSubscription.id;
       paymentLink = asaasSubscription.paymentLink ?? null;
       console.log(`Created Asaas subscription: ${asaasSubscriptionId}`);
+
+      if (billingType === "PIX") {
+        try {
+          const paymentsResponse = await fetch(
+            `${ASAAS_API_URL}/subscriptions/${asaasSubscriptionId}/payments?limit=5`,
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                "access_token": ASAAS_API_KEY!,
+              },
+            }
+          );
+
+          const paymentsText = await paymentsResponse.text();
+
+          if (!paymentsResponse.ok) {
+            console.warn(
+              `⚠️ Failed to fetch PIX payments for subscription ${asaasSubscriptionId}:`,
+              paymentsText
+            );
+          } else {
+            const paymentsData = JSON.parse(paymentsText);
+            const paymentsArray: any[] = Array.isArray(paymentsData?.data)
+              ? paymentsData.data
+              : Array.isArray(paymentsData)
+              ? paymentsData
+              : [];
+
+            const pendingPayment = paymentsArray.find((payment: any) => {
+              const status = String(payment?.status || "").toUpperCase();
+              return ["PENDING", "PENDING_PAYMENT", "AWAITING"].includes(status);
+            }) || paymentsArray[0];
+
+            if (pendingPayment) {
+              pixDetails = {
+                paymentId: pendingPayment.id,
+                status: pendingPayment.status,
+                dueDate: pendingPayment.dueDate,
+                pixExpiresAt:
+                  pendingPayment.pixQrCodeExpirationDate ||
+                  pendingPayment.pixExpirationDate ||
+                  pendingPayment.dueDate,
+                copyPasteCode:
+                  pendingPayment.pixCopiaECola ||
+                  pendingPayment.identificationField ||
+                  pendingPayment.digitableLine ||
+                  pendingPayment.payload,
+                qrCodeImage:
+                  pendingPayment.pixQrCodeImage ||
+                  pendingPayment.qrCodeImage ||
+                  pendingPayment.qrCode ||
+                  null,
+                paymentLink:
+                  pendingPayment.pixUrl ||
+                  pendingPayment.invoiceUrl ||
+                  pendingPayment.bankSlipUrl ||
+                  pendingPayment.paymentLink ||
+                  paymentLink,
+              };
+            }
+          }
+        } catch (pixErr) {
+          console.warn("⚠️ Error retrieving PIX details from Asaas:", pixErr);
+        }
+      }
     } else {
       if (!asaasSubscriptionId) {
         asaasSubscriptionId = `mock-subscription-${crypto.randomUUID()}`;
       }
       console.log("⚠️ Using mock Asaas subscription:", asaasSubscriptionId);
+
+      if (billingType === "PIX") {
+        pixDetails = {
+          paymentId: `mock-payment-${crypto.randomUUID()}`,
+          status: "PENDING",
+          dueDate: formattedDueDate,
+          pixExpiresAt: formattedDueDate,
+          copyPasteCode: "00020126580014BR.GOV.BCB.PIX0136mock-pix-key-asaas-12345678901234567890",
+          qrCodeImage: null,
+          paymentLink,
+        };
+      }
     }
 
     // 6. Update our subscription with Asaas details
@@ -405,6 +484,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
         asaasSubscriptionId,
         asaasCustomerId: asaasCustomerId,
         paymentLink: responsePaymentLink,
+        pixDetails,
         nextDueDate: formattedDueDate,
         message: "Subscription created successfully in Asaas",
         // Public checkout extras
