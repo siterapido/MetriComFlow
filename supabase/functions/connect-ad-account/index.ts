@@ -1,5 +1,17 @@
+// @ts-nocheck
+// Declare Deno for TypeScript editors that don't load the Edge Runtime types
+declare const Deno: {
+  serve: (handler: (req: Request) => Promise<Response> | Response) => void;
+  env: { get: (name: string) => string | undefined };
+};
+
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+
+// Load Supabase client dynamically to avoid module resolution issues in editors
+async function loadCreateClient() {
+  const mod = await import("jsr:@supabase/supabase-js@2");
+  return mod.createClient;
+}
 
 interface ConnectAccountRequest {
   ad_account_id: string;
@@ -34,6 +46,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const createClient = await loadCreateClient();
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { ad_account_id, access_token }: ConnectAccountRequest = await req.json();
 
@@ -158,7 +171,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Buscar campanhas da conta (Graph API v24.0)
-    const effectiveStatus = encodeURIComponent('["ACTIVE","PAUSED"]');
+    const effectiveStatus = encodeURIComponent('["ACTIVE","PAUSED","ARCHIVED"]');
     const campaignsUrl = `https://graph.facebook.com/v24.0/act_${ad_account_id}/campaigns` +
       `?fields=id,name,objective,status,start_time,stop_time&effective_status=${effectiveStatus}&access_token=${access_token}`;
 
@@ -243,8 +256,9 @@ Deno.serve(async (req: Request) => {
 
   } catch (error) {
     console.error('Error in connect-ad-account:', error);
+    const message = (error as any)?.message ?? String(error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: message }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

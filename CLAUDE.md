@@ -529,23 +529,205 @@ The app includes Meta (Facebook) Business OAuth integration for ad campaign trac
 
 **Files:**
 - Route: [/meta-ads-config](src/pages/MetaAdsConfig.tsx)
-- Hook: [useMetaAuth](src/hooks/useMetaAuth.ts)
-- Edge Function: [meta-auth](supabase/functions/meta-auth/index.ts)
+- Hooks: [useMetaAuth](src/hooks/useMetaAuth.ts), [useMetaMetrics](src/hooks/useMetaMetrics.ts)
+- Edge Functions:
+  - [meta-auth](supabase/functions/meta-auth/index.ts) - OAuth flow
+  - [connect-ad-account](supabase/functions/connect-ad-account/index.ts) - Initial campaign sync
+  - [sync-daily-insights](supabase/functions/sync-daily-insights/index.ts) - Daily metrics sync
 - Documentation: [docs/META_ADS_SETUP.md](docs/META_ADS_SETUP.md)
 
-**Flow:**
+### OAuth & Initial Setup Flow
+
 1. User clicks "Connect Meta Business" in `/meta-ads-config`
 2. `useMetaAuth.connectMetaBusiness()` calls `meta-auth` Edge Function
-3. Edge Function returns Meta OAuth URL
+3. Edge Function returns Meta OAuth URL (redirects to Meta)
 4. User authorizes on Meta → redirected back with auth code
-5. `useMetaAuth` exchanges code for access token via Edge Function
+5. `useMetaAuth.exchangeCode()` exchanges code for access token via Edge Function
 6. Token stored in `meta_business_connections` table
-7. Ad accounts synced to `ad_accounts` table
+7. **IMPORTANT**: After OAuth, user must manually add ad accounts via UI
+8. When adding account, `connect-ad-account` Edge Function is called
+9. Function fetches account details and ALL campaigns from Meta API
+10. Campaigns stored in `ad_campaigns` table (linked to `ad_accounts`)
+11. Daily sync via `sync-daily-insights` fetches metrics for existing campaigns
 
-**Scripts:**
+### Campaign & Metrics Data Flow
+
+**CRITICAL**: Campaigns must exist in `ad_campaigns` table before metrics can be synced!
+
+```typescript
+// Campaign data flow:
+1. OAuth → meta_business_connections (access token)
+2. Add Account → ad_accounts (account record)
+3. Connect Account → ad_campaigns (campaigns fetched from Meta API)
+4. Daily Sync → campaign_daily_insights (metrics for each campaign/date)
+
+// Query flow (frontend):
+useAdAccounts() → fetch ad_accounts (filtered by organization_id)
+useAdCampaigns(accountId) → fetch ad_campaigns (filtered by ad_account_id + org)
+useCampaignInsights(campaignId, dateRange) → fetch campaign_daily_insights
+```
+
+### Daily Insights Sync (sync-daily-insights)
+
+**Purpose**: Fetches daily metrics from Meta API for existing campaigns.
+
+**Key Parameters** (POST body):
+```typescript
+{
+  since: "2025-01-01",        // Start date (ISO format)
+  until: "2025-12-31",        // End date (ISO format)
+  ad_account_ids: ["uuid"],   // Filter by internal ad_accounts.id
+  campaign_external_ids: [],  // Filter by Meta campaign IDs
+  dryRun: false,              // When true, validate but don't write to DB
+  maxDaysPerChunk: 30,        // Split requests into chunks (1-90 days)
+  logResponseSample: true     // Log sample of Meta API response
+}
+```
+
+**Token Resolution** (in order of preference):
+1. User's access token from `meta_business_connections` (if not expired)
+2. Global `META_ACCESS_TOKEN` environment variable (fallback)
+3. If neither available → skip account with warning
+
+**Metrics Fetched**:
+- `spend` - Total ad spend (daily)
+- `impressions` - Ad impressions count
+- `clicks` - Click count
+- `leads_count` - Extracted from `actions` array (lead action types)
+
+**Output** (campaign_daily_insights table):
+```typescript
+{
+  campaign_id: "uuid",      // Internal campaign ID
+  date: "2025-01-15",       // Daily breakdown
+  spend: 150.50,            // Daily spend
+  impressions: 12000,
+  clicks: 350,
+  leads_count: 12           // Parsed from actions array
+}
+```
+
+**Invocation** (manual sync):
 ```bash
-npm run verify:meta              # Verify Meta credentials
+# Sync last 7 days for all accounts
+curl -X POST https://YOUR_PROJECT.supabase.co/functions/v1/sync-daily-insights \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"since":"2025-01-01","until":"2025-01-07"}'
+
+# Dry run (validation only, no DB writes)
+curl -X POST https://YOUR_PROJECT.supabase.co/functions/v1/sync-daily-insights \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"since":"2025-01-01","until":"2025-01-07","dryRun":true,"logResponseSample":true}'
+```
+
+**Rate Limiting**: Function detects Meta API rate limits (HTTP 429, error codes 4/17/613) and returns 429 to prevent abuse.
+
+### Troubleshooting Meta Integration
+
+#### Campaigns not appearing in UI
+
+**Possible causes:**
+1. **Ad account not connected**: Check `ad_accounts` table has records with `is_active = true`
+2. **Campaigns not synced**: Run `connect-ad-account` Edge Function manually OR add account via UI
+3. **Organization mismatch**: Ensure `ad_accounts.organization_id` matches user's active organization
+4. **Token expired**: Check `meta_business_connections.token_expires_at` (if set)
+
+**Debug steps:**
+```sql
+-- Check ad accounts for your organization
+SELECT id, external_id, business_name, is_active, organization_id
+FROM ad_accounts
+WHERE organization_id = 'YOUR_ORG_ID';
+
+-- Check campaigns linked to account
+SELECT c.id, c.external_id, c.name, c.status, c.ad_account_id
+FROM ad_campaigns c
+INNER JOIN ad_accounts a ON a.id = c.ad_account_id
+WHERE a.organization_id = 'YOUR_ORG_ID';
+
+-- Check if insights exist for campaigns
+SELECT campaign_id, COUNT(*), MIN(date), MAX(date), SUM(spend)
+FROM campaign_daily_insights
+WHERE campaign_id IN (
+  SELECT c.id FROM ad_campaigns c
+  INNER JOIN ad_accounts a ON a.id = c.ad_account_id
+  WHERE a.organization_id = 'YOUR_ORG_ID'
+)
+GROUP BY campaign_id;
+```
+
+#### No metrics data for campaigns
+
+**Possible causes:**
+1. **Campaigns exist but insights not synced**: Run `sync-daily-insights` manually
+2. **Invalid access token**: Check `meta_business_connections.access_token` is valid
+3. **Date range mismatch**: Ensure `since/until` covers period when campaigns were active
+4. **Meta API error**: Check Edge Function logs for API errors
+
+**Fix:**
+```bash
+# Check Edge Function logs
+npx supabase functions logs sync-daily-insights --limit 50
+
+# Manual sync for specific date range
+npx supabase functions invoke sync-daily-insights \
+  --data '{"since":"2025-01-01","until":"2025-12-31","logResponseSample":true}'
+```
+
+#### Access token expired
+
+**Symptoms**: `sync-daily-insights` logs show "Access token expired" warnings
+
+**Fix**: User must re-authenticate via OAuth flow (disconnect and reconnect in UI)
+
+**Check expiration**:
+```sql
+SELECT user_id, token_expires_at,
+       token_expires_at < NOW() as is_expired
+FROM meta_business_connections
+WHERE is_active = true;
+```
+
+#### Duplicate campaigns or accounts
+
+**Symptoms**: Same campaign appears multiple times in UI
+
+**Cause**: Account was connected multiple times with different organization IDs
+
+**Fix**: Use `merge_ad_accounts` RPC function (see [useMetaAuth.ts](src/hooks/useMetaAuth.ts)):
+```typescript
+await mergeAdAccounts(sourceAccountId, targetAccountId)
+// Migrates campaigns, insights, and leads from source to target
+```
+
+### Meta API Rate Limits
+
+**Meta Graph API v24.0 Rate Limits:**
+- App-level: Varies by app usage tier
+- Ad Account-level: 200 calls per hour (standard accounts)
+- Business-level: Varies by business verification
+
+**Detection**: `sync-daily-insights` checks response headers:
+- `x-app-usage`
+- `x-ad-account-usage`
+- `x-business-use-case-usage`
+
+**Handling**: If rate limit detected (HTTP 429 or error codes 4/17/613), function returns 429 immediately to prevent further calls.
+
+**Best Practices:**
+- Use `maxDaysPerChunk` to split large date ranges (default: 30 days)
+- Avoid syncing same date range multiple times in short period
+- Schedule daily syncs during off-peak hours (e.g., 3 AM)
+
+### Scripts
+
+```bash
+npm run verify:meta              # Verify Meta credentials configuration
 ./scripts/setup-meta-secrets.sh  # Set up Meta secrets in Supabase
+npx supabase functions logs sync-daily-insights  # Check sync logs
+npx supabase functions logs connect-ad-account   # Check connection logs
 ```
 
 ## Lovable Integration
@@ -800,3 +982,122 @@ CREATE POLICY "Users can view their org's data"
 - Check function has proper structure (`index.ts` in function folder)
 - Verify Supabase CLI is logged in: `npx supabase login`
 - Check function logs: `npx supabase functions logs FUNCTION_NAME`
+
+### Meta Ads campaigns not showing
+
+**Symptoms**: Empty campaign list in `/meta-ads-config` even after connecting account
+
+**Root Cause Analysis:**
+```bash
+# 1. Check if ad accounts exist
+npx supabase db execute --query \
+  "SELECT id, external_id, business_name, is_active, organization_id FROM ad_accounts;"
+
+# 2. Check if campaigns were synced
+npx supabase db execute --query \
+  "SELECT COUNT(*) as campaign_count FROM ad_campaigns;"
+
+# 3. Check Edge Function logs
+npx supabase functions logs connect-ad-account --limit 20
+```
+
+**Solution Steps:**
+1. **If no ad accounts**: Connect account via UI (`/meta-ads-config` → Add Account)
+2. **If ad accounts exist but no campaigns**:
+   - Campaigns are only synced when account is first connected
+   - Manually trigger re-sync by deactivating and reactivating account in UI
+   - OR call `connect-ad-account` Edge Function manually
+3. **If campaigns exist but not visible**: Check organization_id mismatch (see query above)
+
+### Meta Ads metrics not syncing for full year
+
+**Symptoms**: Data only shows for recent days/weeks, not entire year selected
+
+**Common Causes:**
+1. **`sync-daily-insights` not run for historical dates**
+   - Function only syncs date ranges you explicitly request
+   - Default sync (if automated) typically covers last 1-7 days only
+
+2. **Date range not passed correctly to API**
+   - Check `since` and `until` parameters in Edge Function invocation
+
+3. **Campaigns didn't exist during selected year**
+   - Meta API only returns data for dates when campaign was active
+
+**Solution:**
+```bash
+# Manual sync for entire year (e.g., 2025)
+npx supabase functions invoke sync-daily-insights \
+  --data '{
+    "since": "2025-01-01",
+    "until": "2025-12-31",
+    "maxDaysPerChunk": 30,
+    "logResponseSample": true
+  }'
+
+# Check if data was written
+npx supabase db execute --query \
+  "SELECT DATE_TRUNC('month', date) as month,
+          COUNT(*) as records,
+          SUM(spend) as total_spend
+   FROM campaign_daily_insights
+   WHERE date >= '2025-01-01'
+   GROUP BY month
+   ORDER BY month;"
+```
+
+**Automated Daily Sync** (recommended):
+Set up a cron job or Supabase scheduled task to run daily:
+```sql
+-- Example: pg_cron job (requires pg_cron extension)
+SELECT cron.schedule(
+  'sync-meta-insights-daily',
+  '0 3 * * *',  -- Run at 3 AM daily
+  $$
+  SELECT net.http_post(
+    url := 'YOUR_PROJECT_URL/functions/v1/sync-daily-insights',
+    headers := '{"Authorization": "Bearer YOUR_SERVICE_ROLE_KEY", "Content-Type": "application/json"}'::jsonb,
+    body := jsonb_build_object(
+      'since', (CURRENT_DATE - INTERVAL '7 days')::text,
+      'until', CURRENT_DATE::text
+    )
+  );
+  $$
+);
+```
+
+### Meta API authentication errors
+
+**Symptoms**:
+- "Invalid OAuth access token" in logs
+- "Access token has expired" warnings
+- Campaigns fail to sync
+
+**Debug Steps:**
+```sql
+-- Check active connections and token expiration
+SELECT
+  user_id,
+  meta_user_name,
+  token_expires_at,
+  CASE
+    WHEN token_expires_at IS NULL THEN 'No expiration set'
+    WHEN token_expires_at < NOW() THEN 'EXPIRED'
+    ELSE 'Valid'
+  END as token_status,
+  connected_at,
+  is_active
+FROM meta_business_connections
+WHERE is_active = true;
+```
+
+**Solutions:**
+1. **Token expired**: User must disconnect and reconnect via OAuth in `/meta-ads-config`
+2. **No META_ACCESS_TOKEN fallback**: Set Supabase secret:
+   ```bash
+   npx supabase secrets set META_ACCESS_TOKEN="your_long_lived_token"
+   ```
+3. **Invalid token**: Verify token has required permissions:
+   - `ads_read`
+   - `ads_management`
+   - `business_management` (for accessing ad accounts)

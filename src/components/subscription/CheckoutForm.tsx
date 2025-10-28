@@ -46,29 +46,40 @@ const creditCardSchema = z.object({
     }),
 });
 
-const checkoutSchema = z.object({
-  billingName: z.string().min(3, "Nome completo é obrigatório"),
-  billingEmail: z.string().email("Email inválido"),
-  billingCpfCnpj: z.string().refine(validateCpfCnpj, {
-    message: "CPF/CNPJ inválido",
-  }),
-  billingPhone: z.string().refine(validatePhone, {
-    message: "Telefone inválido (ex: (11) 98765-4321)",
-  }),
-  postalCode: z.string().refine(validateCEP, {
-    message: "CEP inválido",
-  }),
-  street: z.string().min(3, "Endereço é obrigatório"),
-  addressNumber: z.string().min(1, "Número é obrigatório"),
-  complement: z.string().optional(),
-  province: z.string().min(2, "Bairro é obrigatório"),
-  city: z.string().min(2, "Cidade é obrigatória"),
-  state: z.string().length(2, "Estado deve ter 2 letras (ex: SP)"),
-  paymentMethod: z.literal("CREDIT_CARD"),
-  creditCard: creditCardSchema,
-});
+const checkoutSchema = z
+  .object({
+    billingName: z.string().min(3, "Nome completo é obrigatório"),
+    billingEmail: z.string().email("Email inválido"),
+    billingCpfCnpj: z.string().refine(validateCpfCnpj, {
+      message: "CPF/CNPJ inválido",
+    }),
+    billingPhone: z.string().refine(validatePhone, {
+      message: "Telefone inválido (ex: (11) 98765-4321)",
+    }),
+    postalCode: z.string().refine(validateCEP, {
+      message: "CEP inválido",
+    }),
+    street: z.string().min(3, "Endereço é obrigatório"),
+    addressNumber: z.string().min(1, "Número é obrigatório"),
+    complement: z.string().optional(),
+    province: z.string().min(2, "Bairro é obrigatório"),
+    city: z.string().min(2, "Cidade é obrigatória"),
+    state: z.string().length(2, "Estado deve ter 2 letras (ex: SP)"),
+    paymentMethod: z.literal("CREDIT_CARD"),
+    creditCard: creditCardSchema,
+    accountPassword: z
+      .string()
+      .min(8, "Senha deve ter pelo menos 8 caracteres")
+      .regex(/[A-Za-z]/, "Use letras na senha")
+      .regex(/[0-9]/, "Inclua ao menos um número"),
+    confirmPassword: z.string().min(8, "Confirme sua senha"),
+  })
+  .refine((data) => data.accountPassword === data.confirmPassword, {
+    message: "As senhas não conferem",
+    path: ["confirmPassword"],
+  });
 
-type CheckoutFormData = z.infer<typeof checkoutSchema>;
+export type CheckoutFormData = z.infer<typeof checkoutSchema>;
 
 interface CheckoutFormProps {
   planName: string;
@@ -101,6 +112,8 @@ export function CheckoutForm({ planName, planPrice, onSubmit, isLoading = false 
         expiry: "",
         ccv: "",
       },
+      accountPassword: "",
+      confirmPassword: "",
     },
   });
 
@@ -332,6 +345,39 @@ export function CheckoutForm({ planName, planPrice, onSubmit, isLoading = false 
                         }}
                         maxLength={15}
                       />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="accountPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Crie uma senha *</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="Mínimo 8 caracteres" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      A senha será usada para acessar o painel após a confirmação.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirme a senha *</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="Repita a senha" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

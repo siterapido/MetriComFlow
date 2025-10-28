@@ -1,15 +1,31 @@
 import { createClient, type Session, type AuthChangeEvent } from '@supabase/supabase-js'
 import type { Database } from './database.types'
 
-// Get environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+// Get environment variables (and sanitize to avoid trailing newlines/spaces)
+const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
+const rawSupabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+const supabaseUrl = rawSupabaseUrl?.trim()
+const supabaseAnonKey = rawSupabaseAnonKey?.trim()
 const appUrl = import.meta.env.VITE_APP_URL || (typeof window !== 'undefined' ? window.location.origin : undefined)
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
     'Missing Supabase environment variables. Please check your .env file.'
   )
+}
+
+// Warn in dev if we had to sanitize env vars
+try {
+  if ((import.meta as any).env?.DEV) {
+    if (rawSupabaseUrl && rawSupabaseUrl !== supabaseUrl) {
+      console.warn('[Supabase] VITE_SUPABASE_URL tinha espaços/linhas a mais. Valor foi trimado.')
+    }
+    if (rawSupabaseAnonKey && rawSupabaseAnonKey !== supabaseAnonKey) {
+      console.warn('[Supabase] VITE_SUPABASE_ANON_KEY tinha espaços/linhas a mais. Valor foi trimado.')
+    }
+  }
+} catch (err) {
+  void err
 }
 
 // Create a single supabase client for interacting with your database

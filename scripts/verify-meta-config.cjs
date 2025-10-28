@@ -177,6 +177,20 @@ class MetaConfigVerifier {
       } else if (response.status === 401) {
         // 401 é esperado quando não enviamos autorização
         this.log('success', 'Edge Function meta-auth está ativa (retornou 401 como esperado)');
+      } else if (response.status === 400) {
+        // Verificar se é erro de autorização (comportamento esperado)
+        const errorText = await response.text();
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.error && errorData.error.includes('authorization header')) {
+            this.log('success', 'Edge Function meta-auth está ativa (requer autorização como esperado)');
+          } else {
+            this.log('error', `Edge Function retornou erro 400: ${errorText}`);
+          }
+        } catch {
+          // Se não conseguir fazer parse do JSON, tratar como erro
+          this.log('error', `Edge Function retornou erro 400: ${errorText}`);
+        }
       } else {
         const errorText = await response.text();
         this.log('error', `Edge Function retornou erro ${response.status}: ${errorText}`);

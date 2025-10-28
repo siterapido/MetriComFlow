@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { CheckoutForm } from "@/components/subscription/CheckoutForm";
+import { CheckoutForm, type CheckoutFormData } from "@/components/subscription/CheckoutForm";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
@@ -66,7 +66,7 @@ export default function PublicCheckout() {
     fetchPlan();
   }, [planParam]);
 
-  const handleSubmit = async (formData: any) => {
+  const handleSubmit = async (formData: CheckoutFormData) => {
     if (!plan) {
       toast.error("Plano inválido.");
       return;
@@ -74,6 +74,8 @@ export default function PublicCheckout() {
     setSubmitting(true);
     try {
       const paymentMethod = formData.paymentMethod; // CREDIT_CARD | PIX | BOLETO
+      const password = formData.accountPassword;
+      const email = formData.billingEmail.trim().toLowerCase();
 
       // Parse expiry
       let expiryMonth = "";
@@ -88,7 +90,7 @@ export default function PublicCheckout() {
       const requestBody = {
         planSlug: plan.slug,
         billingName: formData.billingName,
-        billingEmail: formData.billingEmail,
+        billingEmail: email,
         billingCpfCnpj: stripNonNumeric(formData.billingCpfCnpj),
         billingPhone: stripNonNumeric(formData.billingPhone),
         billingAddress: {
@@ -119,8 +121,9 @@ export default function PublicCheckout() {
       }, null, 2));
 
       // Use fetch directly to get better error messages
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      // Sanitize env vars to avoid header/query issues with stray newlines
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string)?.trim();
+      const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string)?.trim();
 
       const response = await fetch(`${supabaseUrl}/functions/v1/create-asaas-subscription`, {
         method: 'POST',
@@ -167,15 +170,94 @@ export default function PublicCheckout() {
         throw new Error(errorMsg);
       }
 
-      toast.success("Assinatura criada com sucesso! Redirecionando...");
+      if (!data.organizationId || !data.subscriptionId || !data.claimToken) {
+        throw new Error("Retorno inválido do checkout. Entre em contato com o suporte.");
+      }
 
-      // Redirect to finalize signup with claim data
-      const nextUrl = `/finalizar-cadastro?org=${encodeURIComponent(
+      let loggedIn = false;
+      let claimSucceeded = false;
+
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: formData.billingName,
+            phone: stripNonNumeric(formData.billingPhone),
+            document: stripNonNumeric(formData.billingCpfCnpj),
+          },
+        },
+      });
+
+      if (signUpError) {
+        const msg = String(signUpError.message || signUpError).toLowerCase();
+        const isAlreadyRegistered =
+          msg.includes("already") || msg.includes("registrado") || msg.includes("existing");
+
+        if (isAlreadyRegistered) {
+          const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+          if (loginError) {
+            throw new Error(
+              "Email já cadastrado. Use sua senha atual ou recupere o acesso para finalizar o cadastro."
+            );
+          }
+          loggedIn = true;
+        } else {
+          throw signUpError;
+        }
+      } else {
+        const currentSession = signUpData?.session;
+        if (currentSession) {
+          loggedIn = true;
+        } else {
+          const { data: sessionData, error: loginError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+          if (!loginError && sessionData.session) {
+            loggedIn = true;
+          } else if (loginError) {
+            console.warn("Falha ao obter sessão após signUp:", loginError);
+          }
+        }
+      }
+
+      if (loggedIn) {
+        const { data: claimData, error: claimError } = await supabase.functions.invoke("claim-account", {
+          body: {
+            claimToken: data.claimToken,
+            organizationId: data.organizationId,
+            subscriptionId: data.subscriptionId,
+          },
+        });
+
+        if (claimError) {
+          console.warn("Falha ao invocar claim-account:", claimError);
+        }
+
+        if (claimData?.success) {
+          claimSucceeded = true;
+        }
+      }
+
+      const finalizeUrl = `/finalizar-cadastro?org=${encodeURIComponent(
         data.organizationId
       )}&sub=${encodeURIComponent(data.subscriptionId)}&claim=${encodeURIComponent(
         data.claimToken || ""
-      )}&email=${encodeURIComponent(formData.billingEmail)}`;
-      navigate(nextUrl);
+      )}&email=${encodeURIComponent(email)}`;
+
+      if (claimSucceeded) {
+        toast.success("Assinatura criada! Redirecionando para o painel...");
+        navigate("/dashboard");
+        return;
+      }
+
+      toast.success(
+        loggedIn
+          ? "Assinatura criada! Finalize a configuração da sua conta em seguida."
+          : "Assinatura criada! Verifique seu email e finalize o cadastro."
+      );
+      navigate(finalizeUrl);
     } catch (err: any) {
       console.error("Erro no checkout:", err);
       toast.error(String(err?.message || err));

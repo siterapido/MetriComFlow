@@ -81,6 +81,52 @@ Deno.serve(async (req) => {
 
     const { action, code, redirect_uri }: MetaAuthRequest = await req.json();
 
+    // Helper to deterministically resolve and normalize the redirect_uri so that
+    // the exact same value is used in both the OAuth dialog and the token exchange.
+    const normalizeRedirectUri = (
+      input: string | undefined,
+      origin: string | null
+    ): string => {
+      const DEFAULT_PATH = '/meta-ads-config';
+
+      // Step 1: choose a candidate (prefer explicit input, then origin fallback)
+      let candidate = input?.trim();
+      if (!candidate || !/^https?:\/\//i.test(candidate)) {
+        if (origin && /^https?:\/\//i.test(origin)) {
+          candidate = `${origin}${DEFAULT_PATH}`;
+        } else {
+          // Absolute fallback to production canonical host
+          candidate = `https://www.insightfy.com.br${DEFAULT_PATH}`;
+        }
+      }
+
+      // Step 2: normalize via URL API
+      try {
+        const url = new URL(candidate);
+
+        // Always force the OAuth callback path without trailing slash
+        url.pathname = DEFAULT_PATH;
+
+        // Remove any query/fragments to avoid accidental mismatches
+        url.search = '';
+        url.hash = '';
+
+        // If the host is our production domain, enforce the www canonical host and https
+        if (url.hostname === 'insightfy.com.br') {
+          url.hostname = 'www.insightfy.com.br';
+          url.protocol = 'https:';
+        }
+
+        // Return the full string form
+        return url.toString();
+      } catch (e) {
+        // If parsing fails for any reason, return the canonical prod URL
+        return 'https://www.insightfy.com.br/meta-ads-config';
+      }
+    };
+
+    const resolvedRedirectUri = normalizeRedirectUri(redirect_uri, req.headers.get('origin'));
+
     // Try to read secrets from environment first (Supabase Functions secrets)
     let META_APP_ID = Deno.env.get('META_APP_ID');
     let META_APP_SECRET = Deno.env.get('META_APP_SECRET');
@@ -118,10 +164,11 @@ Deno.serve(async (req) => {
     console.log('META_APP_ID:', META_APP_ID);
     console.log('META_APP_ID length:', META_APP_ID?.length);
     console.log('META_APP_ID is numeric:', /^\d+$/.test(META_APP_ID || ''));
-    console.log('Expected APP_ID: 336112808735379 (CRMads)');
+    console.log('Expected APP_ID: 3361128087359379 (InsightFy)');
     console.log('User ID:', user.id);
     console.log('Origin:', req.headers.get('origin'));
-    console.log('Redirect URI:', redirect_uri || `${req.headers.get('origin')}/meta-ads-config`);
+    console.log('Redirect URI (incoming):', redirect_uri);
+    console.log('Redirect URI (resolved):', resolvedRedirectUri);
     console.log('========================================================');
 
     if (!META_APP_ID || !/^\d+$/.test(META_APP_ID)) {
@@ -130,13 +177,13 @@ Deno.serve(async (req) => {
     }
 
     // Verificar se é o App ID correto
-    const EXPECTED_APP_ID = '336112808735379';
+    const EXPECTED_APP_ID = '3361128087359379';
     if (META_APP_ID !== EXPECTED_APP_ID) {
       console.warn('⚠️  WARNING: Using different App ID than expected!');
-      console.warn('   Expected:', EXPECTED_APP_ID, '(CRMads)');
+      console.warn('   Expected:', EXPECTED_APP_ID, '(InsightFy)');
       console.warn('   Received:', META_APP_ID);
     } else {
-      console.log('✅ Using correct App ID: CRMads');
+      console.log('✅ Using correct App ID: InsightFy');
     }
 
     if (action === 'get_auth_url') {
@@ -159,7 +206,7 @@ Deno.serve(async (req) => {
       const baseUrl = 'https://www.facebook.com/v24.0/dialog/oauth';
       const params = new URLSearchParams({
         client_id: META_APP_ID,
-        redirect_uri: redirect_uri || `${req.headers.get('origin')}/meta-ads-config`,
+        redirect_uri: resolvedRedirectUri,
         scope: scopes,
         response_type: 'code',
         state: user.id, // Use user ID as state for security
@@ -187,7 +234,7 @@ Deno.serve(async (req) => {
       const tokenParams = new URLSearchParams({
         client_id: META_APP_ID,
         client_secret: META_APP_SECRET,
-        redirect_uri: redirect_uri || `${req.headers.get('origin')}/meta-ads-config`,
+        redirect_uri: resolvedRedirectUri,
         code: code,
       });
 

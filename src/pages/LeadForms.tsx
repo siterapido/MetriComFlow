@@ -62,9 +62,6 @@ type LeadFormRecord = Tables<"lead_forms"> & {
   lead_form_variants?: Tables<"lead_form_variants">[];
 };
 
-type AdAccount = Tables<"ad_accounts">;
-type AdCampaign = Tables<"ad_campaigns">;
-
 const defaultFieldKeys = ["fullName", "email", "phone", "company", "message"] as const;
 type DefaultFieldKey = (typeof defaultFieldKeys)[number];
 
@@ -296,7 +293,7 @@ const LeadForms = () => {
     }
   }, [selectedAccountId, adCampaigns, form]);
 
-  const createFormMutation = useMutation({
+  const createFormMutation = useMutation<Tables<"lead_forms">, unknown, CreateLeadFormPayload>({
     mutationFn: async ({ form: formPayload, fields, variant }: CreateLeadFormPayload) => {
       const { data: createdForm, error } = await supabase
         .from("lead_forms")
@@ -388,9 +385,9 @@ const LeadForms = () => {
     },
     onMutate: async ({ id, isActive }) => {
       await queryClient.cancelQueries({ queryKey: ["lead-forms"] });
-      const previousForms = queryClient.getQueryData<LeadForm[]>(["lead-forms"]);
+      const previousForms = queryClient.getQueryData<LeadFormRecord[]>(["lead-forms"]);
 
-      queryClient.setQueryData<LeadForm[]>(["lead-forms"], (old) =>
+      queryClient.setQueryData<LeadFormRecord[]>(["lead-forms"], (old) =>
         (old ?? []).map((formItem) =>
           formItem.id === id ? { ...formItem, is_active: isActive } : formItem
         ),
@@ -1063,12 +1060,13 @@ const LeadForms = () => {
                     >
                       <Checkbox
                         checked={isChecked}
-                        onCheckedChange={(checked) =>
+                        onCheckedChange={(checked) => {
                           form.setValue(`defaultFields.${key}` as const, Boolean(checked), {
                             shouldDirty: true,
                             shouldTouch: true,
-                          })
-                        }
+                          });
+                          form.trigger("defaultFields");
+                        }}
                       />
                       <div className="space-y-1">
                         <p className="text-sm font-medium text-foreground">

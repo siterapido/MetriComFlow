@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const ASAAS_WEBHOOK_TOKEN = Deno.env.get("ASAAS_WEBHOOK_TOKEN"); // Optional token for webhook validation
 
 /**
  * Asaas Webhook Handler
@@ -11,6 +12,10 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
  * - PAYMENT_CREATED, PAYMENT_RECEIVED, PAYMENT_CONFIRMED
  * - PAYMENT_OVERDUE, PAYMENT_REFUNDED, PAYMENT_DELETED
  * - SUBSCRIPTION_CREATED, SUBSCRIPTION_UPDATED, SUBSCRIPTION_DELETED
+ *
+ * IMPORTANT: This function is designed to accept external webhooks from Asaas.
+ * It does NOT require JWT authentication from Supabase auth system.
+ * Optional: Set ASAAS_WEBHOOK_TOKEN environment variable for additional security.
  */
 
 interface AsaasWebhookPayload {
@@ -45,7 +50,7 @@ serve(async (req) => {
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST",
-        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Headers": "Content-Type, asaas-access-token",
       },
     });
   }
@@ -56,6 +61,24 @@ serve(async (req) => {
   }
 
   try {
+    // Optional: Validate webhook token from Asaas
+    if (ASAAS_WEBHOOK_TOKEN) {
+      const providedToken = req.headers.get("asaas-access-token");
+      if (providedToken !== ASAAS_WEBHOOK_TOKEN) {
+        console.error("Invalid webhook token provided");
+        return new Response(
+          JSON.stringify({
+            code: 401,
+            message: "Invalid webhook token",
+          }),
+          {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+
     // Initialize Supabase client with service role (bypasses RLS)
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: {

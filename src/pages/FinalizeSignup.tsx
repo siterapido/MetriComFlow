@@ -110,7 +110,7 @@ export default function FinalizeSignup() {
           <CardHeader>
             <CardTitle>Finalizar cadastro</CardTitle>
             <CardDescription>
-              Crie sua conta para reivindicar sua organização e concluir a ativação.
+              Use o email e a senha definidos no checkout para reivindicar sua organização. Se ainda não criou uma senha, você pode definir agora.
             </CardDescription>
           </CardHeader>
           <CardContent>
