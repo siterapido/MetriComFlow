@@ -36,16 +36,31 @@ CREATE TABLE IF NOT EXISTS public.subscription_plans (
 -- Enable RLS
 ALTER TABLE public.subscription_plans ENABLE ROW LEVEL SECURITY;
 
--- Anyone can view active plans
-CREATE POLICY "Anyone can view active subscription plans"
-  ON public.subscription_plans FOR SELECT
-  USING (is_active = TRUE);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'subscription_plans'
+      AND policyname = 'Anyone can view active subscription plans'
+  ) THEN
+    CREATE POLICY "Anyone can view active subscription plans"
+      ON public.subscription_plans FOR SELECT
+      USING (is_active = TRUE);
+  END IF;
 
--- Only service role can manage plans (via Edge Functions)
-CREATE POLICY "Service role can manage plans"
-  ON public.subscription_plans FOR ALL
-  USING (auth.jwt() ->> 'role' = 'service_role')
-  WITH CHECK (auth.jwt() ->> 'role' = 'service_role');
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'subscription_plans'
+      AND policyname = 'Service role can manage plans'
+  ) THEN
+    CREATE POLICY "Service role can manage plans"
+      ON public.subscription_plans FOR ALL
+      USING (auth.jwt() ->> 'role' = 'service_role')
+      WITH CHECK (auth.jwt() ->> 'role' = 'service_role');
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_subscription_plans_slug ON public.subscription_plans(slug);
 CREATE INDEX IF NOT EXISTS idx_subscription_plans_active ON public.subscription_plans(is_active);
@@ -82,47 +97,59 @@ CREATE TABLE IF NOT EXISTS public.organization_subscriptions (
   -- Metadata
   metadata JSONB DEFAULT '{}'::JSONB,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-
-  -- Only one active subscription per organization
-  UNIQUE (organization_id) WHERE status IN ('active', 'trial', 'past_due')
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 -- Enable RLS
 ALTER TABLE public.organization_subscriptions ENABLE ROW LEVEL SECURITY;
 
--- Members can view their organization's subscription
-CREATE POLICY "Members can view organization subscription"
-  ON public.organization_subscriptions FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM public.organization_memberships om
-      WHERE om.organization_id = organization_subscriptions.organization_id
-        AND om.profile_id = auth.uid()
-        AND om.is_active = TRUE
-    )
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'organization_subscriptions'
+      AND policyname = 'Members can view organization subscription'
+  ) THEN
+    CREATE POLICY "Members can view organization subscription"
+      ON public.organization_subscriptions FOR SELECT
+      USING (
+        EXISTS (
+          SELECT 1
+          FROM public.organization_memberships om
+          WHERE om.organization_id = organization_subscriptions.organization_id
+            AND om.profile_id = auth.uid()
+            AND om.is_active = TRUE
+        )
+      );
+  END IF;
 
--- Owners can manage their organization's subscription
-CREATE POLICY "Owners can manage organization subscription"
-  ON public.organization_subscriptions FOR ALL
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM public.organizations org
-      WHERE org.id = organization_subscriptions.organization_id
-        AND org.owner_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1
-      FROM public.organizations org
-      WHERE org.id = organization_subscriptions.organization_id
-        AND org.owner_id = auth.uid()
-    )
-  );
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'organization_subscriptions'
+      AND policyname = 'Owners can manage organization subscription'
+  ) THEN
+    CREATE POLICY "Owners can manage organization subscription"
+      ON public.organization_subscriptions FOR ALL
+      USING (
+        EXISTS (
+          SELECT 1
+          FROM public.organizations org
+          WHERE org.id = organization_subscriptions.organization_id
+            AND org.owner_id = auth.uid()
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1
+          FROM public.organizations org
+          WHERE org.id = organization_subscriptions.organization_id
+            AND org.owner_id = auth.uid()
+        )
+      );
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_org_subscriptions_org ON public.organization_subscriptions(organization_id);
 CREATE INDEX IF NOT EXISTS idx_org_subscriptions_plan ON public.organization_subscriptions(plan_id);
@@ -151,24 +178,39 @@ CREATE TABLE IF NOT EXISTS public.subscription_usage (
 -- Enable RLS
 ALTER TABLE public.subscription_usage ENABLE ROW LEVEL SECURITY;
 
--- Members can view their organization's usage
-CREATE POLICY "Members can view organization usage"
-  ON public.subscription_usage FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM public.organization_memberships om
-      WHERE om.organization_id = subscription_usage.organization_id
-        AND om.profile_id = auth.uid()
-        AND om.is_active = TRUE
-    )
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'subscription_usage'
+      AND policyname = 'Members can view organization usage'
+  ) THEN
+    CREATE POLICY "Members can view organization usage"
+      ON public.subscription_usage FOR SELECT
+      USING (
+        EXISTS (
+          SELECT 1
+          FROM public.organization_memberships om
+          WHERE om.organization_id = subscription_usage.organization_id
+            AND om.profile_id = auth.uid()
+            AND om.is_active = TRUE
+        )
+      );
+  END IF;
 
--- System can update usage (via triggers)
-CREATE POLICY "System can update usage"
-  ON public.subscription_usage FOR ALL
-  USING (TRUE)
-  WITH CHECK (TRUE);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'subscription_usage'
+      AND policyname = 'System can update usage'
+  ) THEN
+    CREATE POLICY "System can update usage"
+      ON public.subscription_usage FOR ALL
+      USING (TRUE)
+      WITH CHECK (TRUE);
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_subscription_usage_org ON public.subscription_usage(organization_id);
 
@@ -176,44 +218,77 @@ CREATE INDEX IF NOT EXISTS idx_subscription_usage_org ON public.subscription_usa
 -- MATERIALIZED VIEW: ORGANIZATION PLAN LIMITS
 -- =====================================================
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS public.organization_plan_limits AS
-SELECT
-  o.id AS organization_id,
-  o.name AS organization_name,
-  sp.id AS plan_id,
-  sp.name AS plan_name,
-  sp.slug AS plan_slug,
-  sp.max_ad_accounts,
-  sp.max_users,
-  sp.has_crm_access,
-  sp.features,
-  COALESCE(su.ad_accounts_count, 0) AS current_ad_accounts,
-  COALESCE(su.active_users_count, 0) AS current_users,
-  os.status AS subscription_status,
-  os.current_period_end,
-  -- Calculate remaining capacity
-  (sp.max_ad_accounts - COALESCE(su.ad_accounts_count, 0)) AS remaining_ad_accounts,
-  (sp.max_users - COALESCE(su.active_users_count, 0)) AS remaining_users,
-  -- Check if limits are reached
-  (COALESCE(su.ad_accounts_count, 0) >= sp.max_ad_accounts) AS ad_accounts_limit_reached,
-  (COALESCE(su.active_users_count, 0) >= sp.max_users) AS users_limit_reached
-FROM public.organizations o
-LEFT JOIN public.organization_subscriptions os ON os.organization_id = o.id
-  AND os.status IN ('active', 'trial')
-LEFT JOIN public.subscription_plans sp ON sp.id = os.plan_id
-LEFT JOIN public.subscription_usage su ON su.organization_id = o.id;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname = 'organization_plan_limits'
+  ) THEN
+    EXECUTE $$
+      CREATE MATERIALIZED VIEW public.organization_plan_limits AS
+      SELECT
+        o.id AS organization_id,
+        o.name AS organization_name,
+        sp.id AS plan_id,
+        sp.name AS plan_name,
+        sp.slug AS plan_slug,
+        sp.max_ad_accounts,
+        sp.max_users,
+        sp.has_crm_access,
+        sp.features,
+        COALESCE(su.ad_accounts_count, 0) AS current_ad_accounts,
+        COALESCE(su.active_users_count, 0) AS current_users,
+        os.status AS subscription_status,
+        os.current_period_end,
+        (sp.max_ad_accounts - COALESCE(su.ad_accounts_count, 0)) AS remaining_ad_accounts,
+        (sp.max_users - COALESCE(su.active_users_count, 0)) AS remaining_users,
+        (COALESCE(su.ad_accounts_count, 0) >= sp.max_ad_accounts) AS ad_accounts_limit_reached,
+        (COALESCE(su.active_users_count, 0) >= sp.max_users) AS users_limit_reached
+      FROM public.organizations o
+      LEFT JOIN public.organization_subscriptions os ON os.organization_id = o.id
+        AND os.status IN ('active', 'trial')
+      LEFT JOIN public.subscription_plans sp ON sp.id = os.plan_id
+      LEFT JOIN public.subscription_usage su ON su.organization_id = o.id;
+    $$;
+  END IF;
+END $$;
 
--- Create index on materialized view
-CREATE UNIQUE INDEX IF NOT EXISTS idx_org_plan_limits_org ON public.organization_plan_limits(organization_id);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_matviews
+    WHERE schemaname = 'public'
+      AND matviewname = 'organization_plan_limits'
+  ) THEN
+    EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS idx_org_plan_limits_org ON public.organization_plan_limits(organization_id)';
+  END IF;
+END $$;
 
--- Grant access to materialized view
-GRANT SELECT ON public.organization_plan_limits TO authenticated, anon;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname = 'organization_plan_limits'
+  ) THEN
+    EXECUTE 'GRANT SELECT ON public.organization_plan_limits TO authenticated, anon';
+  END IF;
+END $$;
 
 -- Function to refresh the materialized view
 CREATE OR REPLACE FUNCTION public.refresh_organization_plan_limits()
 RETURNS VOID AS $$
 BEGIN
-  REFRESH MATERIALIZED VIEW CONCURRENTLY public.organization_plan_limits;
+  IF EXISTS (
+    SELECT 1 FROM pg_matviews
+    WHERE schemaname = 'public'
+      AND matviewname = 'organization_plan_limits'
+  ) THEN
+    REFRESH MATERIALIZED VIEW CONCURRENTLY public.organization_plan_limits;
+  END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -455,7 +530,16 @@ FROM public.organizations o
 ON CONFLICT (organization_id) DO NOTHING;
 
 -- Refresh materialized view
-SELECT public.refresh_organization_plan_limits();
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_matviews
+    WHERE schemaname = 'public'
+      AND matviewname = 'organization_plan_limits'
+  ) THEN
+    PERFORM public.refresh_organization_plan_limits();
+  END IF;
+END $$;
 
 -- =====================================================
 -- UPDATE TRIGGERS
@@ -485,4 +569,13 @@ CREATE TRIGGER trg_subscription_usage_updated_at
 COMMENT ON TABLE public.subscription_plans IS 'Available subscription plans with feature limits';
 COMMENT ON TABLE public.organization_subscriptions IS 'Active subscriptions for organizations';
 COMMENT ON TABLE public.subscription_usage IS 'Real-time tracking of resource usage per organization';
-COMMENT ON MATERIALIZED VIEW public.organization_plan_limits IS 'Combined view of plan limits and current usage for easy validation';
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_matviews
+    WHERE schemaname = 'public'
+      AND matviewname = 'organization_plan_limits'
+  ) THEN
+    EXECUTE $$COMMENT ON MATERIALIZED VIEW public.organization_plan_limits IS 'Combined view of plan limits and current usage for easy validation'$$;
+  END IF;
+END $$;

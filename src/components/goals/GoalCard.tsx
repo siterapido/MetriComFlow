@@ -13,6 +13,8 @@ import type { Goal } from '@/types/goals'
 import { GOAL_TYPE_METADATA, getGoalStatusColor, formatGoalValue } from '@/types/goals'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { useGoalProgress } from '@/hooks/useGoals'
+import { Sparkline } from '@/components/charts/Sparkline'
 
 interface GoalCardProps {
   goal: Goal
@@ -42,6 +44,20 @@ export function GoalCard({ goal, onEdit, onDelete, onRefresh }: GoalCardProps) {
   const isAhead = progressPercentage > expectedProgress + 5
   const isBehind = progressPercentage < expectedProgress - 5
   const isOnTrack = !isAhead && !isBehind
+
+  // Sparkline & tendência
+  const { data: progressHistory } = useGoalProgress(goal.id)
+  const sparkValuesAsc = (progressHistory || [])
+    .slice() // copy
+    .reverse() // ascendente por data
+    .map(p => p.value)
+
+  const sparkValues = sparkValuesAsc.length > 30 ? sparkValuesAsc.slice(-30) : sparkValuesAsc
+  const trendDelta = sparkValues.length >= 2 ? sparkValues[sparkValues.length - 1] - sparkValues[0] : 0
+  // Normaliza threshold em 1% do target ou valor absoluto pequeno
+  const threshold = Math.max(goal.target_value * 0.01, 0.001)
+  const trendUp = trendDelta > threshold
+  const trendDown = trendDelta < -threshold
 
   return (
     <Card className="border-border bg-gradient-to-br from-card to-accent/20 hover-lift">
@@ -141,6 +157,30 @@ export function GoalCard({ goal, onEdit, onDelete, onRefresh }: GoalCardProps) {
             </span>
           </div>
           <Progress value={Math.min(progressPercentage, 100)} className="h-2" />
+        </div>
+
+        {/* Tendência (Sparkline) */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground">Tendência</span>
+            {trendUp ? (
+              <div className="flex items-center gap-1">
+                <TrendingUp className="w-3.5 h-3.5 text-success" />
+                <span className="text-success">alta</span>
+              </div>
+            ) : trendDown ? (
+              <div className="flex items-center gap-1">
+                <TrendingDown className="w-3.5 h-3.5 text-warning" />
+                <span className="text-warning">queda</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <Minus className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-muted-foreground">estável</span>
+              </div>
+            )}
+          </div>
+          <Sparkline values={sparkValues} width={120} height={28} className="opacity-80" />
         </div>
 
         {/* Status Indicator */}

@@ -20,30 +20,61 @@ CREATE TABLE IF NOT EXISTS public.organizations (
 
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Members can view organizations they belong to"
-  ON public.organizations FOR SELECT
-  USING (
-    owner_id = auth.uid()
-    OR EXISTS (
-      SELECT 1
-      FROM public.organization_memberships om
-      WHERE om.organization_id = organizations.id
-        AND om.profile_id = auth.uid()
-        AND om.is_active = TRUE
-    )
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'organizations'
+      AND policyname = 'Members can view organizations they belong to'
+  ) THEN
+    CREATE POLICY "Members can view organizations they belong to"
+      ON public.organizations FOR SELECT
+      USING (
+        owner_id = auth.uid()
+        OR EXISTS (
+          SELECT 1
+          FROM public.organization_memberships om
+          WHERE om.organization_id = organizations.id
+            AND om.profile_id = auth.uid()
+            AND om.is_active = TRUE
+        )
+      );
+  END IF;
 
-CREATE POLICY "Owners can update their organizations"
-  ON public.organizations FOR UPDATE
-  USING (owner_id = auth.uid());
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'organizations'
+      AND policyname = 'Owners can update their organizations'
+  ) THEN
+    CREATE POLICY "Owners can update their organizations"
+      ON public.organizations FOR UPDATE
+      USING (owner_id = auth.uid());
+  END IF;
 
-CREATE POLICY "Owners can delete their organizations"
-  ON public.organizations FOR DELETE
-  USING (owner_id = auth.uid());
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'organizations'
+      AND policyname = 'Owners can delete their organizations'
+  ) THEN
+    CREATE POLICY "Owners can delete their organizations"
+      ON public.organizations FOR DELETE
+      USING (owner_id = auth.uid());
+  END IF;
 
-CREATE POLICY "Owners can create organizations"
-  ON public.organizations FOR INSERT
-  WITH CHECK (owner_id = auth.uid());
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'organizations'
+      AND policyname = 'Owners can create organizations'
+  ) THEN
+    CREATE POLICY "Owners can create organizations"
+      ON public.organizations FOR INSERT
+      WITH CHECK (owner_id = auth.uid());
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_organizations_owner ON public.organizations(owner_id);
 CREATE INDEX IF NOT EXISTS idx_organizations_slug ON public.organizations(slug);
@@ -68,40 +99,60 @@ CREATE TABLE IF NOT EXISTS public.organization_memberships (
 
 ALTER TABLE public.organization_memberships ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Members can view memberships for their organizations"
-  ON public.organization_memberships FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM public.organization_memberships om
-      WHERE om.organization_id = organization_memberships.organization_id
-        AND om.profile_id = auth.uid()
-        AND om.is_active = TRUE
-    )
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'organization_memberships'
+      AND policyname = 'Members can view memberships for their organizations'
+  ) THEN
+    CREATE POLICY "Members can view memberships for their organizations"
+      ON public.organization_memberships FOR SELECT
+      USING (
+        EXISTS (
+          SELECT 1
+          FROM public.organization_memberships om
+          WHERE om.organization_id = organization_memberships.organization_id
+            AND om.profile_id = auth.uid()
+            AND om.is_active = TRUE
+        )
+      );
+  END IF;
 
-CREATE POLICY "Owners can manage memberships"
-  ON public.organization_memberships FOR ALL
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM public.organizations org
-      WHERE org.id = organization_memberships.organization_id
-        AND org.owner_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1
-      FROM public.organizations org
-      WHERE org.id = organization_memberships.organization_id
-        AND org.owner_id = auth.uid()
-    )
-  );
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'organization_memberships'
+      AND policyname = 'Owners can manage memberships'
+  ) THEN
+    CREATE POLICY "Owners can manage memberships"
+      ON public.organization_memberships FOR ALL
+      USING (
+        EXISTS (
+          SELECT 1
+          FROM public.organizations org
+          WHERE org.id = organization_memberships.organization_id
+            AND org.owner_id = auth.uid()
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1
+          FROM public.organizations org
+          WHERE org.id = organization_memberships.organization_id
+            AND org.owner_id = auth.uid()
+        )
+      );
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_org_membership_org ON public.organization_memberships(organization_id);
 CREATE INDEX IF NOT EXISTS idx_org_membership_profile ON public.organization_memberships(profile_id);
 CREATE INDEX IF NOT EXISTS idx_org_membership_active ON public.organization_memberships(is_active);
+
+DROP TRIGGER IF EXISTS trg_ensure_owner_membership ON public.organizations;
+DROP FUNCTION IF EXISTS public.ensure_owner_membership();
 
 CREATE OR REPLACE FUNCTION public.ensure_owner_membership()
 RETURNS TRIGGER AS $$
@@ -119,12 +170,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS trg_ensure_owner_membership ON public.organizations;
-
 CREATE TRIGGER trg_ensure_owner_membership
   AFTER INSERT ON public.organizations
   FOR EACH ROW
   EXECUTE FUNCTION public.ensure_owner_membership();
+
+DROP TRIGGER IF EXISTS trg_org_memberships_updated_at ON public.organization_memberships;
+DROP TRIGGER IF EXISTS trg_organizations_updated_at ON public.organizations;
+DROP FUNCTION IF EXISTS public.set_timestamp_updated_at();
 
 CREATE OR REPLACE FUNCTION public.set_timestamp_updated_at()
 RETURNS TRIGGER AS $$
@@ -134,13 +187,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_org_memberships_updated_at ON public.organization_memberships;
 CREATE TRIGGER trg_org_memberships_updated_at
   BEFORE UPDATE ON public.organization_memberships
   FOR EACH ROW
   EXECUTE FUNCTION public.set_timestamp_updated_at();
 
-DROP TRIGGER IF EXISTS trg_organizations_updated_at ON public.organizations;
 CREATE TRIGGER trg_organizations_updated_at
   BEFORE UPDATE ON public.organizations
   FOR EACH ROW
@@ -150,59 +201,86 @@ CREATE TRIGGER trg_organizations_updated_at
 -- TEAM INVITATIONS
 -- =====================================================
 
-CREATE TABLE IF NOT EXISTS public.team_invitations (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  email TEXT NOT NULL,
-  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  invited_by UUID NOT NULL REFERENCES public.profiles(id),
-  role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'manager', 'member')),
-  user_type user_type NOT NULL DEFAULT 'sales',
-  token TEXT NOT NULL UNIQUE,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'revoked')),
-  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-  expires_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (NOW() + INTERVAL '7 days'),
-  accepted_at TIMESTAMP WITH TIME ZONE,
-  accepted_by UUID REFERENCES public.profiles(id),
-  metadata JSONB DEFAULT '{}'::JSONB,
-  UNIQUE (email, organization_id, status) WHERE status = 'pending'
-);
+DO $$
+BEGIN
+  IF to_regclass('public.team_invitations') IS NULL THEN
+    CREATE TABLE public.team_invitations (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      email TEXT NOT NULL,
+      organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+      invited_by UUID NOT NULL REFERENCES public.profiles(id),
+      role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'manager', 'member')),
+      user_type user_type NOT NULL DEFAULT 'sales',
+      token TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'revoked')),
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (NOW() + INTERVAL '7 days'),
+      accepted_at TIMESTAMP WITH TIME ZONE,
+      accepted_by UUID REFERENCES public.profiles(id),
+      metadata JSONB DEFAULT '{}'::JSONB
+    );
+  END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_team_invitations_pending_unique
+  ON public.team_invitations (email, organization_id)
+  WHERE status = 'pending';
 
 ALTER TABLE public.team_invitations ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Owners can view organization invitations"
-  ON public.team_invitations FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM public.organizations org
-      WHERE org.id = team_invitations.organization_id
-        AND org.owner_id = auth.uid()
-    )
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'team_invitations'
+      AND policyname = 'Owners can view organization invitations'
+  ) THEN
+    CREATE POLICY "Owners can view organization invitations"
+      ON public.team_invitations FOR SELECT
+      USING (
+        EXISTS (
+          SELECT 1
+          FROM public.organizations org
+          WHERE org.id = team_invitations.organization_id
+            AND org.owner_id = auth.uid()
+        )
+      );
+  END IF;
 
-CREATE POLICY "Owners can manage organization invitations"
-  ON public.team_invitations FOR ALL
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM public.organizations org
-      WHERE org.id = team_invitations.organization_id
-        AND org.owner_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1
-      FROM public.organizations org
-      WHERE org.id = team_invitations.organization_id
-        AND org.owner_id = auth.uid()
-    )
-  );
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'team_invitations'
+      AND policyname = 'Owners can manage organization invitations'
+  ) THEN
+    CREATE POLICY "Owners can manage organization invitations"
+      ON public.team_invitations FOR ALL
+      USING (
+        EXISTS (
+          SELECT 1
+          FROM public.organizations org
+          WHERE org.id = team_invitations.organization_id
+            AND org.owner_id = auth.uid()
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1
+          FROM public.organizations org
+          WHERE org.id = team_invitations.organization_id
+            AND org.owner_id = auth.uid()
+        )
+      );
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_team_invitations_token ON public.team_invitations(token);
 CREATE INDEX IF NOT EXISTS idx_team_invitations_email ON public.team_invitations(email);
 CREATE INDEX IF NOT EXISTS idx_team_invitations_org ON public.team_invitations(organization_id);
 CREATE INDEX IF NOT EXISTS idx_team_invitations_status ON public.team_invitations(status);
+
+DROP FUNCTION IF EXISTS public.expire_old_team_invitations();
 
 CREATE OR REPLACE FUNCTION public.expire_old_team_invitations()
 RETURNS TRIGGER AS $$
@@ -219,6 +297,8 @@ CREATE TRIGGER trg_expire_team_invitation
   BEFORE INSERT OR UPDATE ON public.team_invitations
   FOR EACH ROW
   EXECUTE FUNCTION public.expire_old_team_invitations();
+
+DROP FUNCTION IF EXISTS public.get_invitation_by_token(TEXT);
 
 CREATE OR REPLACE FUNCTION public.get_invitation_by_token(invitation_token TEXT)
 RETURNS TABLE (
@@ -287,4 +367,3 @@ BEGIN
   END LOOP;
 END;
 $$;
-
