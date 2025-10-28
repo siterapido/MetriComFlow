@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, MapPin, User, FileText, CreditCard } from "lucide-react";
+import { Loader2, MapPin, User, FileText, CreditCard, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -23,6 +23,7 @@ import {
   formatCEP,
   validateCEP,
 } from "@/lib/cpf-cnpj-validator";
+import { PaymentMethodSelector } from "@/components/subscription/PaymentMethodSelector";
 
 const creditCardSchema = z.object({
   holderName: z.string().min(3, "Nome impresso no cartão é obrigatório"),
@@ -65,8 +66,8 @@ const checkoutSchema = z
     province: z.string().min(2, "Bairro é obrigatório"),
     city: z.string().min(2, "Cidade é obrigatória"),
     state: z.string().length(2, "Estado deve ter 2 letras (ex: SP)"),
-    paymentMethod: z.literal("CREDIT_CARD"),
-    creditCard: creditCardSchema,
+    paymentMethod: z.enum(["CREDIT_CARD", "PIX"]),
+    creditCard: creditCardSchema.optional(),
     accountPassword: z
       .string()
       .min(8, "Senha deve ter pelo menos 8 caracteres")
@@ -77,6 +78,20 @@ const checkoutSchema = z
   .refine((data) => data.accountPassword === data.confirmPassword, {
     message: "As senhas não conferem",
     path: ["confirmPassword"],
+  })
+  .superRefine((data, ctx) => {
+    if (data.paymentMethod === "CREDIT_CARD") {
+      const creditResult = creditCardSchema.safeParse(data.creditCard);
+      if (!creditResult.success) {
+        for (const issue of creditResult.error.issues) {
+          ctx.addIssue({
+            code: issue.code,
+            message: issue.message,
+            path: ["creditCard", ...(issue.path ?? [])],
+          });
+        }
+      }
+    }
   });
 
 export type CheckoutFormData = z.infer<typeof checkoutSchema>;
@@ -116,6 +131,7 @@ export function CheckoutForm({ planName, planPrice, onSubmit, isLoading = false 
       confirmPassword: "",
     },
   });
+  const paymentMethod = form.watch("paymentMethod");
 
   // Auto-fetch address from CEP using ViaCEP API
   const handleCepChange = async (cep: string) => {
@@ -166,70 +182,112 @@ export function CheckoutForm({ planName, planPrice, onSubmit, isLoading = false 
           </div>
         </div>
 
-        {/* Credit Card Section - Always visible */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="bg-gradient-to-r from-primary/10 to-secondary/10 border-b border-border px-6 py-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center shadow-md">
-                <CreditCard className="w-5 h-5 text-white" />
+        {/* Payment method */}
+        <FormField
+          control={form.control}
+          name="paymentMethod"
+          render={({ field }) => (
+            <FormItem>
+              <FormControl>
+                <PaymentMethodSelector value={field.value} onChange={field.onChange} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Credit Card Section */}
+        {paymentMethod === "CREDIT_CARD" && (
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="bg-gradient-to-r from-primary/10 to-secondary/10 border-b border-border px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center shadow-md">
+                  <CreditCard className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-xl font-bold text-foreground">Dados do Cartão</h3>
               </div>
-              <h3 className="text-xl font-bold text-foreground">Dados do Cartão</h3>
             </div>
-          </div>
-          <div className="p-6 space-y-4">
-            <FormField
-              control={form.control}
-              name="creditCard.holderName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nome impresso no cartão *</FormLabel>
-                  <FormControl>
-                    <Input placeholder="João da Silva" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-6 space-y-4">
               <FormField
                 control={form.control}
-                name="creditCard.number"
-                render={({ field }) => (
-                  <FormItem className="md:col-span-2">
-                    <FormLabel>Número do cartão *</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="0000 0000 0000 0000"
-                        {...field}
-                        onChange={(e) => {
-                          const digits = e.target.value.replace(/\D/g, "");
-                          const groups = digits.match(/.{1,4}/g) || [];
-                          field.onChange(groups.join(" "));
-                        }}
-                        maxLength={23}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="creditCard.ccv"
+                name="creditCard.holderName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>CVV *</FormLabel>
+                    <FormLabel>Nome impresso no cartão *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="João da Silva" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField
+                  control={form.control}
+                  name="creditCard.number"
+                  render={({ field }) => (
+                    <FormItem className="md:col-span-2">
+                      <FormLabel>Número do cartão *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="0000 0000 0000 0000"
+                          {...field}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, "");
+                            const groups = digits.match(/.{1,4}/g) || [];
+                            field.onChange(groups.join(" "));
+                          }}
+                          maxLength={23}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="creditCard.ccv"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>CVV *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="123"
+                          {...field}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, "");
+                            field.onChange(digits);
+                          }}
+                          maxLength={4}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="creditCard.expiry"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Validade (MM/AA) *</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="123"
+                        placeholder="MM/AA"
                         {...field}
                         onChange={(e) => {
                           const digits = e.target.value.replace(/\D/g, "");
-                          field.onChange(digits);
+                          let formatted = digits;
+                          if (digits.length >= 3) {
+                            formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;
+                          }
+                          field.onChange(formatted);
                         }}
-                        maxLength={4}
+                        maxLength={5}
                       />
                     </FormControl>
                     <FormMessage />
@@ -237,34 +295,25 @@ export function CheckoutForm({ planName, planPrice, onSubmit, isLoading = false 
                 )}
               />
             </div>
-
-            <FormField
-              control={form.control}
-              name="creditCard.expiry"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Validade (MM/AA) *</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="MM/AA"
-                      {...field}
-                      onChange={(e) => {
-                        const digits = e.target.value.replace(/\D/g, "");
-                        let formatted = digits;
-                        if (digits.length >= 3) {
-                          formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;
-                        }
-                        field.onChange(formatted);
-                      }}
-                      maxLength={5}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
           </div>
-        </div>
+        )}
+
+        {paymentMethod === "PIX" && (
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="bg-gradient-to-r from-success/10 to-success/5 border-b border-border px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-success to-emerald-600 rounded-lg flex items-center justify-center shadow-md">
+                  <QrCode className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-xl font-bold text-foreground">Pagamento via PIX</h3>
+              </div>
+            </div>
+            <div className="p-6 space-y-3 text-sm text-muted-foreground">
+              <p>Após confirmar os dados, geramos um QR Code e um código PIX com validade de 1 hora.</p>
+              <p>Assim que o pagamento for reconhecido, você receberá a confirmação por email.</p>
+            </div>
+          </div>
+        )}
 
         {/* Personal Information */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">

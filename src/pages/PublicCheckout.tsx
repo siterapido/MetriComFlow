@@ -73,7 +73,7 @@ export default function PublicCheckout() {
     }
     setSubmitting(true);
     try {
-      const paymentMethod = formData.paymentMethod; // CREDIT_CARD | PIX | BOLETO
+      const paymentMethod = formData.paymentMethod; // CREDIT_CARD | PIX
       const password = formData.accountPassword;
       const email = formData.billingEmail.trim().toLowerCase();
       const sanitizedPhone = stripNonNumeric(formData.billingPhone);

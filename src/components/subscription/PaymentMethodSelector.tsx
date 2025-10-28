@@ -1,8 +1,8 @@
-import { CreditCard, QrCode, FileText } from "lucide-react";
+import { CreditCard, QrCode } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-export type PaymentMethod = "CREDIT_CARD" | "PIX" | "BOLETO";
+export type PaymentMethod = "CREDIT_CARD" | "PIX";
 
 interface PaymentMethodSelectorProps {
   value: PaymentMethod;
@@ -24,13 +24,6 @@ export function PaymentMethodSelector({ value, onChange }: PaymentMethodSelector
       description: "Aprovação em até 1 hora",
       icon: QrCode,
       color: "from-success to-green-600",
-    },
-    {
-      value: "BOLETO" as PaymentMethod,
-      label: "Boleto Bancário",
-      description: "Aprovação em até 3 dias úteis",
-      icon: FileText,
-      color: "from-warning to-orange-600",
     },
   ];
 
