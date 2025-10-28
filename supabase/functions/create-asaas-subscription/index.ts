@@ -246,9 +246,10 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       console.log("⚠️ ASAAS_API_KEY not set. Using mock customer:", asaasCustomerId);
     }
 
-    // 4. Calculate next due date (today + 30 days or immediate)
+    // 4. Calculate next due date
+    // For credit card: charge immediately (today)
+    // For PIX/BOLETO: charge today (user pays when ready)
     const nextDueDate = new Date();
-    nextDueDate.setDate(nextDueDate.getDate() + 30);
     const formattedDueDate = nextDueDate.toISOString().split("T")[0];
 
     // 5. Create subscription in Asaas
