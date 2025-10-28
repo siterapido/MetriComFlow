@@ -148,6 +148,22 @@ export default function PublicCheckout() {
             console.warn("Falha ao obter sessão após signUp:", loginError);
           }
         }
+
+        // Promote new user to owner with organization creation
+        if (signUpData?.user) {
+          try {
+            const { error: promoteError } = await supabase.functions.invoke("promote-owner", {
+              body: { userId: signUpData.user.id }
+            });
+            if (promoteError) {
+              console.warn("Falha ao promover usuário a owner:", promoteError);
+            } else {
+              console.log("Usuário promovido a owner com sucesso");
+            }
+          } catch (promoteErr) {
+            console.warn("Erro ao promover usuário:", promoteErr);
+          }
+        }
       }
 
       if (!accountReady) {
