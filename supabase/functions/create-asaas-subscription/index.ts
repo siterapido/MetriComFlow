@@ -10,11 +10,17 @@ const corsHeaders = {
 };
 
 const ASAAS_API_KEY = (globalThis as any).Deno?.env.get("ASAAS_API_KEY") || "";
-const ASAAS_API_URL = "https://api.asaas.com/v3";
+// Detect environment from API key format (sandbox keys start with $aact_hmlg_)
+const IS_SANDBOX = ASAAS_API_KEY.startsWith("$aact_hmlg_");
+const ASAAS_API_URL = IS_SANDBOX ? "https://sandbox.asaas.com/api/v3" : "https://api.asaas.com/v3";
 const SUPABASE_URL = (globalThis as any).Deno?.env.get("SUPABASE_URL")!;
 // Note: Supabase secrets cannot start with "SUPABASE_". Use SERVICE_ROLE_KEY.
 const SERVICE_ROLE_KEY = (globalThis as any).Deno?.env.get("SERVICE_ROLE_KEY")!;
-const ASAAS_MOCK_MODE = !ASAAS_API_KEY;
+// Allow explicit mock mode override via env, otherwise fallback to missing ASAAS_API_KEY
+const ASAAS_MOCK_MODE = ((globalThis as any).Deno?.env.get("ASAAS_MOCK_MODE") === "true") || !ASAAS_API_KEY;
+
+console.log(`🔧 Asaas Environment: ${IS_SANDBOX ? "SANDBOX" : "PRODUCTION"}`);
+console.log(`🔗 Asaas API URL: ${ASAAS_API_URL}`);
 
 interface CreateSubscriptionRequest {
   // Internal Supabase subscription ID (existing org flow). Optional in public checkout flow
@@ -29,6 +35,10 @@ interface CreateSubscriptionRequest {
   billingAddress: {
     postalCode: string;
     addressNumber: string;
+    street: string;
+    province: string;
+    city: string;
+    state: string;
     addressComplement?: string;
   };
   billingType: "CREDIT_CARD" | "PIX" | "BOLETO";
@@ -73,6 +83,17 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     console.log(
       `🔄 Creating Asaas subscription for: ${subscriptionId ?? "PUBLIC_CHECKOUT"} | Plan: ${planSlug} | Type: ${billingType}`
     );
+
+    if (
+      !billingAddress?.street ||
+      !billingAddress?.province ||
+      !billingAddress?.city ||
+      !billingAddress?.state
+    ) {
+      throw new Error(
+        "Endereço incompleto. Informe logradouro, bairro, cidade e estado para continuar."
+      );
+    }
 
     // 1. Get subscription plan details
     const { data: plan, error: planError } = await supabase
@@ -164,12 +185,25 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
 
     if (!asaasCustomerId && !ASAAS_MOCK_MODE) {
       // Create customer in Asaas
-      const customerPayload = {
+      // Sanitize phone and postal code to meet Asaas format expectations
+      const sanitizedPhone = (billingPhone || "").replace(/\D/g, "");
+      const sanitizedPostalCode = (billingAddress.postalCode || "").replace(/\D/g, "");
+
+      const customerPayload: Record<string, any> = {
         name: billingName,
         email: billingEmail,
-        cpfCnpj: billingCpfCnpj,
-        phone: billingPhone,
-        postalCode: billingAddress.postalCode,
+        cpfCnpj: (billingCpfCnpj || "").replace(/\D/g, ""),
+        // Envia phone (10 dígitos) ou mobilePhone (11 dígitos). Caso contrário, omite.
+        ...(sanitizedPhone.length === 11
+          ? { mobilePhone: sanitizedPhone }
+          : sanitizedPhone.length === 10
+          ? { phone: sanitizedPhone }
+          : {}),
+        address: billingAddress.street,
+        province: billingAddress.province,
+        city: billingAddress.city,
+        state: billingAddress.state,
+        postalCode: sanitizedPostalCode,
         addressNumber: billingAddress.addressNumber,
         addressComplement: billingAddress.addressComplement,
         externalReference: organizationId, // Link to our org
@@ -234,29 +268,56 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
 
       // Add credit card info if provided
       if (billingType === "CREDIT_CARD" && creditCard) {
+        // Sanitize credit card data
+        const sanitizedCCNumber = creditCard.number.replace(/\D/g, "");
+        const sanitizedCCV = creditCard.ccv.replace(/\D/g, "");
+
         asaasSubscriptionPayload.creditCard = {
-          holderName: creditCard.holderName,
-          number: creditCard.number,
-          expiryMonth: creditCard.expiryMonth,
-          expiryYear: creditCard.expiryYear,
-          ccv: creditCard.ccv,
+          holderName: creditCard.holderName.trim(),
+          number: sanitizedCCNumber,
+          expiryMonth: creditCard.expiryMonth.padStart(2, "0"), // Ensure 2 digits
+          expiryYear: creditCard.expiryYear, // Should be YYYY format
+          ccv: sanitizedCCV,
         };
+
+        // Sanitize holder info to match Asaas expected formats
+        const ccSanitizedPhone = (billingPhone || "").replace(/\D/g, "");
+        const ccSanitizedPostalCode = (billingAddress.postalCode || "").replace(/\D/g, "");
+        const ccSanitizedCpfCnpj = (billingCpfCnpj || "").replace(/\D/g, "");
 
         asaasSubscriptionPayload.creditCardHolderInfo = {
-          name: billingName,
-          email: billingEmail,
-          cpfCnpj: billingCpfCnpj,
-          postalCode: billingAddress.postalCode,
-          addressNumber: billingAddress.addressNumber,
-          addressComplement: billingAddress.addressComplement,
-          phone: billingPhone,
-          mobilePhone: billingPhone,
+          name: billingName.trim(),
+          email: billingEmail.trim().toLowerCase(),
+          cpfCnpj: ccSanitizedCpfCnpj,
+          postalCode: ccSanitizedPostalCode,
+          addressNumber: billingAddress.addressNumber.trim(),
+          address: billingAddress.street.trim(),
+          province: billingAddress.province.trim(),
+          city: billingAddress.city.trim(),
+          state: billingAddress.state.trim().toUpperCase(),
+          ...(billingAddress.addressComplement ? { addressComplement: billingAddress.addressComplement.trim() } : {}),
+          ...(ccSanitizedPhone.length === 11
+            ? { mobilePhone: ccSanitizedPhone }
+            : ccSanitizedPhone.length === 10
+            ? { phone: ccSanitizedPhone }
+            : {}),
         };
 
+        // Add remoteIp if provided (required for some fraud prevention)
         if (remoteIp) {
-          asaasSubscriptionPayload.remoteIp = remoteIp;
+          asaasSubscriptionPayload.creditCardHolderInfo.remoteIp = remoteIp;
         }
       }
+
+      // Log payload for debugging (without sensitive data)
+      console.log("🔄 Creating Asaas subscription with payload:", JSON.stringify({
+        customer: asaasSubscriptionPayload.customer,
+        billingType: asaasSubscriptionPayload.billingType,
+        value: asaasSubscriptionPayload.value,
+        cycle: asaasSubscriptionPayload.cycle,
+        hasCreditCard: !!asaasSubscriptionPayload.creditCard,
+        hasCreditCardHolderInfo: !!asaasSubscriptionPayload.creditCardHolderInfo,
+      }, null, 2));
 
       const asaasResponse = await fetch(`${ASAAS_API_URL}/subscriptions`, {
         method: "POST",
@@ -269,9 +330,22 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
 
       if (!asaasResponse.ok) {
         const errorData = await asaasResponse.json();
-        throw new Error(
-          `Failed to create Asaas subscription: ${JSON.stringify(errorData)}`
-        );
+        console.error("❌ Asaas API error:", JSON.stringify(errorData, null, 2));
+
+        // Extract user-friendly error message
+        let errorMessage = "Falha ao processar pagamento";
+        if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+          const firstError = errorData.errors[0];
+          if (firstError.code === "invalid_creditCard") {
+            errorMessage = "Transação não autorizada. Verifique os dados do cartão de crédito e tente novamente.";
+          } else if (firstError.description) {
+            errorMessage = firstError.description;
+          }
+        } else if (errorData.error) {
+          errorMessage = errorData.error;
+        }
+
+        throw new Error(errorMessage);
       }
 
       const asaasSubscription = await asaasResponse.json();

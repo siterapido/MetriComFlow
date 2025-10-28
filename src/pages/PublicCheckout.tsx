@@ -95,6 +95,10 @@ export default function PublicCheckout() {
           billingAddress: {
             postalCode: stripNonNumeric(formData.postalCode),
             addressNumber: formData.addressNumber,
+            street: formData.street?.trim(),
+            province: formData.province?.trim(),
+            city: formData.city?.trim(),
+            state: formData.state?.trim().toUpperCase(),
             addressComplement: formData.complement || undefined,
           },
           billingType: paymentMethod,
@@ -123,8 +127,12 @@ export default function PublicCheckout() {
       if (!data?.success) {
         console.error("API returned error:", data);
         const errorMsg = data?.error || "Falha ao criar assinatura.";
-        const detailsMsg = data?.details ? `\n\nDetalhes técnicos: ${data.details}` : "";
-        toast.error(errorMsg + detailsMsg, { duration: 10000 });
+
+        // Show user-friendly error without technical details
+        toast.error(errorMsg, {
+          duration: 10000,
+          description: "Por favor, verifique os dados informados e tente novamente."
+        });
         throw new Error(errorMsg);
       }
 

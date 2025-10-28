@@ -88,17 +88,23 @@ async function testAsaasSubscription() {
     // 4. Call Edge Function to create Asaas subscription
     console.log('\n4️⃣ Chamando Edge Function para criar assinatura no Asaas...');
 
-    const payload = {
-      subscriptionId: subscription.id,
-      planSlug: 'basico',
-      billingName: 'Teste Asaas',
-      billingEmail: 'teste@metricom.com.br',
-      billingCpfCnpj: '12345678901', // CPF de teste
-      billingPhone: '11999999999',
-      billingAddress: {
-        postalCode: '01310-100',
-        addressNumber: '123',
+  const payload = {
+    subscriptionId: subscription.id,
+    planSlug: 'basico',
+    billingName: 'Teste Asaas',
+    billingEmail: 'teste@metricom.com.br',
+    // CPF válido (apenas números). Exemplo conhecido usado em testes: 529.982.247-25
+    billingCpfCnpj: '52998224725',
+    // Telefone em formato E.164 (com código do país BR 55). A função envia mobilePhone quando tiver 11+ dígitos
+    billingPhone: '+5511999999999',
+    billingAddress: {
+      postalCode: '01310-100',
+      street: 'Avenida Paulista',
+      addressNumber: '123',
         addressComplement: 'Apto 45',
+        province: 'Bela Vista',
+        city: 'São Paulo',
+        state: 'SP',
       },
       billingType: 'BOLETO', // Usar boleto para teste (não cobra cartão de verdade)
     };
@@ -113,7 +119,25 @@ async function testAsaasSubscription() {
     );
 
     if (edgeFunctionError) {
-      console.error('   ❌ Erro na Edge Function:', edgeFunctionError);
+      console.error('   ❌ Erro na Edge Function (invoke):', edgeFunctionError);
+
+      // Diagnóstico adicional: chamar diretamente a URL da função para obter o corpo da resposta
+      const functionsUrl = `${SUPABASE_URL}/functions/v1/create-asaas-subscription`;
+      console.log(`\n   🔎 Tentando obter detalhes direto da função: POST ${functionsUrl}`);
+      const directRes = await fetch(functionsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Em ambientes protegidos, a função pode exigir Authorization. Usamos a service role aqui já que é um teste controlado.
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const directText = await directRes.text();
+      console.log('   🧾 Status:', directRes.status);
+      console.log('   🧾 Body:', directText);
+
       throw edgeFunctionError;
     }
 

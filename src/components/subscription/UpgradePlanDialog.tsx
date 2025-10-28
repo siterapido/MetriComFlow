@@ -68,6 +68,10 @@ export function UpgradePlanDialog({
             billingAddress: {
               postalCode: stripNonNumeric(data.postalCode),
               addressNumber: data.addressNumber,
+              street: data.street?.trim(),
+              province: data.province?.trim(),
+              city: data.city?.trim(),
+              state: data.state?.trim().toUpperCase(),
               addressComplement: data.complement || undefined,
             },
             billingType: data.paymentMethod,

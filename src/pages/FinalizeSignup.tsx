@@ -36,29 +36,65 @@ export default function FinalizeSignup() {
     }
     setIsSubmitting(true);
     try {
+      // Tenta criar nova conta.
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
       });
-      if (signUpError) throw signUpError;
 
-      // Attempt to claim the organization by invoking a backend function (to be implemented)
-      const { error: claimError } = await supabase.functions.invoke("claim-account", {
+      // Alguns projetos exigem confirmação por email e não retornam sessão aqui.
+      // Para garantir que temos JWT ativo antes de invocar a função, tenta login.
+      let loggedIn = false;
+      if (signUpError) {
+        const msg = String(signUpError?.message || signUpError).toLowerCase();
+        const isAlreadyRegistered = msg.includes("already") || msg.includes("registrado") || msg.includes("existing");
+        if (isAlreadyRegistered) {
+          // Conta já existe: faz login para prosseguir com a reivindicação.
+          const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+          if (loginError) throw loginError;
+          loggedIn = true;
+        } else {
+          throw signUpError;
+        }
+      } else {
+        // Caso não haja sessão, tenta login para garantir JWT.
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData?.session) {
+          const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+          if (loginError) {
+            // Se o projeto exigir confirmação por email, informa ao usuário.
+            console.warn("Falha ao obter sessão após signUp:", loginError);
+          } else {
+            loggedIn = true;
+          }
+        } else {
+          loggedIn = true;
+        }
+      }
+
+      // Invoca função para reivindicar organização
+      const { data: claimData, error: claimError } = await supabase.functions.invoke("claim-account", {
         body: {
           claimToken: claim.claimToken,
           organizationId: claim.organizationId,
           subscriptionId: claim.subscriptionId,
         },
       });
+
       if (claimError) {
-        // The function might not exist yet; inform the user gracefully.
-        console.warn("claim-account not available:", claimError);
+        console.warn("Falha ao invocar claim-account:", claimError);
       }
 
-      toast.success(
-        "Cadastro criado! Enviamos um email de confirmação. Após confirmar, você poderá acessar o painel."
-      );
-      navigate("/login");
+      if (claimData?.success) {
+        toast.success("Conta criada e organização reivindicada com sucesso!");
+      } else {
+        toast.success(
+          "Cadastro criado! Enviamos um email de confirmação. Após confirmar, você poderá acessar o painel."
+        );
+      }
+
+      // Se já estiver logado, pode ir direto ao dashboard; caso contrário, direciona ao login
+      navigate(loggedIn ? "/dashboard" : "/login");
     } catch (err: any) {
       console.error(err);
       toast.error(String(err?.message || err));

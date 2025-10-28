@@ -85,7 +85,7 @@ async function testCreditCardCheckout() {
         postalCode: '01310100',
         street: 'Avenida Paulista',
         addressNumber: '1000',
-        complement: 'Sala 101',
+        addressComplement: 'Sala 101',
         province: 'Bela Vista',
         city: 'São Paulo',
         state: 'SP',
