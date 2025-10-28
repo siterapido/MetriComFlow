@@ -361,6 +361,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
 
       if (billingType === "PIX") {
         try {
+          // Step 1: Get the payments for the subscription
           const paymentsResponse = await fetch(
             `${ASAAS_API_URL}/subscriptions/${asaasSubscriptionId}/payments?limit=5`,
             {
@@ -373,6 +374,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
           );
 
           const paymentsText = await paymentsResponse.text();
+          console.log(`📥 Payments response (${paymentsResponse.status}):`, paymentsText);
 
           if (!paymentsResponse.ok) {
             console.warn(
@@ -393,31 +395,49 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
             }) || paymentsArray[0];
 
             if (pendingPayment) {
+              console.log(`💳 Found pending payment: ${pendingPayment.id}`);
+
+              // Step 2: Generate QR Code for the payment
+              const qrCodeResponse = await fetch(
+                `${ASAAS_API_URL}/payments/${pendingPayment.id}/pixQrCode`,
+                {
+                  method: "GET",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "access_token": ASAAS_API_KEY!,
+                  },
+                }
+              );
+
+              const qrCodeText = await qrCodeResponse.text();
+              console.log(`📱 QR Code response (${qrCodeResponse.status}):`, qrCodeText);
+
+              let qrCodeData = null;
+              if (qrCodeResponse.ok) {
+                qrCodeData = JSON.parse(qrCodeText);
+              } else {
+                console.warn(`⚠️ Failed to generate QR Code for payment ${pendingPayment.id}:`, qrCodeText);
+              }
+
               pixDetails = {
                 paymentId: pendingPayment.id,
                 status: pendingPayment.status,
                 dueDate: pendingPayment.dueDate,
-                pixExpiresAt:
-                  pendingPayment.pixQrCodeExpirationDate ||
-                  pendingPayment.pixExpirationDate ||
-                  pendingPayment.dueDate,
-                copyPasteCode:
-                  pendingPayment.pixCopiaECola ||
-                  pendingPayment.identificationField ||
-                  pendingPayment.digitableLine ||
-                  pendingPayment.payload,
-                qrCodeImage:
-                  pendingPayment.pixQrCodeImage ||
-                  pendingPayment.qrCodeImage ||
-                  pendingPayment.qrCode ||
-                  null,
+                pixExpiresAt: qrCodeData?.expirationDate || pendingPayment.dueDate,
+                copyPasteCode: qrCodeData?.payload || null,
+                qrCodeImage: qrCodeData?.encodedImage || null,
                 paymentLink:
-                  pendingPayment.pixUrl ||
                   pendingPayment.invoiceUrl ||
                   pendingPayment.bankSlipUrl ||
-                  pendingPayment.paymentLink ||
                   paymentLink,
               };
+
+              console.log("✅ PIX details generated:", {
+                paymentId: pixDetails.paymentId,
+                hasQrCode: !!pixDetails.qrCodeImage,
+                hasCopyPasteCode: !!pixDetails.copyPasteCode,
+                expiresAt: pixDetails.pixExpiresAt,
+              });
             }
           }
         } catch (pixErr) {
