@@ -85,42 +85,73 @@ export default function PublicCheckout() {
         expiryYear = yy?.length === 2 ? `20${yy}` : yy;
       }
 
-      const { data, error } = await supabase.functions.invoke("create-asaas-subscription", {
-        body: {
-          planSlug: plan.slug,
-          billingName: formData.billingName,
-          billingEmail: formData.billingEmail,
-          billingCpfCnpj: stripNonNumeric(formData.billingCpfCnpj),
-          billingPhone: stripNonNumeric(formData.billingPhone),
-          billingAddress: {
-            postalCode: stripNonNumeric(formData.postalCode),
-            addressNumber: formData.addressNumber,
-            street: formData.street?.trim(),
-            province: formData.province?.trim(),
-            city: formData.city?.trim(),
-            state: formData.state?.trim().toUpperCase(),
-            addressComplement: formData.complement || undefined,
-          },
-          billingType: paymentMethod,
-          creditCard:
-            paymentMethod === "CREDIT_CARD"
-              ? {
-                  holderName: formData.creditCard.holderName,
-                  number: String(formData.creditCard.number).replace(/\s/g, ""),
-                  expiryMonth,
-                  expiryYear,
-                  ccv: stripNonNumeric(formData.creditCard.ccv),
-                }
-              : undefined,
+      const requestBody = {
+        planSlug: plan.slug,
+        billingName: formData.billingName,
+        billingEmail: formData.billingEmail,
+        billingCpfCnpj: stripNonNumeric(formData.billingCpfCnpj),
+        billingPhone: stripNonNumeric(formData.billingPhone),
+        billingAddress: {
+          postalCode: stripNonNumeric(formData.postalCode),
+          addressNumber: formData.addressNumber,
+          street: formData.street?.trim(),
+          province: formData.province?.trim(),
+          city: formData.city?.trim(),
+          state: formData.state?.trim().toUpperCase(),
+          addressComplement: formData.complement || undefined,
         },
+        billingType: paymentMethod,
+        creditCard:
+          paymentMethod === "CREDIT_CARD"
+            ? {
+                holderName: formData.creditCard.holderName,
+                number: String(formData.creditCard.number).replace(/\s/g, ""),
+                expiryMonth,
+                expiryYear,
+                ccv: stripNonNumeric(formData.creditCard.ccv),
+              }
+            : undefined,
+      };
+
+      console.log("📤 Sending to Edge Function:", JSON.stringify({
+        ...requestBody,
+        creditCard: requestBody.creditCard ? { ...requestBody.creditCard, number: '****', ccv: '***' } : undefined
+      }, null, 2));
+
+      // Use fetch directly to get better error messages
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/create-asaas-subscription`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify(requestBody),
       });
 
-      console.log("📦 API Response:", { data, error });
+      const responseText = await response.text();
+      console.log("📦 Response Status:", response.status, response.statusText);
+      console.log("📦 Response Body:", responseText);
 
-      if (error) {
-        console.error("Edge Function error:", error);
-        const errorMsg = error.message || "Erro ao comunicar com servidor";
-        toast.error(errorMsg);
+      let data;
+      let error = null;
+
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        error = new Error(`Invalid response: ${responseText}`);
+      }
+
+      // Check for HTTP errors
+      if (!response.ok || error) {
+        const errorMsg = data?.error || error?.message || "Erro ao processar pagamento";
+        console.error("❌ Checkout failed:", errorMsg);
+        toast.error(errorMsg, {
+          description: "Por favor, verifique os dados e tente novamente."
+        });
         throw new Error(errorMsg);
       }
 
