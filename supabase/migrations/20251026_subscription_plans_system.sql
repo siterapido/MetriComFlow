@@ -226,7 +226,7 @@ BEGIN
     WHERE n.nspname = 'public'
       AND c.relname = 'organization_plan_limits'
   ) THEN
-    EXECUTE $$
+    EXECUTE '
       CREATE MATERIALIZED VIEW public.organization_plan_limits AS
       SELECT
         o.id AS organization_id,
@@ -248,10 +248,10 @@ BEGIN
         (COALESCE(su.active_users_count, 0) >= sp.max_users) AS users_limit_reached
       FROM public.organizations o
       LEFT JOIN public.organization_subscriptions os ON os.organization_id = o.id
-        AND os.status IN ('active', 'trial')
+        AND os.status IN (''active'', ''trial'')
       LEFT JOIN public.subscription_plans sp ON sp.id = os.plan_id
-      LEFT JOIN public.subscription_usage su ON su.organization_id = o.id;
-    $$;
+      LEFT JOIN public.subscription_usage su ON su.organization_id = o.id
+    ';
   END IF;
 END $$;
 

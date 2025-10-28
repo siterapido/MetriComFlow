@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -15,6 +15,15 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -46,8 +55,36 @@ import {
 import { format } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { Tables, TablesInsert } from "@/lib/database.types";
+import LeadFormBuilderDrawer from "@/components/forms/LeadFormBuilderDrawer";
+import { useAdAccounts, useAdCampaigns } from "@/hooks/useMetaMetrics";
 
-type LeadForm = Tables<"lead_forms">;
+type LeadFormRecord = Tables<"lead_forms"> & {
+  lead_form_variants?: Tables<"lead_form_variants">[];
+};
+
+type AdAccount = Tables<"ad_accounts">;
+type AdCampaign = Tables<"ad_campaigns">;
+
+const defaultFieldKeys = ["fullName", "email", "phone", "company", "message"] as const;
+type DefaultFieldKey = (typeof defaultFieldKeys)[number];
+
+const defaultFieldsSchema = z
+  .object({
+    fullName: z.boolean(),
+    email: z.boolean(),
+    phone: z.boolean(),
+    company: z.boolean(),
+    message: z.boolean(),
+  })
+  .superRefine((value, ctx) => {
+    if (!Object.values(value).some(Boolean)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Selecione pelo menos um campo obrigatório",
+        path: [],
+      });
+    }
+  });
 
 const formSchema = z.object({
   name: z.string().min(3, "Informe um nome com pelo menos 3 caracteres"),
@@ -63,6 +100,9 @@ const formSchema = z.object({
     .optional()
     .or(z.literal("")),
   successMessage: z.string().max(160, "Máximo de 160 caracteres").optional(),
+  defaultFields: defaultFieldsSchema,
+  adAccountId: z.string().nullable().optional(),
+  campaignId: z.string().nullable().optional(),
 });
 
 const toSlug = (value: string) =>
@@ -70,6 +110,77 @@ const toSlug = (value: string) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)+/g, "");
+
+interface DefaultFieldTemplate {
+  key: string;
+  label: string;
+  type: TablesInsert<"lead_form_fields">["type"];
+  isRequired: boolean;
+  placeholder?: string;
+  helpText?: string;
+  crmField?: string;
+  metaField?: string;
+  validations?: Record<string, unknown>;
+}
+
+const DEFAULT_FIELD_TEMPLATES: Record<DefaultFieldKey, DefaultFieldTemplate> = {
+  fullName: {
+    key: "full_name",
+    label: "Nome completo",
+    type: "text",
+    isRequired: true,
+    placeholder: "Ex: Ana Souza",
+    helpText: "Informe o nome do lead",
+    crmField: "full_name",
+    metaField: "full_name",
+  },
+  email: {
+    key: "email",
+    label: "Email",
+    type: "email",
+    isRequired: true,
+    placeholder: "email@empresa.com",
+    helpText: "Usado para follow-up e notificações",
+    crmField: "email",
+    metaField: "email",
+  },
+  phone: {
+    key: "phone",
+    label: "Telefone / WhatsApp",
+    type: "phone",
+    isRequired: true,
+    placeholder: "(11) 99999-9999",
+    helpText: "Inclua DDD para contato via WhatsApp",
+    crmField: "phone",
+    metaField: "phone_number",
+  },
+  company: {
+    key: "company",
+    label: "Empresa",
+    type: "text",
+    isRequired: false,
+    placeholder: "Nome da empresa",
+    crmField: "company",
+    metaField: "company_name",
+  },
+  message: {
+    key: "message",
+    label: "Mensagem",
+    type: "textarea",
+    isRequired: false,
+    placeholder: "Conte-nos sobre a sua necessidade",
+    helpText: "Campo livre para detalhes sobre a oportunidade",
+    crmField: "notes",
+    metaField: "custom_question",
+    validations: { maxLength: 600 },
+  },
+};
+
+interface CreateLeadFormPayload {
+  form: TablesInsert<"lead_forms">;
+  fields: Array<Omit<TablesInsert<"lead_form_fields">, "form_id">>;
+  variant?: Omit<TablesInsert<"lead_form_variants">, "form_id"> | null;
+}
 
 type FormSchema = z.infer<typeof formSchema>;
 
@@ -97,6 +208,7 @@ const copyToClipboard = async (value: string, onSuccess: () => void, onError: ()
 const LeadForms = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [builderForm, setBuilderForm] = useState<LeadFormRecord | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -106,12 +218,24 @@ const LeadForms = () => {
     isFetching,
     isError,
     error: formsError,
-  } = useQuery<LeadForm[]>({
+  } = useQuery<LeadFormRecord[]>({
     queryKey: ["lead-forms"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("lead_forms")
-        .select("*")
+        .select(
+          `*,
+          lead_form_variants (
+            id,
+            name,
+            slug,
+            campaign_source,
+            campaign_id,
+            meta_campaign_id,
+            meta_ad_account_id,
+            is_default
+          )`
+        )
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -130,14 +254,53 @@ const LeadForms = () => {
       webhookUrl: "",
       redirectUrl: "",
       successMessage: "",
+      defaultFields: {
+        fullName: true,
+        email: true,
+        phone: true,
+        company: true,
+        message: true,
+      },
+      adAccountId: null,
+      campaignId: null,
     },
   });
 
+  const { data: adAccounts = [], isLoading: isLoadingAdAccounts } = useAdAccounts();
+  const selectedAccountId = form.watch("adAccountId");
+  const { data: adCampaigns = [], isLoading: isLoadingCampaigns } = useAdCampaigns(
+    selectedAccountId ?? undefined,
+    { enabled: Boolean(selectedAccountId) }
+  );
+  const selectedCampaignId = form.watch("campaignId");
+  const defaultFieldsValues = form.watch("defaultFields");
+  const selectedDefaultFieldCount = useMemo(
+    () => (defaultFieldsValues ? Object.values(defaultFieldsValues).filter(Boolean).length : 0),
+    [defaultFieldsValues],
+  );
+  const defaultFieldsError = (
+    form.formState.errors.defaultFields as { root?: { message?: string } } | undefined
+  )?.root?.message;
+
+  useEffect(() => {
+    if (!selectedAccountId) {
+      form.setValue("campaignId", null);
+    } else {
+      const currentCampaignId = form.getValues("campaignId");
+      if (currentCampaignId) {
+        const exists = adCampaigns.some((campaign) => campaign.id === currentCampaignId);
+        if (!exists) {
+          form.setValue("campaignId", null);
+        }
+      }
+    }
+  }, [selectedAccountId, adCampaigns, form]);
+
   const createFormMutation = useMutation({
-    mutationFn: async (payload: TablesInsert<"lead_forms">) => {
-      const { data, error } = await supabase
+    mutationFn: async ({ form: formPayload, fields, variant }: CreateLeadFormPayload) => {
+      const { data: createdForm, error } = await supabase
         .from("lead_forms")
-        .insert(payload)
+        .insert(formPayload)
         .select("*")
         .single();
 
@@ -145,12 +308,45 @@ const LeadForms = () => {
         throw error;
       }
 
-      return data;
+      try {
+        if (fields.length > 0) {
+          const formattedFields = fields.map((field) => ({
+            ...field,
+            form_id: createdForm.id,
+          }));
+
+          const { error: fieldsError } = await supabase.from("lead_form_fields").insert(formattedFields);
+          if (fieldsError) {
+            throw fieldsError;
+          }
+        }
+
+        if (variant) {
+          const { error: variantError } = await supabase
+            .from("lead_form_variants")
+            .insert({
+              ...variant,
+              form_id: createdForm.id,
+            });
+
+          if (variantError) {
+            throw variantError;
+          }
+        }
+
+        return createdForm;
+      } catch (insertError) {
+        await supabase.from("lead_form_fields").delete().eq("form_id", createdForm.id);
+        await supabase.from("lead_form_variants").delete().eq("form_id", createdForm.id);
+        await supabase.from("lead_forms").delete().eq("id", createdForm.id);
+        throw insertError;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (_createdForm, variables) => {
+      const linkedCampaign = variables.variant?.campaign_id ? " e vinculado à campanha selecionada" : "";
       toast({
         title: "Formulário criado",
-        description: "O formulário público está ativo e pronto para captar leads.",
+        description: `Campos padrão configurados${linkedCampaign}. Você pode personalizar mais tarde na aba de campos.`,
       });
       queryClient.invalidateQueries({ queryKey: ["lead-forms"] });
       setIsDialogOpen(false);
@@ -265,16 +461,85 @@ const LeadForms = () => {
     const slug = toSlug(values.name);
     const id = slug || `form-${Date.now()}`;
 
+    const selectedFieldKeys = defaultFieldKeys.filter((key) => values.defaultFields[key]);
+
+    const fieldsPayload: Array<Omit<TablesInsert<"lead_form_fields">, "form_id">> = selectedFieldKeys.map(
+      (key, index) => {
+        const template = DEFAULT_FIELD_TEMPLATES[key];
+        return {
+          key: template.key,
+          label: template.label,
+          type: template.type,
+          is_required: template.isRequired,
+          order_index: (index + 1) * 10,
+          placeholder: template.placeholder ?? null,
+          help_text: template.helpText ?? null,
+          options: [],
+          validations: template.validations ?? {},
+          crm_field: template.crmField ?? null,
+          meta_field: template.metaField ?? null,
+        };
+      },
+    );
+
+    const selectedAccount = values.adAccountId
+      ? (adAccounts ?? []).find((account) => account.id === values.adAccountId)
+      : null;
+    const selectedCampaign = values.campaignId
+      ? (adCampaigns ?? []).find((campaign) => campaign.id === values.campaignId)
+      : null;
+
+    const variantName = selectedCampaign?.name
+      ? selectedCampaign.name
+      : selectedAccount
+        ? `Meta Ads - ${selectedAccount.business_name || selectedAccount.external_id}`
+        : "Versão pública";
+
+    const variantSlug = toSlug(variantName) || "versao-publica";
+
+    const variantPayload: Omit<TablesInsert<"lead_form_variants">, "form_id"> = {
+      name: variantName,
+      slug: variantSlug,
+      campaign_source: selectedAccount ? "meta_ads" : "manual",
+      campaign_id: selectedCampaign?.id ?? null,
+      meta_ad_account_id: selectedAccount?.external_id ?? null,
+      meta_campaign_id: selectedCampaign?.external_id ?? null,
+      meta_adset_id: null,
+      meta_ad_id: null,
+      theme_overrides: {},
+      automation_settings: {},
+      is_default: true,
+    };
+
+    const formSettings = {
+      default_fields: selectedFieldKeys,
+      linked_ad_account: selectedAccount?.external_id ?? null,
+      linked_campaign: selectedCampaign?.external_id ?? null,
+    };
+
     await createFormMutation.mutateAsync({
-      id,
-      name: values.name,
-      description: values.description?.trim() ? values.description.trim() : null,
-      success_message: values.successMessage?.trim() ? values.successMessage.trim() : null,
-      webhook_url: values.webhookUrl?.trim() ? values.webhookUrl.trim() : null,
-      redirect_url: values.redirectUrl?.trim() ? values.redirectUrl.trim() : null,
-      is_active: true,
-      submission_count: 0,
+      form: {
+        id,
+        name: values.name,
+        description: values.description?.trim() ? values.description.trim() : null,
+        success_message: values.successMessage?.trim() ? values.successMessage.trim() : null,
+        webhook_url: values.webhookUrl?.trim() ? values.webhookUrl.trim() : null,
+        redirect_url: values.redirectUrl?.trim() ? values.redirectUrl.trim() : null,
+        is_active: true,
+        submission_count: 0,
+        settings: formSettings,
+      },
+      fields: fieldsPayload,
+      variant: variantPayload,
     });
+  };
+
+  const handleOpenBuilder = (form: LeadFormRecord) => {
+    setBuilderForm(form);
+  };
+
+  const handleCloseBuilder = () => {
+    setBuilderForm(null);
   };
 
   const handleToggleForm = async (formId: string, checked: boolean) => {
@@ -446,6 +711,10 @@ const LeadForms = () => {
                       const publicUrl = `${appBaseUrl}/forms/${formItem.id}`;
                       const embedCode = `<iframe src="${publicUrl}" width="100%" height="680" style="border:0" allow="fullscreen"></iframe>`;
                       const isUpdating = updatingId === formItem.id && updateFormStatusMutation.isPending;
+                      const defaultVariant =
+                        formItem.lead_form_variants?.find((variant) => variant.is_default) ??
+                        formItem.lead_form_variants?.[0] ??
+                        null;
 
                       return (
                         <TableRow key={formItem.id} className="hover:bg-muted/40">
@@ -465,6 +734,14 @@ const LeadForms = () => {
                                 <Badge variant="outline" className="flex items-center gap-1">
                                   <Link2 className="w-3 h-3" /> URL pública
                                 </Badge>
+                                {defaultVariant && (
+                                  <Badge variant="outline" className="flex items-center gap-1">
+                                    <Plug className="w-3 h-3" />
+                                    {defaultVariant.campaign_source === "meta_ads"
+                                      ? defaultVariant.name ?? "Meta Ads"
+                                      : "Versão padrão"}
+                                  </Badge>
+                                )}
                                 {formItem.webhook_url && (
                                   <Badge variant="outline" className="flex items-center gap-1">
                                     <Webhook className="w-3 h-3" /> Webhook ativo
@@ -498,6 +775,14 @@ const LeadForms = () => {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                className="gap-1"
+                                onClick={() => handleOpenBuilder(formItem)}
+                              >
+                                <FileText className="w-3 h-3" /> Campos
+                              </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -752,6 +1037,127 @@ const LeadForms = () => {
               )}
             </div>
 
+            <Separator />
+
+            <div className="space-y-4">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">Campos iniciais</p>
+                  <p className="text-xs text-muted-foreground">
+                    Esses campos serão criados automaticamente no formulário público e vinculados ao CRM.
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-xs">
+                  {selectedDefaultFieldCount} selecionado(s)
+                </Badge>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {defaultFieldKeys.map((key) => {
+                  const template = DEFAULT_FIELD_TEMPLATES[key];
+                  const isChecked = defaultFieldsValues?.[key] ?? false;
+                  return (
+                    <label
+                      key={key}
+                      className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3 transition hover:border-primary/60"
+                    >
+                      <Checkbox
+                        checked={isChecked}
+                        onCheckedChange={(checked) =>
+                          form.setValue(`defaultFields.${key}` as const, Boolean(checked), {
+                            shouldDirty: true,
+                            shouldTouch: true,
+                          })
+                        }
+                      />
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-foreground">
+                          {template.label}
+                          {template.isRequired && <span className="ml-1 text-destructive">*</span>}
+                        </p>
+                        {template.placeholder && (
+                          <p className="text-xs text-muted-foreground">{template.placeholder}</p>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {defaultFieldsError && <p className="text-sm text-destructive">{defaultFieldsError}</p>}
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">Integração Meta Ads (opcional)</p>
+                <p className="text-xs text-muted-foreground">
+                  Vincule o formulário a uma conta e campanha para aplicar atribuição automática e gerar relatórios por origem.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="adAccountId">Conta de anúncios conectada</Label>
+                <Select
+                  value={selectedAccountId ?? "none"}
+                  onValueChange={(value) => {
+                    form.setValue("adAccountId", value === "none" ? null : value, {
+                      shouldDirty: true,
+                      shouldTouch: true,
+                    });
+                  }}
+                  disabled={isLoadingAdAccounts}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolha uma conta ou mantenha sem vínculo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sem vinculação</SelectItem>
+                    {adAccounts.map((account) => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.business_name || account.external_id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {isLoadingAdAccounts && (
+                  <p className="text-xs text-muted-foreground">Carregando contas conectadas...</p>
+                )}
+              </div>
+
+              {selectedAccountId && (
+                <div className="space-y-2">
+                  <Label htmlFor="campaignId">Campanha Meta Ads</Label>
+                  <Select
+                    value={selectedCampaignId ?? "none"}
+                    onValueChange={(value) => {
+                      form.setValue("campaignId", value === "none" ? null : value, {
+                        shouldDirty: true,
+                        shouldTouch: true,
+                      });
+                    }}
+                    disabled={isLoadingCampaigns}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecionar campanha (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Todas as campanhas da conta</SelectItem>
+                      {adCampaigns.map((campaign) => (
+                        <SelectItem key={campaign.id} value={campaign.id}>
+                          {campaign.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {isLoadingCampaigns && (
+                    <p className="text-xs text-muted-foreground">Carregando campanhas...</p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <DialogFooter className="gap-2 sm:gap-0">
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancelar
@@ -773,6 +1179,10 @@ const LeadForms = () => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {builderForm && (
+        <LeadFormBuilderDrawer form={builderForm} open={Boolean(builderForm)} onClose={handleCloseBuilder} />
+      )}
     </div>
   );
 };

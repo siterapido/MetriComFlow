@@ -29,6 +29,7 @@ import AcceptInvitation from "./pages/AcceptInvitation";
 import SubscriptionPlans from "./pages/SubscriptionPlans";
 import PublicCheckout from "./pages/PublicCheckout";
 import FinalizeSignup from "./pages/FinalizeSignup";
+import PublicLeadForm from "./pages/PublicLeadForm";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +52,7 @@ const App = () => (
             <Route path="/checkout" element={<PublicCheckout />} />
             <Route path="/finalizar-cadastro" element={<FinalizeSignup />} />
             <Route path="/setup-admin" element={<SetupAdmin />} />
+            <Route path="/forms/:formId" element={<PublicLeadForm />} />
             <Route path="/auth/forgot-password" element={<ForgotPassword />} />
             <Route path="/auth/update-password" element={<UpdatePassword />} />
             <Route path="/auth/callback" element={<AuthCallback />} />

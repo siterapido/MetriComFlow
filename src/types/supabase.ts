@@ -178,6 +178,12 @@ export type Database = {
           submission_count: number
           created_at: string
           updated_at: string
+          organization_id: string | null
+          schema_version: number
+          settings: Json
+          theme: Json
+          last_published_at: string | null
+          default_owner_id: string | null
         }
         Insert: {
           id: string
@@ -190,6 +196,12 @@ export type Database = {
           submission_count?: number
           created_at?: string
           updated_at?: string
+          organization_id?: string | null
+          schema_version?: number
+          settings?: Json
+          theme?: Json
+          last_published_at?: string | null
+          default_owner_id?: string | null
         }
         Update: {
           id?: string
@@ -202,8 +214,322 @@ export type Database = {
           submission_count?: number
           created_at?: string
           updated_at?: string
+          organization_id?: string | null
+          schema_version?: number
+          settings?: Json
+          theme?: Json
+          last_published_at?: string | null
+          default_owner_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "lead_forms_default_owner_id_fkey"
+            columns: ["default_owner_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_forms_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_form_fields: {
+        Row: {
+          id: string
+          form_id: string
+          key: string
+          label: string
+          type:
+            | "text"
+            | "email"
+            | "phone"
+            | "textarea"
+            | "select"
+            | "multiselect"
+            | "checkbox"
+            | "radio"
+            | "date"
+            | "hidden"
+          is_required: boolean
+          order_index: number
+          placeholder: string | null
+          help_text: string | null
+          options: Json
+          validations: Json
+          crm_field: string | null
+          meta_field: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          form_id: string
+          key: string
+          label: string
+          type:
+            | "text"
+            | "email"
+            | "phone"
+            | "textarea"
+            | "select"
+            | "multiselect"
+            | "checkbox"
+            | "radio"
+            | "date"
+            | "hidden"
+          is_required?: boolean
+          order_index?: number
+          placeholder?: string | null
+          help_text?: string | null
+          options?: Json
+          validations?: Json
+          crm_field?: string | null
+          meta_field?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          form_id?: string
+          key?: string
+          label?: string
+          type?:
+            | "text"
+            | "email"
+            | "phone"
+            | "textarea"
+            | "select"
+            | "multiselect"
+            | "checkbox"
+            | "radio"
+            | "date"
+            | "hidden"
+          is_required?: boolean
+          order_index?: number
+          placeholder?: string | null
+          help_text?: string | null
+          options?: Json
+          validations?: Json
+          crm_field?: string | null
+          meta_field?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_form_fields_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "lead_forms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_form_submission_events: {
+        Row: {
+          id: string
+          submission_id: string
+          event_type: string
+          payload: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          submission_id: string
+          event_type: string
+          payload?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          submission_id?: string
+          event_type?: string
+          payload?: Json | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_form_submission_events_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "lead_form_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_form_submissions: {
+        Row: {
+          id: string
+          form_id: string
+          variant_id: string | null
+          lead_id: string | null
+          payload: Json
+          errors: Json | null
+          status: "received" | "validated" | "synced_crm" | "failed"
+          source: string | null
+          utm_source: string | null
+          utm_medium: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_term: string | null
+          meta_form_id: string | null
+          meta_lead_id: string | null
+          fbp: string | null
+          fbc: string | null
+          landing_page: string | null
+          referrer: string | null
+          user_agent: string | null
+          ip_address: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          form_id: string
+          variant_id?: string | null
+          lead_id?: string | null
+          payload: Json
+          errors?: Json | null
+          status?: "received" | "validated" | "synced_crm" | "failed"
+          source?: string | null
+          utm_source?: string | null
+          utm_medium?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_term?: string | null
+          meta_form_id?: string | null
+          meta_lead_id?: string | null
+          fbp?: string | null
+          fbc?: string | null
+          landing_page?: string | null
+          referrer?: string | null
+          user_agent?: string | null
+          ip_address?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          form_id?: string
+          variant_id?: string | null
+          lead_id?: string | null
+          payload?: Json
+          errors?: Json | null
+          status?: "received" | "validated" | "synced_crm" | "failed"
+          source?: string | null
+          utm_source?: string | null
+          utm_medium?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_term?: string | null
+          meta_form_id?: string | null
+          meta_lead_id?: string | null
+          fbp?: string | null
+          fbc?: string | null
+          landing_page?: string | null
+          referrer?: string | null
+          user_agent?: string | null
+          ip_address?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_form_submissions_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "lead_forms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_form_submissions_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_form_submissions_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "lead_form_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_form_variants: {
+        Row: {
+          id: string
+          form_id: string
+          name: string
+          slug: string
+          campaign_source: string | null
+          campaign_id: string | null
+          meta_ad_account_id: string | null
+          meta_campaign_id: string | null
+          meta_adset_id: string | null
+          meta_ad_id: string | null
+          theme_overrides: Json
+          automation_settings: Json
+          is_default: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          form_id: string
+          name: string
+          slug: string
+          campaign_source?: string | null
+          campaign_id?: string | null
+          meta_ad_account_id?: string | null
+          meta_campaign_id?: string | null
+          meta_adset_id?: string | null
+          meta_ad_id?: string | null
+          theme_overrides?: Json
+          automation_settings?: Json
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          form_id?: string
+          name?: string
+          slug?: string
+          campaign_source?: string | null
+          campaign_id?: string | null
+          meta_ad_account_id?: string | null
+          meta_campaign_id?: string | null
+          meta_adset_id?: string | null
+          meta_ad_id?: string | null
+          theme_overrides?: Json
+          automation_settings?: Json
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_form_variants_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "ad_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_form_variants_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "lead_forms"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -443,7 +769,20 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      lead_form_performance: {
+        Row: {
+          form_id: string
+          form_name: string
+          variant_id: string | null
+          variant_name: string | null
+          day: string | null
+          submissions: number | null
+          leads_crm: number | null
+          deals_closed: number | null
+          revenue_won: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never

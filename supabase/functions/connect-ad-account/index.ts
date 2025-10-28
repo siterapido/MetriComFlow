@@ -44,8 +44,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Obter informações da conta de anúncios do Meta
-    const accountUrl = `https://graph.facebook.com/v18.0/act_${ad_account_id}` +
+    // Obter informações da conta de anúncios do Meta (Graph API v24.0)
+    const accountUrl = `https://graph.facebook.com/v24.0/act_${ad_account_id}` +
       `?fields=id,name,business_name&access_token=${access_token}`;
 
     const accountResponse = await fetch(accountUrl);
@@ -119,6 +119,9 @@ Deno.serve(async (req: Request) => {
           business_name: accountData.business_name || accountData.name,
           connected_by: user.id,
           organization_id: organizationId,
+          provider: 'meta',
+          platform: 'meta_ads',
+          is_active: true,
           updated_at: new Date().toISOString()
         })
         .eq('id', existingAccount.id)
@@ -138,7 +141,11 @@ Deno.serve(async (req: Request) => {
           external_id: ad_account_id,
           business_name: accountData.business_name || accountData.name,
           connected_by: user.id,
-          organization_id: organizationId
+          organization_id: organizationId,
+          provider: 'meta',
+          platform: 'meta_ads',
+          is_active: true,
+          connected_at: new Date().toISOString()
         })
         .select()
         .single();
@@ -150,9 +157,10 @@ Deno.serve(async (req: Request) => {
       accountId = newAccount.id;
     }
 
-    // Buscar campanhas da conta
-    const campaignsUrl = `https://graph.facebook.com/v18.0/act_${ad_account_id}/campaigns` +
-      `?fields=id,name,objective,status,start_time,stop_time&access_token=${access_token}`;
+    // Buscar campanhas da conta (Graph API v24.0)
+    const effectiveStatus = encodeURIComponent('["ACTIVE","PAUSED"]');
+    const campaignsUrl = `https://graph.facebook.com/v24.0/act_${ad_account_id}/campaigns` +
+      `?fields=id,name,objective,status,start_time,stop_time&effective_status=${effectiveStatus}&access_token=${access_token}`;
 
     const campaignsResponse = await fetch(campaignsUrl);
     const campaignsData = await campaignsResponse.json();
