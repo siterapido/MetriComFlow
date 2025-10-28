@@ -57,15 +57,13 @@ const checkoutSchema = z
     billingPhone: z.string().refine(validatePhone, {
       message: "Telefone inválido (ex: (11) 98765-4321)",
     }),
-    postalCode: z.string().refine(validateCEP, {
-      message: "CEP inválido",
-    }),
-    street: z.string().min(3, "Endereço é obrigatório"),
-    addressNumber: z.string().min(1, "Número é obrigatório"),
+    postalCode: z.string().optional(),
+    street: z.string().optional(),
+    addressNumber: z.string().optional(),
     complement: z.string().optional(),
-    province: z.string().min(2, "Bairro é obrigatório"),
-    city: z.string().min(2, "Cidade é obrigatória"),
-    state: z.string().length(2, "Estado deve ter 2 letras (ex: SP)"),
+    province: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
     paymentMethod: z.enum(["CREDIT_CARD", "PIX"]),
     creditCard: z.object({
       holderName: z.string().optional(),
@@ -85,8 +83,8 @@ const checkoutSchema = z
     path: ["confirmPassword"],
   })
   .superRefine((data, ctx) => {
+    // Validate credit card fields only when CREDIT_CARD is selected
     if (data.paymentMethod === "CREDIT_CARD") {
-      // Validate credit card fields only when CREDIT_CARD is selected
       if (!data.creditCard) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -104,6 +102,50 @@ const checkoutSchema = z
             path: ["creditCard", ...issue.path],
           });
         }
+      }
+
+      // Validate address fields only for credit card (required for fraud prevention)
+      if (!data.postalCode || !validateCEP(data.postalCode)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "CEP é obrigatório para cartão de crédito",
+          path: ["postalCode"],
+        });
+      }
+      if (!data.street || data.street.length < 3) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Endereço é obrigatório para cartão de crédito",
+          path: ["street"],
+        });
+      }
+      if (!data.addressNumber || data.addressNumber.length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Número é obrigatório para cartão de crédito",
+          path: ["addressNumber"],
+        });
+      }
+      if (!data.province || data.province.length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Bairro é obrigatório para cartão de crédito",
+          path: ["province"],
+        });
+      }
+      if (!data.city || data.city.length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Cidade é obrigatória para cartão de crédito",
+          path: ["city"],
+        });
+      }
+      if (!data.state || data.state.length !== 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Estado é obrigatório para cartão de crédito (2 letras)",
+          path: ["state"],
+        });
       }
     }
   });
@@ -461,17 +503,23 @@ export function CheckoutForm({
           </div>
         </div>
 
-        {/* Billing Address */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="bg-gradient-to-r from-primary/10 to-secondary/10 border-b border-border px-6 py-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center shadow-md">
-                <MapPin className="w-5 h-5 text-white" />
+        {/* Billing Address - Only show for Credit Card */}
+        {paymentMethod === "CREDIT_CARD" && (
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="bg-gradient-to-r from-primary/10 to-secondary/10 border-b border-border px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center shadow-md">
+                    <MapPin className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-xl font-bold text-foreground">Endereço de Cobrança</h3>
+                </div>
+                <span className="text-xs text-warning bg-warning/10 px-3 py-1 rounded-full">
+                  Obrigatório para Cartão
+                </span>
               </div>
-              <h3 className="text-xl font-bold text-foreground">Endereço de Cobrança</h3>
             </div>
-          </div>
-          <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4">
             <FormField
               control={form.control}
               name="postalCode"
@@ -600,7 +648,7 @@ export function CheckoutForm({
               />
             </div>
           </div>
-        </div>
+        )}
 
         {/* Submit Button */}
         <div className="bg-gradient-to-br from-success/10 to-success/5 border border-success/20 rounded-xl p-6">

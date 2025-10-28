@@ -84,15 +84,18 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       `🔄 Creating Asaas subscription for: ${subscriptionId ?? "PUBLIC_CHECKOUT"} | Plan: ${planSlug} | Type: ${billingType}`
     );
 
-    if (
-      !billingAddress?.street ||
-      !billingAddress?.province ||
-      !billingAddress?.city ||
-      !billingAddress?.state
-    ) {
-      throw new Error(
-        "Endereço incompleto. Informe logradouro, bairro, cidade e estado para continuar."
-      );
+    // Validate address only for credit card (required for fraud prevention)
+    if (billingType === "CREDIT_CARD") {
+      if (
+        !billingAddress?.street ||
+        !billingAddress?.province ||
+        !billingAddress?.city ||
+        !billingAddress?.state
+      ) {
+        throw new Error(
+          "Endereço completo é obrigatório para pagamento com cartão de crédito."
+        );
+      }
     }
 
     // 1. Get subscription plan details
@@ -199,13 +202,14 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
           : sanitizedPhone.length === 10
           ? { phone: sanitizedPhone }
           : {}),
-        address: billingAddress.street,
-        province: billingAddress.province,
-        city: billingAddress.city,
-        state: billingAddress.state,
-        postalCode: sanitizedPostalCode,
-        addressNumber: billingAddress.addressNumber,
-        addressComplement: billingAddress.addressComplement,
+        // Include address fields only if provided
+        ...(billingAddress.street ? { address: billingAddress.street } : {}),
+        ...(billingAddress.province ? { province: billingAddress.province } : {}),
+        ...(billingAddress.city ? { city: billingAddress.city } : {}),
+        ...(billingAddress.state ? { state: billingAddress.state } : {}),
+        ...(sanitizedPostalCode ? { postalCode: sanitizedPostalCode } : {}),
+        ...(billingAddress.addressNumber ? { addressNumber: billingAddress.addressNumber } : {}),
+        ...(billingAddress.addressComplement ? { addressComplement: billingAddress.addressComplement } : {}),
         externalReference: organizationId, // Link to our org
       };
 
