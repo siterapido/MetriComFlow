@@ -143,7 +143,19 @@ export function useMetaAuth() {
   // Get Meta OAuth URL
   const getAuthUrl = async (): Promise<string> => {
     try {
+      // Get the current session explicitly to ensure we have a valid token
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error('No active session. Please log in again.');
+      }
+
+      console.log('🔐 Using session token for meta-auth');
+
       const { data, error } = await supabase.functions.invoke('meta-auth', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: {
           action: 'get_auth_url',
           redirect_uri: REDIRECT_URI,

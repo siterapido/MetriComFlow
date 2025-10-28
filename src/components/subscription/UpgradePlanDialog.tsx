@@ -119,11 +119,13 @@ export function UpgradePlanDialog({
     }
   };
 
+  const isFirstSubscription = !currentPlan; // New: detect first-time subscription
   const isDowngrade = currentPlan && newPlan && newPlan.price < currentPlan.price;
   const priceDiff = currentPlan && newPlan ? newPlan.price - currentPlan.price : 0;
 
-  // Check if downgrade would exceed limits
+  // Check if downgrade would exceed limits (only relevant if there's a current plan)
   const wouldExceedLimits =
+    !isFirstSubscription &&
     isDowngrade &&
     currentUsage &&
     newPlan &&
@@ -150,14 +152,18 @@ export function UpgradePlanDialog({
           <DialogTitle className="text-2xl font-bold text-foreground flex items-center gap-2">
             <TrendingUp className="w-6 h-6 text-primary" />
             {step === "confirm"
-              ? isDowngrade
+              ? isFirstSubscription
+                ? "Contratar Plano"
+                : isDowngrade
                 ? "Downgrade de Plano"
                 : "Upgrade de Plano"
               : "Finalizar Contratação"}
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
             {step === "confirm"
-              ? isDowngrade
+              ? isFirstSubscription
+                ? `Você está prestes a contratar o plano ${newPlan.name}.`
+                : isDowngrade
                 ? "Você está prestes a fazer downgrade do seu plano."
                 : "Você está prestes a fazer upgrade do seu plano."
               : "Preencha os dados de cobrança para finalizar"}
@@ -166,31 +172,46 @@ export function UpgradePlanDialog({
 
         {step === "confirm" && (
           <div className="space-y-6 py-4">
-            {/* Plan Comparison */}
-            <div className="grid grid-cols-2 gap-4">
-            {/* Current Plan */}
-            {currentPlan && (
-              <div className="p-4 rounded-lg border border-border bg-muted/20">
-                <Badge className="mb-2 bg-muted text-muted-foreground">Plano Atual</Badge>
-                <h3 className="font-bold text-lg text-foreground">{currentPlan.name}</h3>
-                <p className="text-2xl font-bold text-foreground mt-2">
-                  {formatCurrency(currentPlan.price)}<span className="text-sm text-muted-foreground">/mês</span>
+            {/* Plan Comparison OR Single Plan Display */}
+            {isFirstSubscription ? (
+              /* First Subscription: Show only new plan */
+              <div className="p-6 rounded-lg border-2 border-primary bg-gradient-to-br from-primary/10 to-secondary/10">
+                <Badge className="mb-3 bg-primary text-primary-foreground">Plano Selecionado</Badge>
+                <h3 className="font-bold text-2xl text-foreground">{newPlan.name}</h3>
+                <p className="text-3xl font-bold text-primary mt-3">
+                  {formatCurrency(newPlan.price)}<span className="text-lg text-muted-foreground">/mês</span>
                 </p>
+                {newPlan.description && (
+                  <p className="text-muted-foreground mt-2">{newPlan.description}</p>
+                )}
+              </div>
+            ) : (
+              /* Existing Subscription: Show comparison */
+              <div className="grid grid-cols-2 gap-4">
+                {/* Current Plan */}
+                {currentPlan && (
+                  <div className="p-4 rounded-lg border border-border bg-muted/20">
+                    <Badge className="mb-2 bg-muted text-muted-foreground">Plano Atual</Badge>
+                    <h3 className="font-bold text-lg text-foreground">{currentPlan.name}</h3>
+                    <p className="text-2xl font-bold text-foreground mt-2">
+                      {formatCurrency(currentPlan.price)}<span className="text-sm text-muted-foreground">/mês</span>
+                    </p>
+                  </div>
+                )}
+
+                {/* New Plan */}
+                <div className="p-4 rounded-lg border-2 border-primary bg-gradient-to-br from-primary/5 to-secondary/5">
+                  <Badge className="mb-2 bg-primary text-primary-foreground">Novo Plano</Badge>
+                  <h3 className="font-bold text-lg text-foreground">{newPlan.name}</h3>
+                  <p className="text-2xl font-bold text-primary mt-2">
+                    {formatCurrency(newPlan.price)}<span className="text-sm text-muted-foreground">/mês</span>
+                  </p>
+                </div>
               </div>
             )}
 
-            {/* New Plan */}
-            <div className="p-4 rounded-lg border-2 border-primary bg-gradient-to-br from-primary/5 to-secondary/5">
-              <Badge className="mb-2 bg-primary text-primary-foreground">Novo Plano</Badge>
-              <h3 className="font-bold text-lg text-foreground">{newPlan.name}</h3>
-              <p className="text-2xl font-bold text-primary mt-2">
-                {formatCurrency(newPlan.price)}<span className="text-sm text-muted-foreground">/mês</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Price Difference */}
-          {currentPlan && (
+          {/* Price Difference (only for upgrades/downgrades) */}
+          {!isFirstSubscription && currentPlan && (
             <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-accent/20">
               <p className="text-sm text-muted-foreground">
                 Diferença:{" "}
@@ -205,38 +226,51 @@ export function UpgradePlanDialog({
 
           {/* Feature Changes */}
           <div className="space-y-3">
-            <h4 className="font-semibold text-foreground">Mudanças no plano:</h4>
+            <h4 className="font-semibold text-foreground">
+              {isFirstSubscription ? "Recursos incluídos:" : "Mudanças no plano:"}
+            </h4>
 
             <div className="grid grid-cols-2 gap-3">
               {/* Ad Accounts */}
               <FeatureChange
                 icon={<BarChart3 className="w-4 h-4" />}
                 label="Contas de Anúncio"
-                oldValue={currentPlan?.max_ad_accounts}
+                oldValue={isFirstSubscription ? undefined : currentPlan?.max_ad_accounts}
                 newValue={newPlan.max_ad_accounts}
-                currentUsage={currentUsage?.ad_accounts}
+                currentUsage={isFirstSubscription ? undefined : currentUsage?.ad_accounts}
               />
 
               {/* Users */}
               <FeatureChange
                 icon={<Users className="w-4 h-4" />}
                 label="Usuários"
-                oldValue={currentPlan?.max_users}
+                oldValue={isFirstSubscription ? undefined : currentPlan?.max_users}
                 newValue={newPlan.max_users}
-                currentUsage={currentUsage?.users}
+                currentUsage={isFirstSubscription ? undefined : currentUsage?.users}
               />
             </div>
 
             {/* CRM Access */}
-            {currentPlan && currentPlan.has_crm_access !== newPlan.has_crm_access && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-accent/20">
-                <Check className="w-5 h-5 text-success" />
-                <span className="text-sm text-foreground">
-                  {newPlan.has_crm_access
-                    ? "✨ Acesso ao CRM será habilitado"
-                    : "⚠️ Acesso ao CRM será removido"}
-                </span>
-              </div>
+            {isFirstSubscription ? (
+              newPlan.has_crm_access && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-success/10">
+                  <Check className="w-5 h-5 text-success" />
+                  <span className="text-sm text-foreground font-medium">
+                    ✨ Acesso completo ao CRM incluído
+                  </span>
+                </div>
+              )
+            ) : (
+              currentPlan && currentPlan.has_crm_access !== newPlan.has_crm_access && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-accent/20">
+                  <Check className="w-5 h-5 text-success" />
+                  <span className="text-sm text-foreground">
+                    {newPlan.has_crm_access
+                      ? "✨ Acesso ao CRM será habilitado"
+                      : "⚠️ Acesso ao CRM será removido"}
+                  </span>
+                </div>
+              )
             )}
           </div>
 
@@ -259,7 +293,9 @@ export function UpgradePlanDialog({
             <Alert className="bg-primary/10 border-primary">
               <AlertDescription className="text-foreground">
                 <p className="text-sm">
-                  {isDowngrade
+                  {isFirstSubscription
+                    ? "Seu plano será ativado imediatamente após a confirmação do pagamento. Você terá acesso completo a todos os recursos incluídos."
+                    : isDowngrade
                     ? "O downgrade será aplicado no final do período atual de cobrança."
                     : "O upgrade será aplicado imediatamente e você terá acesso a todas as novas funcionalidades."}
                 </p>

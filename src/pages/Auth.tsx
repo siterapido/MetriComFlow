@@ -1,24 +1,11 @@
-import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
 import { LoginForm } from "@/components/auth/LoginForm";
-import { RegisterForm } from "@/components/auth/RegisterForm";
+import { Link } from "react-router-dom";
 
 export default function Auth() {
-  const [isLogin, setIsLogin] = useState(true);
-  const location = useLocation();
-
-  // Ajusta modo inicial via querystring: ?mode=register|login
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const mode = params.get("mode");
-    if (mode === "register") setIsLogin(false);
-    else if (mode === "login") setIsLogin(true);
-  }, [location.search]);
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-accent/20 flex items-center justify-center px-4 sm:px-6 py-6">
       <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGRlZnM+CjxwYXR0ZXJuIGlkPSJncmlkIiB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiPgo8cGF0aCBkPSJtIDYwIDAgLTYwIDYwIE0gMzAgMzAgbCAzMCAtMzAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzJkYTdmZjEwIiBzdHJva2Utd2lkdGg9IjEiLz4KPC9wYXR0ZXJuPgo8L2RlZnM+CjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz4KPHN2Zz4=')] opacity-30 pointer-events-none"></div>
-      
+
       <div className="relative z-10 w-full max-w-md animate-fade-in">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-gradient-to-br from-primary to-secondary rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-2xl">
@@ -28,35 +15,14 @@ export default function Auth() {
           <p className="text-muted-foreground">Sistema Interno de Gestão</p>
         </div>
 
-        {isLogin ? (
-          <>
-            <LoginForm />
-            <div className="mt-4 text-center text-sm text-muted-foreground">
-              Não tem uma conta?
-              <button
-                type="button"
-                onClick={() => setIsLogin(false)}
-                className="ml-1 text-primary hover:underline"
-              >
-                Criar conta
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <RegisterForm />
-            <div className="mt-4 text-center text-sm text-muted-foreground">
-              Já possui conta?
-              <button
-                type="button"
-                onClick={() => setIsLogin(true)}
-                className="ml-1 text-primary hover:underline"
-              >
-                Entrar
-              </button>
-            </div>
-          </>
-        )}
+        <LoginForm />
+
+        <div className="mt-4 text-center text-sm text-muted-foreground">
+          Não tem uma conta?{" "}
+          <Link to="/#planos" className="text-primary hover:underline">
+            Assine um plano
+          </Link>
+        </div>
       </div>
     </div>
   );

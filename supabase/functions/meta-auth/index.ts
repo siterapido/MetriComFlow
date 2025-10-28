@@ -53,16 +53,31 @@ Deno.serve(async (req) => {
 
     // Get user from Authorization header
     const authHeader = req.headers.get('Authorization');
+    console.log('📨 Received request with auth header:', authHeader ? 'Present' : 'Missing');
+
     if (!authHeader) {
       throw new Error('No authorization header');
     }
 
     const token = authHeader.replace('Bearer ', '');
+    console.log('🔑 Token length:', token.length, 'First 20 chars:', token.substring(0, 20) + '...');
+
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
+
+    console.log('👤 User validation result:', {
+      hasUser: !!user,
+      userId: user?.id,
+      userEmail: user?.email,
+      hasError: !!authError,
+      errorMessage: authError?.message
+    });
+
     if (authError || !user) {
-      throw new Error('Invalid token');
+      console.error('❌ Auth error details:', authError);
+      throw new Error(`Invalid token: ${authError?.message || 'User not found'}`);
     }
+
+    console.log('✅ User authenticated successfully:', user.email);
 
     const { action, code, redirect_uri }: MetaAuthRequest = await req.json();
 
@@ -351,11 +366,17 @@ Deno.serve(async (req) => {
     throw new Error('Invalid action');
 
   } catch (error) {
-    console.error('Meta auth error:', error);
+    console.error('==================== META AUTH ERROR ====================');
+    console.error('Error type:', error.constructor.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('========================================================');
+
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: error.message || 'Internal server error',
-        success: false 
+        errorType: error.constructor.name,
+        success: false
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

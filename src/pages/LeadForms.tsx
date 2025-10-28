@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,7 @@ import {
   ExternalLink,
   FileText,
   Globe,
+  Loader2,
   Link2,
   Mail,
   Plug,
@@ -42,18 +44,10 @@ import {
   Webhook,
 } from "lucide-react";
 import { format } from "date-fns";
+import { supabase } from "@/lib/supabase";
+import { Tables, TablesInsert } from "@/lib/database.types";
 
-interface LeadForm {
-  id: string;
-  name: string;
-  description?: string;
-  createdAt: string;
-  submissions: number;
-  isActive: boolean;
-  webhookUrl?: string;
-  redirectUrl?: string;
-  successMessage?: string;
-}
+type LeadForm = Tables<"lead_forms">;
 
 const formSchema = z.object({
   name: z.string().min(3, "Informe um nome com pelo menos 3 caracteres"),
@@ -71,44 +65,13 @@ const formSchema = z.object({
   successMessage: z.string().max(160, "Máximo de 160 caracteres").optional(),
 });
 
-const generateFormUrl = (formId: string) =>
-  `https://app.metricomflow.com/forms/${formId}`;
-
-const generateEmbedCode = (formId: string) =>
-  `<iframe src="https://app.metricomflow.com/forms/${formId}" width="100%" height="680" style="border:0" allow="fullscreen"></iframe>`;
+const toSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
 
 type FormSchema = z.infer<typeof formSchema>;
-
-const defaultForms: LeadForm[] = [
-  {
-    id: "landing-lancamento",
-    name: "Landing Page - Lançamento",
-    description: "Formulário curto para captar leads quentes da página principal.",
-    createdAt: new Date().toISOString(),
-    submissions: 245,
-    isActive: true,
-    webhookUrl: "https://hooks.metricomflow.com/leads/landing",
-    successMessage: "Recebemos seus dados! Nossa equipe entrará em contato em até 15 minutos.",
-  },
-  {
-    id: "webinar-exclusivo",
-    name: "Webinar Estratégias Meta Ads",
-    description: "Inscrição para evento exclusivo com envio automático para o CRM.",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(),
-    submissions: 128,
-    isActive: true,
-    webhookUrl: "https://hooks.metricomflow.com/leads/webinar",
-    redirectUrl: "https://metricomflow.com/obrigado-webinar",
-  },
-  {
-    id: "feira-negocios",
-    name: "Captura em Eventos",
-    description: "Formulário público utilizado pela equipe comercial durante feiras.",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString(),
-    submissions: 82,
-    isActive: false,
-  },
-];
 
 const formatDate = (isoDate: string) => {
   try {
@@ -132,9 +95,32 @@ const copyToClipboard = async (value: string, onSuccess: () => void, onError: ()
 };
 
 const LeadForms = () => {
-  const [forms, setForms] = useState<LeadForm[]>(defaultForms);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const {
+    data: formsData = [],
+    isLoading: isLoadingForms,
+    isFetching,
+    isError,
+    error: formsError,
+  } = useQuery<LeadForm[]>({
+    queryKey: ["lead-forms"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("lead_forms")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      return data ?? [];
+    },
+  });
 
   const form = useForm<FormSchema>({
     resolver: zodResolver(formSchema),
@@ -147,53 +133,160 @@ const LeadForms = () => {
     },
   });
 
+  const createFormMutation = useMutation({
+    mutationFn: async (payload: TablesInsert<"lead_forms">) => {
+      const { data, error } = await supabase
+        .from("lead_forms")
+        .insert(payload)
+        .select("*")
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return data;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Formulário criado",
+        description: "O formulário público está ativo e pronto para captar leads.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["lead-forms"] });
+      setIsDialogOpen(false);
+      form.reset();
+    },
+    onError: (error) => {
+      let message =
+        typeof error === "object" && error !== null && "message" in error
+          ? String((error as { message: string }).message)
+          : "Não foi possível criar o formulário.";
+
+      if (typeof error === "object" && error !== null && "code" in error) {
+        const code = String((error as { code?: string }).code ?? "");
+        if (code === "23505") {
+          message = "Já existe um formulário com este nome. Ajuste o identificador e tente novamente.";
+        }
+      }
+
+      toast({
+        title: "Erro ao criar formulário",
+        description: message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateFormStatusMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const { error } = await supabase
+        .from("lead_forms")
+        .update({ is_active: isActive })
+        .eq("id", id);
+
+      if (error) {
+        throw error;
+      }
+
+      return { id, isActive };
+    },
+    onMutate: async ({ id, isActive }) => {
+      await queryClient.cancelQueries({ queryKey: ["lead-forms"] });
+      const previousForms = queryClient.getQueryData<LeadForm[]>(["lead-forms"]);
+
+      queryClient.setQueryData<LeadForm[]>(["lead-forms"], (old) =>
+        (old ?? []).map((formItem) =>
+          formItem.id === id ? { ...formItem, is_active: isActive } : formItem
+        ),
+      );
+
+      return { previousForms };
+    },
+    onError: (error, _variables, context) => {
+      if (context?.previousForms) {
+        queryClient.setQueryData(["lead-forms"], context.previousForms);
+      }
+
+      const message =
+        typeof error === "object" && error !== null && "message" in error
+          ? String((error as { message: string }).message)
+          : "Não foi possível atualizar o status do formulário.";
+
+      toast({
+        title: "Erro ao atualizar formulário",
+        description: message,
+        variant: "destructive",
+      });
+    },
+    onSuccess: (_data, { isActive }) => {
+      toast({
+        title: "Status atualizado",
+        description: isActive ? "Formulário ativado." : "Formulário desativado.",
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["lead-forms"] });
+    },
+  });
+
+  const forms = formsData;
+  const loadingForms = isLoadingForms || isFetching;
+  const formsErrorMessage =
+    formsError && typeof formsError === "object" && "message" in formsError
+      ? String((formsError as { message: string }).message)
+      : "Não foi possível carregar os formulários.";
+
+  const appBaseUrl = useMemo(() => {
+    const envUrl = import.meta.env.VITE_APP_URL;
+    if (envUrl && typeof envUrl === "string" && envUrl.length > 0) {
+      return envUrl.replace(/\/+$/, "");
+    }
+    if (typeof window !== "undefined") {
+      return window.location.origin;
+    }
+    return "https://app.metricomflow.com";
+  }, []);
+
   const stats = useMemo(() => {
-    const activeForms = forms.filter((formItem) => formItem.isActive).length;
-    const totalSubmissions = forms.reduce((sum, formItem) => sum + formItem.submissions, 0);
-    const averageSubmissions = forms.length ? Math.round(totalSubmissions / forms.length) : 0;
+    const totalForms = forms.length;
+    const totalSubmissions = forms.reduce((sum, formItem) => sum + (formItem.submission_count ?? 0), 0);
+    const activeForms = forms.filter((formItem) => formItem.is_active).length;
+    const averageSubmissions = totalForms ? Math.round(totalSubmissions / totalForms) : 0;
 
     return {
-      totalForms: forms.length,
+      totalForms,
       activeForms,
       totalSubmissions,
       averageSubmissions,
     };
   }, [forms]);
 
-  const handleCreateForm = (values: FormSchema) => {
-    const id = values.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)+/g, "");
+  const handleCreateForm = async (values: FormSchema) => {
+    const slug = toSlug(values.name);
+    const id = slug || `form-${Date.now()}`;
 
-    const newForm: LeadForm = {
-      id: id || `form-${Date.now()}`,
+    await createFormMutation.mutateAsync({
+      id,
       name: values.name,
-      description: values.description,
-      createdAt: new Date().toISOString(),
-      submissions: 0,
-      isActive: true,
-      webhookUrl: values.webhookUrl || undefined,
-      redirectUrl: values.redirectUrl || undefined,
-      successMessage: values.successMessage || undefined,
-    };
-
-    setForms((prev) => [newForm, ...prev]);
-    setIsDialogOpen(false);
-    form.reset();
-
-    toast({
-      title: "Formulário criado",
-      description: "O formulário público está ativo e pronto para captar leads.",
+      description: values.description?.trim() ? values.description.trim() : null,
+      success_message: values.successMessage?.trim() ? values.successMessage.trim() : null,
+      webhook_url: values.webhookUrl?.trim() ? values.webhookUrl.trim() : null,
+      redirect_url: values.redirectUrl?.trim() ? values.redirectUrl.trim() : null,
+      is_active: true,
+      submission_count: 0,
     });
   };
 
-  const handleToggleForm = (formId: string, checked: boolean) => {
-    setForms((prev) =>
-      prev.map((formItem) =>
-        formItem.id === formId ? { ...formItem, isActive: checked } : formItem
-      )
-    );
+  const handleToggleForm = async (formId: string, checked: boolean) => {
+    setUpdatingId(formId);
+    try {
+      await updateFormStatusMutation.mutateAsync({ id: formId, isActive: checked });
+    } catch (error) {
+      // handled via mutation onError toast
+      console.error("Failed to update form status", error);
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   const handleCopy = (value: string, successMessage: string) => {
@@ -327,89 +420,116 @@ const LeadForms = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {forms.map((formItem) => {
-                    const publicUrl = generateFormUrl(formItem.id);
-                    const embedCode = generateEmbedCode(formItem.id);
+                  {isError ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-10 text-center text-sm text-destructive">
+                        {formsErrorMessage}
+                      </TableCell>
+                    </TableRow>
+                  ) : loadingForms ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-10">
+                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Carregando formulários...
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : forms.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                        Nenhum formulário cadastrado até o momento.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    forms.map((formItem) => {
+                      const publicUrl = `${appBaseUrl}/forms/${formItem.id}`;
+                      const embedCode = `<iframe src="${publicUrl}" width="100%" height="680" style="border:0" allow="fullscreen"></iframe>`;
+                      const isUpdating = updatingId === formItem.id && updateFormStatusMutation.isPending;
 
-                    return (
-                      <TableRow key={formItem.id} className="hover:bg-muted/40">
-                        <TableCell>
-                          <div className="space-y-1">
-                            <p className="font-medium text-foreground">{formItem.name}</p>
-                            {formItem.description && (
-                              <p className="text-xs text-muted-foreground max-w-lg">
-                                {formItem.description}
-                              </p>
-                            )}
-                            <div className="flex flex-wrap gap-2 pt-1">
-                              <Badge variant="outline" className="flex items-center gap-1">
-                                <Globe className="w-3 h-3" />
-                                {formItem.id}
-                              </Badge>
-                              <Badge variant="outline" className="flex items-center gap-1">
-                                <Link2 className="w-3 h-3" /> URL pública
-                              </Badge>
-                              {formItem.webhookUrl && (
-                                <Badge variant="outline" className="flex items-center gap-1">
-                                  <Webhook className="w-3 h-3" /> Webhook ativo
-                                </Badge>
+                      return (
+                        <TableRow key={formItem.id} className="hover:bg-muted/40">
+                          <TableCell>
+                            <div className="space-y-1">
+                              <p className="font-medium text-foreground">{formItem.name}</p>
+                              {formItem.description && (
+                                <p className="text-xs text-muted-foreground max-w-lg">
+                                  {formItem.description}
+                                </p>
                               )}
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                <Badge variant="outline" className="flex items-center gap-1">
+                                  <Globe className="w-3 h-3" />
+                                  {formItem.id}
+                                </Badge>
+                                <Badge variant="outline" className="flex items-center gap-1">
+                                  <Link2 className="w-3 h-3" /> URL pública
+                                </Badge>
+                                {formItem.webhook_url && (
+                                  <Badge variant="outline" className="flex items-center gap-1">
+                                    <Webhook className="w-3 h-3" /> Webhook ativo
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                          {formatDate(formItem.createdAt)}
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm text-foreground">
-                          {formItem.submissions}
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell text-xs text-muted-foreground max-w-[220px] truncate">
-                          {formItem.webhookUrl || "Sem webhook"}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              checked={formItem.isActive}
-                              onCheckedChange={(checked) => handleToggleForm(formItem.id, checked)}
-                            />
-                            <span className="text-xs font-medium text-muted-foreground">
-                              {formItem.isActive ? "Ativo" : "Inativo"}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1"
-                              onClick={() => handleCopy(publicUrl, "Link público copiado para a área de transferência.")}
-                            >
-                              <Link2 className="w-3 h-3" /> Link
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1"
-                              onClick={() => handleCopy(embedCode, "Código de incorporação copiado.")}
-                            >
-                              <Copy className="w-3 h-3" /> Embed
-                            </Button>
-                            {formItem.webhookUrl && (
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                            {formatDate(formItem.created_at)}
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell text-sm text-foreground">
+                            {formItem.submission_count ?? 0}
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell text-xs text-muted-foreground max-w-[220px] truncate">
+                            {formItem.webhook_url || "Sem webhook"}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                aria-label="Ativar ou desativar formulário"
+                                checked={formItem.is_active}
+                                disabled={isUpdating}
+                                onCheckedChange={(checked) => handleToggleForm(formItem.id, checked)}
+                              />
+                              <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                                {isUpdating && <Loader2 className="w-3 h-3 animate-spin" />}
+                                {formItem.is_active ? "Ativo" : "Inativo"}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
                                 className="gap-1"
-                                onClick={() => handleCopy(formItem.webhookUrl!, "URL do webhook copiada.")}
+                                onClick={() => handleCopy(publicUrl, "Link público copiado para a área de transferência.")}
                               >
-                                <Webhook className="w-3 h-3" /> Webhook
+                                <Link2 className="w-3 h-3" /> Link
                               </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1"
+                                onClick={() => handleCopy(embedCode, "Código de incorporação copiado.")}
+                              >
+                                <Copy className="w-3 h-3" /> Embed
+                              </Button>
+                              {formItem.webhook_url && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-1"
+                                  onClick={() => handleCopy(formItem.webhook_url!, "URL do webhook copiada.")}
+                                >
+                                  <Webhook className="w-3 h-3" /> Webhook
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -636,9 +756,18 @@ const LeadForms = () => {
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" className="gap-2">
-                <CheckCircle2 className="w-4 h-4" />
-                Criar formulário
+              <Button type="submit" className="gap-2" disabled={createFormMutation.isPending}>
+                {createFormMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    Criar formulário
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </form>

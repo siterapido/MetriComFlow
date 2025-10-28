@@ -313,6 +313,7 @@ export const useHasCRMAccess = () => {
 
 /**
  * Upgrade/Change organization's subscription plan
+ * Also handles first-time subscription creation
  */
 export const useUpgradePlan = () => {
   const queryClient = useQueryClient();
@@ -325,7 +326,7 @@ export const useUpgradePlan = () => {
 
       // Check if subscription exists
       if (currentSubscription) {
-        // Update existing subscription
+        // Update existing subscription (upgrade/downgrade)
         const { data, error } = await supabase
           .from("organization_subscriptions")
           .update({
@@ -339,17 +340,22 @@ export const useUpgradePlan = () => {
         if (error) throw error;
         return data;
       } else {
-        // Create new subscription
+        // Create new subscription (first-time subscription)
+        // Note: Status will be updated to "active" by create-asaas-subscription Edge Function
+        const now = new Date();
+        const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
         const { data, error } = await supabase
           .from("organization_subscriptions")
           .insert({
             organization_id: org.id,
             plan_id: newPlanId,
-            status: "trial", // Start with trial
-            current_period_start: new Date().toISOString(),
-            current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
-            trial_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            next_billing_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            status: "trial", // Temporary status, will be updated to "active" after payment
+            current_period_start: now.toISOString(),
+            current_period_end: periodEnd.toISOString(),
+            trial_end: null, // No trial for paid subscriptions
+            next_billing_date: periodEnd.toISOString(),
+            metadata: { first_subscription: true },
           })
           .select()
           .single();
@@ -358,15 +364,18 @@ export const useUpgradePlan = () => {
         return data;
       }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ["current-subscription"] });
       queryClient.invalidateQueries({ queryKey: ["organization-plan-limits"] });
       queryClient.invalidateQueries({ queryKey: ["user-permissions"] });
 
+      const isFirstSubscription = !currentSubscription;
       toast({
-        title: "Plano atualizado com sucesso!",
-        description: "Seu novo plano já está ativo.",
+        title: isFirstSubscription ? "Plano contratado com sucesso!" : "Plano atualizado com sucesso!",
+        description: isFirstSubscription
+          ? "Seu plano será ativado assim que o pagamento for confirmado."
+          : "Seu novo plano já está ativo.",
       });
     },
     onError: (error: any) => {

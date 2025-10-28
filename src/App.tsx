@@ -13,6 +13,7 @@ import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
 import LeadsLinear from "./pages/LeadsLinear";
 import Metas from "./pages/Metas";
+import MetasNew from "./pages/MetasNew";
 import MetaAdsConfig from "./pages/MetaAdsConfig";
 import Users from "./pages/Users";
 import LeadForms from "./pages/LeadForms";
@@ -61,7 +62,10 @@ const App = () => (
                 <Route path="/leads" element={<LeadsLinear />} />
                 <Route path="/leads/kanban" element={<Leads />} />
                 <Route path="/formularios" element={<LeadForms />} />
-                <Route path="/metas" element={<Metas />} />
+                {/* Nova página de Metas unificada */}
+                <Route path="/metas" element={<MetasNew />} />
+                {/* Página antiga mantida como legado */}
+                <Route path="/metas-legacy" element={<Metas />} />
                 {/* Redireciona /metrics para /meta-ads-config (páginas unificadas) */}
                 <Route path="/metrics" element={<Navigate to="/meta-ads-config" replace />} />
                 <Route path="/meta-ads-config" element={<MetaAdsConfig />} />

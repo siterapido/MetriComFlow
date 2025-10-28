@@ -2,15 +2,27 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 // @ts-ignore: Allow jsr imports in local editors without Deno tooling
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+// Basic CORS headers (match other functions like meta-auth)
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-application-name",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+};
+
 type PromoteOwnerBody = {
   organizationName?: string;
   planSlug?: string; // default: 'pro'
 };
 
-const SUPABASE_URL = (globalThis as any).Deno?.env.get("SUPABASE_URL")!;
+// Read env values with fallbacks similar to meta-auth
+const SUPABASE_URL =
+  (globalThis as any).Deno?.env.get("PROJECT_URL") ??
+  (globalThis as any).Deno?.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = (globalThis as any).Deno?.env.get("SUPABASE_ANON_KEY")!;
-// Note: Supabase secrets cannot start with "SUPABASE_". Use SERVICE_ROLE_KEY.
-const SERVICE_ROLE_KEY = (globalThis as any).Deno?.env.get("SERVICE_ROLE_KEY")!;
+// Prefer SERVICE_ROLE_KEY, fallback to SUPABASE_SERVICE_ROLE_KEY if that is what was configured
+const SERVICE_ROLE_KEY =
+  (globalThis as any).Deno?.env.get("SERVICE_ROLE_KEY") ??
+  (globalThis as any).Deno?.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 function slugify(input: string): string {
   return input
@@ -22,12 +34,17 @@ function slugify(input: string): string {
 
 export default (globalThis as any).Deno?.serve(async (req: Request) => {
   try {
+    // Handle CORS preflight
+    if (req.method === "OPTIONS") {
+      return new Response("ok", { headers: corsHeaders });
+    }
+
     // Require authenticated user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
         status: 401,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -41,7 +58,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     if (userError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized", details: userError?.message }), {
         status: 401,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -61,7 +78,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       // If column doesn't exist or RLS, return error
       return new Response(
         JSON.stringify({ error: "Failed to promote user", details: updateProfileError.message }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -75,7 +92,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     if (orgCheckError) {
       return new Response(
         JSON.stringify({ error: "Failed to check organization", details: orgCheckError.message }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -102,7 +119,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       if (createOrgError) {
         return new Response(
           JSON.stringify({ error: "Failed to create organization", details: createOrgError.message }),
-          { status: 500, headers: { "Content-Type": "application/json" } }
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       organizationId = newOrg.id as string;
@@ -118,7 +135,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     if (planError || !plan?.id) {
       return new Response(
         JSON.stringify({ error: "Subscription plan not found", details: planError?.message }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -147,7 +164,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       if (createSubError) {
         return new Response(
           JSON.stringify({ error: "Failed to create trial subscription", details: createSubError.message }),
-          { status: 500, headers: { "Content-Type": "application/json" } }
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
     }
@@ -157,13 +174,13 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ success: true, organizationId }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return new Response(
       JSON.stringify({ error: "Unexpected error", details: message }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

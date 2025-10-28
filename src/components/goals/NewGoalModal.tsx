@@ -129,27 +129,26 @@ export function NewGoalModal({ open, onOpenChange, goal, onSuccess }: NewGoalMod
       const metricKey = data.metric_key as GoalType;
       const metricMetadata = GOAL_TYPE_METADATA[metricKey];
 
-      const goalData = {
+      // Monta somente campos persistidos (status e percentage são gerados no banco)
+      const baseGoalData = {
         company_name: data.company_name,
         goal_amount: data.goal_amount,
         achieved_amount: data.achieved_amount,
         period_start: format(data.period_start, 'yyyy-MM-dd'),
         period_end: format(data.period_end, 'yyyy-MM-dd'),
-        status: data.status,
-        percentage: (data.achieved_amount / data.goal_amount) * 100,
         metric_key: metricKey,
         metric_category: metricMetadata?.category ?? null,
         metric_label: metricMetadata?.label ?? null,
-      };
+      } as const;
 
       if (isEditMode && goal) {
         await updateGoal.mutateAsync({
           id: goal.id,
-          updates: goalData,
+          updates: baseGoalData,
         });
         toast.success("Meta atualizada com sucesso!");
       } else {
-        await createGoal.mutateAsync(goalData);
+        await createGoal.mutateAsync(baseGoalData);
         toast.success("Meta criada com sucesso!");
       }
 
@@ -166,20 +165,22 @@ export function NewGoalModal({ open, onOpenChange, goal, onSuccess }: NewGoalMod
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-4xl p-4 sm:p-6 lg:p-8">
+      <DialogContent className="w-full max-w-4xl sm:max-w-[900px] max-h-[90vh] overflow-y-auto bg-card border-border p-4 sm:p-6 lg:p-8">
         <DialogHeader>
-          <DialogTitle>{isEditMode ? 'Editar Meta' : 'Nova Meta do Cliente'}</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-foreground">
+            {isEditMode ? 'Editar Meta' : 'Nova Meta do Cliente'}
+          </DialogTitle>
+          <DialogDescription className="text-muted-foreground">
             {isEditMode
               ? 'Atualize as informações da meta do cliente'
-              : 'Defina uma nova meta para acompanhar o desempenho do cliente'
-            }
+              : 'Defina uma nova meta para acompanhar o desempenho do cliente'}
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,0.6fr)_minmax(0,0.4fr)]">
+            {/* Layout responsivo: 1 coluna no mobile, 2 colunas no LG e proporções customizadas apenas a partir de XL */}
+            <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-[minmax(0,0.6fr)_minmax(0,0.4fr)]">
               <FormField
                 control={form.control}
                 name="metric_key"
@@ -291,7 +292,7 @@ export function NewGoalModal({ open, onOpenChange, goal, onSuccess }: NewGoalMod
                               </Button>
                             </FormControl>
                           </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
+                          <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
                             <Calendar
                               mode="single"
                               selected={field.value}
@@ -334,7 +335,7 @@ export function NewGoalModal({ open, onOpenChange, goal, onSuccess }: NewGoalMod
                               </Button>
                             </FormControl>
                           </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
+                          <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
                             <Calendar
                               mode="single"
                               selected={field.value}
@@ -362,11 +363,11 @@ export function NewGoalModal({ open, onOpenChange, goal, onSuccess }: NewGoalMod
                         defaultValue={field.value}
                       >
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger className="border-border">
                             <SelectValue placeholder="Selecione o status" />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
+                        <SelectContent className="bg-card border-border">
                           <SelectItem value="Excelente">Excelente</SelectItem>
                           <SelectItem value="Em dia">Em dia</SelectItem>
                           <SelectItem value="Atrasado">Atrasado</SelectItem>

@@ -41,7 +41,7 @@ const items: NavItem[] = [
     requiresCRM: true,
   },
   {
-    title: "Metas dos Clientes",
+    title: "Metas",
     url: "/metas",
     icon: Target,
     requiresMetrics: true,

@@ -46,9 +46,9 @@ function HeaderLanding() {
             <a href="/login">Entrar</a>
           </Button>
           <Button onClick={() => {
-            track({ event: "lp_header_cta_click", label: "comece_gratis" });
+            track({ event: "lp_header_cta_click", label: "ver_planos" });
             document.getElementById("planos")?.scrollIntoView({ behavior: "smooth" });
-          }}>Comece grátis</Button>
+          }}>Ver planos</Button>
         </div>
       </div>
     </header>
@@ -87,13 +87,13 @@ function Hero() {
               <Button className="accent-ring" size="lg" onClick={() => {
                 track({ event: "lp_hero_cta_click", label: "comece_gratis" });
                 document.getElementById("planos")?.scrollIntoView({ behavior: "smooth" });
-              }}>Comece grátis</Button>
+              }}>Ver planos</Button>
               <Button className="accent-ring" size="lg" variant="outline" onClick={() => {
                 track({ event: "lp_hero_cta_click", label: "agendar_demo" });
                 document.getElementById("planos")?.scrollIntoView({ behavior: "smooth" });
               }}>Agendar demo</Button>
             </div>
-            <div className="mt-6 text-sm text-muted-foreground">Sem cartão de crédito. 5 minutos para começar.</div>
+            <div className="mt-6 text-sm text-muted-foreground">Escolha seu plano e comece em 5 minutos.</div>
           </div>
           <div className="relative">
             <div className="gradient-card rounded-lg border p-4 glow">
@@ -334,7 +334,7 @@ function PricingTeaser() {
     <section className="container mx-auto px-4 py-16">
       <div className="p-8 border rounded-lg text-center">
         <h3 className="text-2xl font-semibold">Planos simples e transparentes</h3>
-        <p className="mt-2 text-muted-foreground">Comece grátis e evolua conforme seu time cresce.</p>
+        <p className="mt-2 text-muted-foreground">Escolha seu plano e evolua conforme seu time cresce.</p>
         <div className="mt-6">
           <Button size="lg" onClick={() => {
             track({ event: "lp_pricing_cta_click" });

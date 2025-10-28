@@ -46,7 +46,8 @@ export default function SubscriptionPlans() {
 
   const handleSelectPlan = (planId: string) => {
     const plan = plans?.find((p) => p.id === planId);
-    if (plan && plan.id !== currentPlan?.id) {
+    // Allow selection if no current plan OR different from current plan
+    if (plan && (!currentPlan || plan.id !== currentPlan.id)) {
       setSelectedPlan(plan);
       setUpgradeDialogOpen(true);
     }
@@ -132,10 +133,13 @@ export default function SubscriptionPlans() {
 
       {/* Payment Status Alerts */}
       {!currentSubscription && (
-        <Alert className="bg-accent/20 border-border">
-          <AlertCircle className="h-4 w-4 text-muted-foreground" />
-          <AlertDescription className="text-muted-foreground">
-            Nenhum plano ativo no momento. Escolha um plano abaixo para habilitar limites e recursos.
+        <Alert className="bg-warning/10 border-warning">
+          <AlertCircle className="h-5 w-5 text-warning" />
+          <AlertDescription className="text-foreground">
+            <p className="font-semibold text-base">⚠️ Nenhum Plano Ativo</p>
+            <p className="text-sm mt-1">
+              Você não possui um plano ativo no momento. Escolha um dos planos abaixo para desbloquear todos os recursos da plataforma e começar a gerenciar suas campanhas com eficiência.
+            </p>
           </AlertDescription>
         </Alert>
       )}
@@ -153,12 +157,24 @@ export default function SubscriptionPlans() {
       )}
 
       {currentSubscription?.status === "canceled" && (
-        <Alert className="bg-destructive/10 border-destructive">
-          <XCircle className="h-4 w-4 text-destructive" />
-          <AlertDescription className="text-destructive">
-            <p className="font-semibold">Assinatura Cancelada</p>
+        <Alert className="bg-warning/10 border-warning">
+          <XCircle className="h-5 w-5 text-warning" />
+          <AlertDescription className="text-foreground">
+            <p className="font-semibold text-base">⚠️ Assinatura Cancelada</p>
             <p className="text-sm mt-1">
-              Sua assinatura foi cancelada. Contrate um novo plano para continuar usando o sistema.
+              Sua assinatura foi cancelada. Contrate um novo plano abaixo para continuar usando o sistema e todos os seus recursos.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {currentSubscription?.status === "expired" && (
+        <Alert className="bg-warning/10 border-warning">
+          <XCircle className="h-5 w-5 text-warning" />
+          <AlertDescription className="text-foreground">
+            <p className="font-semibold text-base">⚠️ Plano Expirado</p>
+            <p className="text-sm mt-1">
+              Seu plano expirou. Escolha um dos planos abaixo para reativar sua conta e voltar a usar todos os recursos da plataforma.
             </p>
           </AlertDescription>
         </Alert>
@@ -242,7 +258,21 @@ export default function SubscriptionPlans() {
 
       {/* Plans Grid */}
       <div>
-        <h2 className="text-2xl font-bold text-foreground mb-4">Escolha seu plano</h2>
+        {!currentSubscription ? (
+          /* No active plan: Highlight call-to-action */
+          <div className="bg-gradient-to-br from-primary/10 via-secondary/5 to-primary/5 border-2 border-primary/30 rounded-2xl p-8 mb-6">
+            <div className="text-center mb-6">
+              <h2 className="text-3xl font-bold text-foreground mb-2">
+                🚀 Comece Agora com o Plano Ideal
+              </h2>
+              <p className="text-muted-foreground text-lg">
+                Escolha o plano perfeito para o seu negócio e desbloqueie todo o potencial da plataforma
+              </p>
+            </div>
+          </div>
+        ) : (
+          <h2 className="text-2xl font-bold text-foreground mb-4">Escolha seu plano</h2>
+        )}
 
         {!plans || plans.length === 0 ? (
           <Alert className="bg-accent/20 border-border">

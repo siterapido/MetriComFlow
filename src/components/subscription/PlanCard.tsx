@@ -23,7 +23,8 @@ export function PlanCard({ plan, isCurrentPlan, onSelect, disabled, loading }: P
   const getButtonText = () => {
     if (isCurrentPlan) return "Plano Atual";
     if (loading) return "Processando...";
-    return "Selecionar Plano";
+    // Show "Contratar" when there's no current plan, otherwise "Selecionar"
+    return "Contratar Plano";
   };
 
   return (

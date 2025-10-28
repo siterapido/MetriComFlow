@@ -319,7 +319,7 @@ export function GoalFormDialog({ open, onOpenChange, goal, onSuccess }: GoalForm
           </div>
 
           {/* Period */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="period_start" className="text-foreground flex items-center gap-1">
                 <Calendar className="w-3 h-3" />

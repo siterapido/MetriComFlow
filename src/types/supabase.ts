@@ -58,6 +58,61 @@ export type Database = {
           // },
         ]
       }
+      client_goals: {
+        Row: {
+          id: string
+          company_name: string
+          goal_amount: number
+          achieved_amount: number
+          percentage: number
+          status: 'Excelente' | 'Em dia' | 'Atrasado' | 'Crítico'
+          period_start: string
+          period_end: string
+          created_by: string | null
+          created_at: string | null
+          updated_at: string | null
+          metric_key: string | null
+          metric_category: 'crm' | 'meta' | 'revenue' | 'custom' | null
+          metric_label: string | null
+        }
+        Insert: {
+          id?: string
+          company_name: string
+          goal_amount: number
+          achieved_amount?: number
+          period_start: string
+          period_end: string
+          created_by?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          metric_key?: string | null
+          metric_category?: 'crm' | 'meta' | 'revenue' | 'custom' | null
+          metric_label?: string | null
+        }
+        Update: {
+          id?: string
+          company_name?: string
+          goal_amount?: number
+          achieved_amount?: number
+          period_start?: string
+          period_end?: string
+          created_by?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          metric_key?: string | null
+          metric_category?: 'crm' | 'meta' | 'revenue' | 'custom' | null
+          metric_label?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_goals_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meta_business_connections: {
         Row: {
           access_token: string
@@ -100,8 +155,8 @@ export type Database = {
           refresh_token?: string | null
           updated_at?: string | null
           user_id?: string
-        }
-        Relationships: [
+      }
+      Relationships: [
           {
             foreignKeyName: "meta_business_connections_user_id_fkey"
             columns: ["user_id"]
@@ -110,6 +165,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      lead_forms: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          success_message: string | null
+          webhook_url: string | null
+          redirect_url: string | null
+          is_active: boolean
+          submission_count: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          name: string
+          description?: string | null
+          success_message?: string | null
+          webhook_url?: string | null
+          redirect_url?: string | null
+          is_active?: boolean
+          submission_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          success_message?: string | null
+          webhook_url?: string | null
+          redirect_url?: string | null
+          is_active?: boolean
+          submission_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
