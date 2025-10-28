@@ -22,9 +22,9 @@ export default function Auth() {
       <div className="relative z-10 w-full max-w-md animate-fade-in">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-gradient-to-br from-primary to-secondary rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-2xl">
-            <span className="text-3xl font-bold text-white">M</span>
+            <span className="text-3xl font-bold text-white">I</span>
           </div>
-          <h1 className="text-4xl font-bold text-foreground mb-2">MetriCom Flow</h1>
+          <h1 className="text-4xl font-bold text-foreground mb-2">InsightFy</h1>
           <p className="text-muted-foreground">Sistema Interno de Gestão</p>
         </div>
 

@@ -1,8 +1,8 @@
-# Metricom Flow - Database Documentation
+# InsightFy - Database Documentation
 
 ## Overview
 
-This document describes the complete database schema for the Metricom Flow CRM application, built on **Supabase** (PostgreSQL).
+This document describes the complete database schema for the InsightFy CRM application, built on **Supabase** (PostgreSQL).
 
 ## Table of Contents
 

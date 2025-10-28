@@ -57,7 +57,7 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader>
-        <CardTitle>Entrar no Metricom Flow</CardTitle>
+        <CardTitle>Entrar no InsightFy</CardTitle>
         <CardDescription>
           Digite suas credenciais para acessar o sistema
         </CardDescription>

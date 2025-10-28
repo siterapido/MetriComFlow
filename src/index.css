@@ -2,11 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* MetriCom Flow Design System - Modern Internal CRM */
+/* InsightFy Design System - Modern Internal CRM */
 
 @layer base {
   :root {
-    /* Main Brand Colors - MetriCom Flow */
+    /* Main Brand Colors - InsightFy */
     --background: 218 56% 14%;  /* #071D33 */
     --foreground: 206 20% 92%;  /* #FFFFFF */
     

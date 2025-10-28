@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, MapPin, User, Phone, Mail, FileText, CreditCard } from "lucide-react";
+import { Loader2, MapPin, User, FileText, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -14,8 +14,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PaymentMethodSelector, PaymentMethod } from "./PaymentMethodSelector";
 import {
   formatCpfCnpj,
   validateCpfCnpj,
@@ -48,8 +46,7 @@ const creditCardSchema = z.object({
     }),
 });
 
-// Use discriminated union to validate credit card fields ONLY when paymentMethod === "CREDIT_CARD"
-const baseFields = {
+const checkoutSchema = z.object({
   billingName: z.string().min(3, "Nome completo é obrigatório"),
   billingEmail: z.string().email("Email inválido"),
   billingCpfCnpj: z.string().refine(validateCpfCnpj, {
@@ -67,25 +64,9 @@ const baseFields = {
   province: z.string().min(2, "Bairro é obrigatório"),
   city: z.string().min(2, "Cidade é obrigatória"),
   state: z.string().length(2, "Estado deve ter 2 letras (ex: SP)"),
-};
-
-const checkoutSchema = z.discriminatedUnion("paymentMethod", [
-  z.object({
-    ...baseFields,
-    paymentMethod: z.literal("CREDIT_CARD"),
-    creditCard: creditCardSchema,
-  }),
-  z.object({
-    ...baseFields,
-    paymentMethod: z.literal("PIX"),
-    creditCard: z.undefined().optional(),
-  }),
-  z.object({
-    ...baseFields,
-    paymentMethod: z.literal("BOLETO"),
-    creditCard: z.undefined().optional(),
-  }),
-]);
+  paymentMethod: z.literal("CREDIT_CARD"),
+  creditCard: creditCardSchema,
+});
 
 type CheckoutFormData = z.infer<typeof checkoutSchema>;
 
@@ -123,16 +104,6 @@ export function CheckoutForm({ planName, planPrice, onSubmit, isLoading = false 
     },
   });
 
-  // When switching to PIX/BOLETO, clear creditCard from form state to avoid hidden validation
-  const currentMethod = form.watch("paymentMethod");
-  if (currentMethod !== "CREDIT_CARD") {
-    const cc = form.getValues("creditCard" as any);
-    if (cc !== undefined) {
-      // Clear only once to prevent unnecessary rerenders
-      form.setValue("creditCard" as any, undefined, { shouldValidate: false, shouldDirty: false });
-    }
-  }
-
   // Auto-fetch address from CEP using ViaCEP API
   const handleCepChange = async (cep: string) => {
     const cleanCep = stripNonNumeric(cep);
@@ -165,144 +136,134 @@ export function CheckoutForm({ planName, planPrice, onSubmit, isLoading = false 
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {/* Plan Summary */}
-        <Card className="bg-gradient-to-br from-primary/10 to-secondary/10 border-primary/20">
-          <CardHeader>
-            <CardTitle className="text-2xl">Plano {planName}</CardTitle>
-            <CardDescription className="text-lg font-semibold text-foreground">
-              R$ {planPrice.toFixed(2)}/mês
-            </CardDescription>
-          </CardHeader>
-        </Card>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        {/* Plan Summary - Minimalista */}
+        <div className="bg-gradient-to-br from-card to-accent/20 border border-border rounded-xl p-6 hover-lift">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground mb-1">Plano Selecionado</p>
+              <h2 className="text-3xl font-bold text-foreground">{planName}</h2>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-medium text-muted-foreground mb-1">Valor Mensal</p>
+              <p className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                R$ {planPrice.toFixed(2)}
+              </p>
+            </div>
+          </div>
+        </div>
 
-        {/* Payment Method */}
-        <FormField
-          control={form.control}
-          name="paymentMethod"
-          render={({ field }) => (
-            <FormItem>
-              <PaymentMethodSelector
-                value={field.value}
-                onChange={field.onChange}
-              />
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {form.watch("paymentMethod") === "CREDIT_CARD" && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                  <CreditCard className="w-5 h-5 text-white" />
-                </div>
-                <CardTitle>Dados do Cartão</CardTitle>
+        {/* Credit Card Section - Always visible */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="bg-gradient-to-r from-primary/10 to-secondary/10 border-b border-border px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center shadow-md">
+                <CreditCard className="w-5 h-5 text-white" />
               </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              <h3 className="text-xl font-bold text-foreground">Dados do Cartão</h3>
+            </div>
+          </div>
+          <div className="p-6 space-y-4">
+            <FormField
+              control={form.control}
+              name="creditCard.holderName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome impresso no cartão *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="João da Silva" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <FormField
                 control={form.control}
-                name="creditCard.holderName"
+                name="creditCard.number"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome impresso no cartão *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="João da Silva" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormField
-                  control={form.control}
-                  name="creditCard.number"
-                  render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                      <FormLabel>Número do cartão *</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="0000 0000 0000 0000"
-                          {...field}
-                          onChange={(e) => {
-                            const digits = e.target.value.replace(/\D/g, "");
-                            const groups = digits.match(/.{1,4}/g) || [];
-                            field.onChange(groups.join(" "));
-                          }}
-                          maxLength={23}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="creditCard.ccv"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>CVV *</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="123"
-                          {...field}
-                          onChange={(e) => {
-                            const digits = e.target.value.replace(/\D/g, "");
-                            field.onChange(digits);
-                          }}
-                          maxLength={4}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="creditCard.expiry"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Validade (MM/AA) *</FormLabel>
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Número do cartão *</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="MM/AA"
+                        placeholder="0000 0000 0000 0000"
                         {...field}
                         onChange={(e) => {
                           const digits = e.target.value.replace(/\D/g, "");
-                          let formatted = digits;
-                          if (digits.length >= 3) {
-                            formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;
-                          }
-                          field.onChange(formatted);
+                          const groups = digits.match(/.{1,4}/g) || [];
+                          field.onChange(groups.join(" "));
                         }}
-                        maxLength={5}
+                        maxLength={23}
                       />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </CardContent>
-          </Card>
-        )}
+
+              <FormField
+                control={form.control}
+                name="creditCard.ccv"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CVV *</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="123"
+                        {...field}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "");
+                          field.onChange(digits);
+                        }}
+                        maxLength={4}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="creditCard.expiry"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Validade (MM/AA) *</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="MM/AA"
+                      {...field}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, "");
+                        let formatted = digits;
+                        if (digits.length >= 3) {
+                          formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;
+                        }
+                        field.onChange(formatted);
+                      }}
+                      maxLength={5}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
 
         {/* Personal Information */}
-        <Card>
-          <CardHeader>
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="bg-gradient-to-r from-primary/10 to-secondary/10 border-b border-border px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center shadow-md">
                 <User className="w-5 h-5 text-white" />
               </div>
-              <CardTitle>Informações Pessoais</CardTitle>
+              <h3 className="text-xl font-bold text-foreground">Informações Pessoais</h3>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          </div>
+          <div className="p-6 space-y-4">
             <FormField
               control={form.control}
               name="billingName"
@@ -377,20 +338,20 @@ export function CheckoutForm({ planName, planPrice, onSubmit, isLoading = false 
                 )}
               />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Billing Address */}
-        <Card>
-          <CardHeader>
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="bg-gradient-to-r from-primary/10 to-secondary/10 border-b border-border px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center shadow-md">
                 <MapPin className="w-5 h-5 text-white" />
               </div>
-              <CardTitle>Endereço de Cobrança</CardTitle>
+              <h3 className="text-xl font-bold text-foreground">Endereço de Cobrança</h3>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          </div>
+          <div className="p-6 space-y-4">
             <FormField
               control={form.control}
               name="postalCode"
@@ -518,50 +479,36 @@ export function CheckoutForm({ planName, planPrice, onSubmit, isLoading = false 
                 )}
               />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Submit Button */}
-        <Card className="bg-gradient-to-br from-success/10 to-success/5 border-success/20">
-          <CardContent className="p-6">
-            <Button
-              type="submit"
-              className="w-full bg-success hover:bg-success/90 text-white h-12 text-base font-semibold"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Processando...
-                </>
-              ) : (
-                <>
-                  <FileText className="mr-2 h-5 w-5" />
-                  Confirmar e Contratar Plano
-                </>
-              )}
-            </Button>
+        <div className="bg-gradient-to-br from-success/10 to-success/5 border border-success/20 rounded-xl p-6">
+          <Button
+            type="submit"
+            className="w-full bg-success hover:bg-success/90 text-white h-12 text-base font-semibold"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Processando...
+              </>
+            ) : (
+              <>
+                <FileText className="mr-2 h-5 w-5" />
+                Confirmar e Contratar Plano
+              </>
+            )}
+          </Button>
 
-            <p className="text-xs text-center text-muted-foreground mt-4">
-              Ao confirmar, você concorda com os Termos de Serviço e Política de Privacidade.
-              {form.watch("paymentMethod") === "BOLETO" && (
-                <span className="block mt-2 text-warning">
-                  ⚠️ Boleto bancário: aprovação em até 3 dias úteis após pagamento
-                </span>
-              )}
-              {form.watch("paymentMethod") === "PIX" && (
-                <span className="block mt-2 text-success">
-                  ✅ PIX: aprovação automática em até 1 hora após pagamento
-                </span>
-              )}
-              {form.watch("paymentMethod") === "CREDIT_CARD" && (
-                <span className="block mt-2 text-primary">
-                  ⚡ Cartão de crédito: aprovação imediata
-                </span>
-              )}
-            </p>
-          </CardContent>
-        </Card>
+          <p className="text-xs text-center text-muted-foreground mt-4">
+            Ao confirmar, você concorda com os Termos de Serviço e Política de Privacidade.
+            <span className="block mt-2 text-primary font-medium">
+              ⚡ Cartão de crédito: aprovação imediata
+            </span>
+          </p>
+        </div>
       </form>
     </Form>
   );

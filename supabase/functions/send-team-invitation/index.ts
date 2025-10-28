@@ -44,11 +44,11 @@ async function sendEmailInvitation(params: {
     return;
   }
 
-  const fromEmail = Deno.env.get("INVITE_FROM_EMAIL") ?? "Metricom Flow <convites@metricomflow.app>";
+  const fromEmail = Deno.env.get("INVITE_FROM_EMAIL") ?? "InsightFy <convites@insightfy.app>";
 
   const emailHtml = `
     <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827;">
-      <h2 style="color: #111827;">Você foi convidado para o Metricom Flow</h2>
+      <h2 style="color: #111827;">Você foi convidado para o InsightFy</h2>
       <p>${params.invitedByName} convidou você para entrar na organização <strong>${params.organizationName}</strong>.</p>
       <p>Clique no botão abaixo para aceitar o convite:</p>
       <p style="margin: 24px 0;">
@@ -75,7 +75,7 @@ async function sendEmailInvitation(params: {
     body: JSON.stringify({
       from: fromEmail,
       to: params.to,
-      subject: `Convite para ${params.organizationName} no Metricom Flow`,
+      subject: `Convite para ${params.organizationName} no InsightFy`,
       html: emailHtml,
     }),
   });
@@ -237,7 +237,7 @@ Deno.serve(async (req) => {
         to: email,
         inviteLink,
         organizationName: organization.name,
-        invitedByName: invitationMetadata.invited_by_name ?? "Equipe Metricom Flow",
+        invitedByName: invitationMetadata.invited_by_name ?? "Equipe InsightFy",
       });
       console.log("✅ Convite enviado por email para", email);
     } catch (emailError) {

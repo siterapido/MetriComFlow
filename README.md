@@ -1,4 +1,4 @@
-# Metricom Flow CRM
+# InsightFy CRM
 
 > Sistema de CRM moderno para gestão de leads, metas e faturamento B2B
 

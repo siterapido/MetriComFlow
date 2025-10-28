@@ -21,8 +21,8 @@ export default function PrivacyPolicy() {
           <section>
             <h2 className="text-2xl font-semibold text-foreground mb-4">1. Introdução</h2>
             <p className="text-muted-foreground leading-relaxed">
-              O MetriCom Flow é um sistema interno de gestão que prioriza a proteção e privacidade dos dados dos nossos usuários. 
-              Esta Política de Privacidade descreve como coletamos, usamos, armazenamos e protegemos suas informações pessoais 
+              O InsightFy é um sistema interno de gestão que prioriza a proteção e privacidade dos dados dos nossos usuários.
+              Esta Política de Privacidade descreve como coletamos, usamos, armazenamos e protegemos suas informações pessoais
               quando você utiliza nosso aplicativo.
             </p>
           </section>
@@ -56,7 +56,7 @@ export default function PrivacyPolicy() {
           <section>
             <h2 className="text-2xl font-semibold text-foreground mb-4">3. Como Usamos suas Informações</h2>
             <ul className="list-disc list-inside space-y-2 text-muted-foreground">
-              <li>Fornecer e manter os serviços do MetriCom Flow</li>
+              <li>Fornecer e manter os serviços do InsightFy</li>
               <li>Processar e gerenciar leads e campanhas publicitárias</li>
               <li>Gerar relatórios e análises de performance</li>
               <li>Melhorar a funcionalidade e experiência do usuário</li>

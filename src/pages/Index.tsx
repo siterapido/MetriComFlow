@@ -33,8 +33,8 @@ function HeaderLanding() {
     <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <img src="/favicon.ico" alt="MetriCom Flow" className="w-6 h-6" />
-          <span className="font-semibold">MetriCom Flow</span>
+          <img src="/favicon.ico" alt="InsightFy" className="w-6 h-6" />
+          <span className="font-semibold">InsightFy</span>
         </div>
         <nav className="hidden sm:flex items-center gap-6 text-sm text-muted-foreground">
           <a href="#como-funciona" className="hover:text-foreground">Como funciona</a>

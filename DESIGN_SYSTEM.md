@@ -1,8 +1,8 @@
-# MetriCom Flow - Design System Guide
+# InsightFy - Design System Guide
 
 ## 📐 Visão Geral
 
-O MetriCom Flow utiliza um design system moderno e profissional com foco em tons de azul, criando uma identidade visual coesa e harmoniosa em toda a aplicação.
+O InsightFy utiliza um design system moderno e profissional com foco em tons de azul, criando uma identidade visual coesa e harmoniosa em toda a aplicação.
 
 ---
 

@@ -1,4 +1,4 @@
-# Guia de Implementação - Metricom Flow MVP
+# Guia de Implementação - InsightFy MVP
 
 Este guia detalha toda a implementação realizada para criar um sistema completo de CRM com integração Meta Ads.
 

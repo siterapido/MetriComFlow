@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Metricom Flow** is a B2B CRM for lead management, revenue tracking, and goal monitoring. Built with **Vite + React 18 + TypeScript**, **shadcn-ui**, **Tailwind CSS**, and **Supabase** backend. Originally created with Lovable (lovable.dev).
+**InsightFy** is a B2B CRM for lead management, revenue tracking, and goal monitoring. Built with **Vite + React 18 + TypeScript**, **shadcn-ui**, **Tailwind CSS**, and **Supabase** backend. Originally created with Lovable (lovable.dev).
 
 ## Key Commands
 

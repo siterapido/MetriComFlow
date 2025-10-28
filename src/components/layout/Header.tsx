@@ -31,7 +31,7 @@ export function Header() {
     <header className="h-16 bg-card border-b border-border flex items-center justify-between px-4 sm:px-6 gap-3 flex-wrap">
       <div className="flex items-center gap-3">
         <SidebarTrigger className="text-foreground hover:bg-accent" />
-        <h1 className="text-lg sm:text-xl font-bold text-foreground">Sistema MetriCom Flow</h1>
+        <h1 className="text-lg sm:text-xl font-bold text-foreground">Sistema InsightFy</h1>
       </div>
 
       <div className="flex items-center gap-2">

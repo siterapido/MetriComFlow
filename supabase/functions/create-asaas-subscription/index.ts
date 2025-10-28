@@ -263,7 +263,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
         nextDueDate: formattedDueDate,
         value: plan.price,
         cycle: "MONTHLY",
-        description: `Plano ${plan.name} - Metricom Flow`,
+        description: `Plano ${plan.name} - InsightFy`,
         externalReference: subscription.id, // Link to our subscription
       };
 
