@@ -645,8 +645,9 @@ export function CheckoutForm({
                     <FormMessage />
                   </FormItem>
                 )}
-              />
+             />
             </div>
+          </div>
           </div>
         )}
 
