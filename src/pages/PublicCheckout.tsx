@@ -76,6 +76,63 @@ export default function PublicCheckout() {
       const paymentMethod = formData.paymentMethod; // CREDIT_CARD | PIX | BOLETO
       const password = formData.accountPassword;
       const email = formData.billingEmail.trim().toLowerCase();
+      const sanitizedPhone = stripNonNumeric(formData.billingPhone);
+      const sanitizedCpfCnpj = stripNonNumeric(formData.billingCpfCnpj);
+      const sanitizedPostalCode = stripNonNumeric(formData.postalCode);
+
+      let loggedIn = false;
+      let accountReady = false;
+
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: formData.billingName,
+            phone: sanitizedPhone,
+            document: sanitizedCpfCnpj,
+          },
+        },
+      });
+
+      if (signUpError) {
+        const msg = String(signUpError.message || signUpError).toLowerCase();
+        const isAlreadyRegistered =
+          msg.includes("already") || msg.includes("registrado") || msg.includes("existing");
+
+        if (isAlreadyRegistered) {
+          const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+          if (loginError) {
+            throw new Error(
+              "Email já cadastrado. Use sua senha atual ou recupere o acesso para continuar."
+            );
+          }
+          accountReady = true;
+          loggedIn = true;
+        } else {
+          throw signUpError;
+        }
+      } else {
+        accountReady = true;
+        const currentSession = signUpData?.session;
+        if (currentSession) {
+          loggedIn = true;
+        } else {
+          const { data: sessionData, error: loginError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+          if (!loginError && sessionData.session) {
+            loggedIn = true;
+          } else if (loginError) {
+            console.warn("Falha ao obter sessão após signUp:", loginError);
+          }
+        }
+      }
+
+      if (!accountReady) {
+        throw new Error("Não foi possível validar sua conta. Tente novamente em instantes.");
+      }
 
       // Parse expiry
       let expiryMonth = "";
@@ -91,10 +148,10 @@ export default function PublicCheckout() {
         planSlug: plan.slug,
         billingName: formData.billingName,
         billingEmail: email,
-        billingCpfCnpj: stripNonNumeric(formData.billingCpfCnpj),
-        billingPhone: stripNonNumeric(formData.billingPhone),
+        billingCpfCnpj: sanitizedCpfCnpj,
+        billingPhone: sanitizedPhone,
         billingAddress: {
-          postalCode: stripNonNumeric(formData.postalCode),
+          postalCode: sanitizedPostalCode,
           addressNumber: formData.addressNumber,
           street: formData.street?.trim(),
           province: formData.province?.trim(),
@@ -124,6 +181,10 @@ export default function PublicCheckout() {
       // Sanitize env vars to avoid header/query issues with stray newlines
       const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string)?.trim();
       const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string)?.trim();
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error("Configuração do Supabase ausente. Verifique suas variáveis de ambiente.");
+      }
 
       const response = await fetch(`${supabaseUrl}/functions/v1/create-asaas-subscription`, {
         method: 'POST',
@@ -174,53 +235,7 @@ export default function PublicCheckout() {
         throw new Error("Retorno inválido do checkout. Entre em contato com o suporte.");
       }
 
-      let loggedIn = false;
       let claimSucceeded = false;
-
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: formData.billingName,
-            phone: stripNonNumeric(formData.billingPhone),
-            document: stripNonNumeric(formData.billingCpfCnpj),
-          },
-        },
-      });
-
-      if (signUpError) {
-        const msg = String(signUpError.message || signUpError).toLowerCase();
-        const isAlreadyRegistered =
-          msg.includes("already") || msg.includes("registrado") || msg.includes("existing");
-
-        if (isAlreadyRegistered) {
-          const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
-          if (loginError) {
-            throw new Error(
-              "Email já cadastrado. Use sua senha atual ou recupere o acesso para finalizar o cadastro."
-            );
-          }
-          loggedIn = true;
-        } else {
-          throw signUpError;
-        }
-      } else {
-        const currentSession = signUpData?.session;
-        if (currentSession) {
-          loggedIn = true;
-        } else {
-          const { data: sessionData, error: loginError } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
-          if (!loginError && sessionData.session) {
-            loggedIn = true;
-          } else if (loginError) {
-            console.warn("Falha ao obter sessão após signUp:", loginError);
-          }
-        }
-      }
 
       if (loggedIn) {
         const { data: claimData, error: claimError } = await supabase.functions.invoke("claim-account", {
