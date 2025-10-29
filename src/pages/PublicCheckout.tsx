@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { stripNonNumeric } from "@/lib/cpf-cnpj-validator";
-import { formatDateTime } from "@/lib/formatters";
 
 type Plan = {
   id: string;
@@ -24,8 +23,6 @@ export default function PublicCheckout() {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [pendingFinalizeUrl, setPendingFinalizeUrl] = useState<string | null>(null);
-  const [loggedInAfterCheckout, setLoggedInAfterCheckout] = useState(false);
 
   const planParam = useMemo(() => searchParams.get("plan") || "", [searchParams]);
 
@@ -71,23 +68,19 @@ export default function PublicCheckout() {
     fetchPlan();
   }, [planParam]);
 
-  const handleSubmit = async (accountData: AccountData, paymentData: PaymentData) => {
+  const handleSubmit = async (accountData: AccountData, _paymentData: PaymentData) => {
     if (!plan) {
       toast.error("Plano inválido.");
       return;
     }
     setSubmitting(true);
     try {
-      setPendingFinalizeUrl(null);
-      setLoggedInAfterCheckout(false);
-      const paymentMethod = paymentData.paymentMethod; // CREDIT_CARD
       const password = accountData.accountPassword;
       const email = accountData.billingEmail.trim().toLowerCase();
       const sanitizedPhone = stripNonNumeric(accountData.billingPhone);
       const sanitizedCpfCnpj = stripNonNumeric(accountData.billingCpfCnpj);
       const sanitizedPostalCode = stripNonNumeric(accountData.postalCode);
 
-      let loggedIn = false;
       let accountReady = false;
 
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
@@ -115,23 +108,18 @@ export default function PublicCheckout() {
             );
           }
           accountReady = true;
-          loggedIn = true;
         } else {
           throw signUpError;
         }
       } else {
         accountReady = true;
         const currentSession = signUpData?.session;
-        if (currentSession) {
-          loggedIn = true;
-        } else {
-          const { data: sessionData, error: loginError } = await supabase.auth.signInWithPassword({
+        if (!currentSession) {
+          const { error: loginError } = await supabase.auth.signInWithPassword({
             email,
             password,
           });
-          if (!loginError && sessionData.session) {
-            loggedIn = true;
-          } else if (loginError) {
+          if (loginError) {
             console.warn("Falha ao obter sessão após signUp:", loginError);
           }
         }
@@ -157,18 +145,6 @@ export default function PublicCheckout() {
         throw new Error("Não foi possível validar sua conta. Tente novamente em instantes.");
       }
 
-      // Parse expiry
-      let expiryMonth = "";
-      let expiryYear = "";
-      if (paymentMethod === "CREDIT_CARD" && paymentData.creditCard?.expiry) {
-        const [mm, yy] = String(paymentData.creditCard.expiry).split("/");
-        expiryMonth = mm;
-        // Convert YY to YYYY (assume 20YY)
-        expiryYear = yy?.length === 2 ? `20${yy}` : yy;
-      }
-
-      const creditCardData = paymentData.creditCard;
-
       const requestBody = {
         planSlug: plan.slug,
         billingName: accountData.billingName,
@@ -184,17 +160,6 @@ export default function PublicCheckout() {
           state: accountData.state?.trim().toUpperCase(),
           addressComplement: accountData.complement || undefined,
         },
-        billingType: paymentMethod,
-        creditCard:
-          paymentMethod === "CREDIT_CARD" && creditCardData
-            ? {
-                holderName: creditCardData.holderName ?? "",
-                number: String(creditCardData.number ?? "").replace(/\s/g, ""),
-                expiryMonth,
-                expiryYear,
-                ccv: stripNonNumeric(creditCardData.ccv ?? ""),
-              }
-            : undefined,
       };
 
       console.log("📤 Sending to Edge Function:", JSON.stringify({
@@ -211,7 +176,7 @@ export default function PublicCheckout() {
         throw new Error("Configuração do Supabase ausente. Verifique suas variáveis de ambiente.");
       }
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/create-asaas-subscription`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/create-stripe-checkout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -256,52 +221,12 @@ export default function PublicCheckout() {
         throw new Error(errorMsg);
       }
 
-      if (!data.organizationId || !data.subscriptionId || !data.claimToken) {
-        throw new Error("Retorno inválido do checkout. Entre em contato com o suporte.");
+      if (!data.checkoutUrl) {
+        throw new Error("Checkout da Stripe não retornou URL de pagamento.");
       }
-
-      let claimSucceeded = false;
-
-      setLoggedInAfterCheckout(loggedIn);
-
-      if (loggedIn) {
-        const { data: claimData, error: claimError } = await supabase.functions.invoke("claim-account", {
-          body: {
-            claimToken: data.claimToken,
-            organizationId: data.organizationId,
-            subscriptionId: data.subscriptionId,
-          },
-        });
-
-        if (claimError) {
-          console.warn("Falha ao invocar claim-account:", claimError);
-        }
-
-        if (claimData?.success) {
-          claimSucceeded = true;
-        }
-      }
-
-      const finalizeUrl = `/finalizar-cadastro?org=${encodeURIComponent(
-        data.organizationId
-      )}&sub=${encodeURIComponent(data.subscriptionId)}&claim=${encodeURIComponent(
-        data.claimToken || ""
-      )}&email=${encodeURIComponent(email)}`;
-
-
-
-      if (claimSucceeded) {
-        toast.success("Assinatura criada! Redirecionando para o painel...");
-        navigate("/dashboard");
-        return;
-      }
-
-      toast.success(
-        loggedIn
-          ? "Assinatura criada! Finalize a configuração da sua conta em seguida."
-          : "Assinatura criada! Verifique seu email e finalize o cadastro."
-      );
-      navigate(finalizeUrl);
+      toast.success("Redirecionando para pagamento seguro...");
+      window.location.href = data.checkoutUrl;
+      return;
     } catch (err: any) {
       console.error("Erro no checkout:", err);
       toast.error(String(err?.message || err));

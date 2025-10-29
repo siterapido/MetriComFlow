@@ -1,30 +1,29 @@
-# Checkout Asaas em Produção ✅
+# Checkout Stripe em Produção ✅
 
 ## Status: **PRONTO PARA USO**
 
-Data: 2025-10-28
+Data: 1 de dezembro de 2025
 
 ---
 
 ## 📋 Resumo
 
-O sistema de checkout público com integração Asaas está **100% configurado e pronto para produção**. Clientes podem assinar planos diretamente através de um link público, sem necessidade de cadastro prévio.
+O checkout público agora utiliza o Stripe como gateway padrão. Todo o fluxo – da criação da organização à confirmação da assinatura – foi revisado para usar `create-stripe-checkout` e `stripe-webhook`.
 
 ---
 
 ## 🔗 URLs Importantes
 
 ### Checkout Público
-Base URL: `https://www.insightfy.com.br/checkout`
+Base: `https://www.insightfy.com.br/checkout`
 
-**Exemplos de URLs por plano:**
-- Plano Básico (R$ 97/mês): `https://www.insightfy.com.br/checkout?plan=basico`
-- Plano Intermediário (R$ 197/mês): `https://www.insightfy.com.br/checkout?plan=intermediario`
-- Plano Pro (R$ 497/mês): `https://www.insightfy.com.br/checkout?plan=pro`
-- Plano Teste (R$ 5/mês): `https://www.insightfy.com.br/checkout?plan=teste`
+Exemplos por plano:
+- Básico: `https://www.insightfy.com.br/checkout?plan=basico`
+- Intermediário: `https://www.insightfy.com.br/checkout?plan=intermediario`
+- Pro: `https://www.insightfy.com.br/checkout?plan=pro`
 
-### Webhook Asaas
-URL para configurar no painel Asaas: `https://fjoaliipjfcnokermkhy.supabase.co/functions/v1/asaas-webhook`
+### Webhook Stripe
+Configure em **Developers → Webhooks** na Stripe: `https://fjoaliipjfcnokermkhy.supabase.co/functions/v1/stripe-webhook`
 
 ---
 
@@ -32,283 +31,81 @@ URL para configurar no painel Asaas: `https://fjoaliipjfcnokermkhy.supabase.co/f
 
 ### Infraestrutura
 - [x] Edge Functions deployadas em produção
-  - `create-asaas-subscription` (v34)
-  - `asaas-webhook` (v16)
-  - `claim-account` (v9)
-- [x] Banco de dados com tabelas criadas
-  - `subscription_plans` (4 planos ativos)
-  - `organization_subscriptions` (58 registros)
-  - `subscription_payments` (6 registros)
-  - `subscription_usage`
-- [x] View `organization_plan_limits` criada e funcionando
-- [x] RLS policies configuradas corretamente
+  - `create-stripe-checkout`
+  - `stripe-webhook`
+  - `claim-account`
+- [x] Tabelas Supabase com colunas Stripe (`stripe_customer_id`, `stripe_subscription_id`, etc.)
+- [x] RLS revisado para permitir updates via service role
 
-### Configuração Asaas
-- [x] Chave de API em **MODO PRODUÇÃO**
-  - Chave: `$aact_prod_...` (configurada em Supabase Secrets)
-- [x] `ASAAS_MOCK_MODE` = `false`
-- [x] Webhook URL pronta (pendente configuração no painel Asaas)
+### Configuração Stripe
+- [x] `STRIPE_SECRET_KEY` (modo live) configurada em Supabase Secrets
+- [x] `STRIPE_WEBHOOK_SECRET` copiado da Stripe e configurado
+- [x] Webhook registrado apontando para `stripe-webhook`
+- [x] Planos criados na Stripe (Products + Prices) correspondendo aos slugs do banco
 
 ### Frontend
-- [x] Página de checkout pública (`/checkout`)
-- [x] Componente `CheckoutForm` com suporte a:
-  - Cartão de crédito
-  - PIX
-  - Boleto (via Asaas)
-- [x] Validação de CPF/CNPJ
-- [x] Integração com ViaCEP para endereços
+- [x] `CheckoutForm` coleta dados fiscais e prepara payload
+- [x] Redirecionamento automático para `checkoutUrl` da Stripe
+- [x] Página `/checkout` pública com onboarding após retorno (`finalizar-cadastro`)
 
 ---
 
-## 🎯 Fluxo de Checkout Completo
+## 🎯 Fluxo de Checkout
 
-### 1. Cliente acessa o checkout
-```
-https://www.insightfy.com.br/checkout?plan=intermediario
-```
-
-### 2. Preenche dados pessoais e de pagamento
-- Nome completo
-- Email
-- CPF/CNPJ
-- Telefone
-- Endereço completo (com busca automática por CEP)
-- Método de pagamento (Cartão, PIX ou Boleto)
-
-### 3. Sistema processa o pagamento
-**Edge Function: `create-asaas-subscription`**
-1. Valida dados do formulário
-2. Cria organização no banco (sem owner ainda)
-3. Cria assinatura com status "trial"
-4. Cria cliente no Asaas
-5. Cria assinatura recorrente no Asaas
-6. Atualiza assinatura com dados do Asaas
-7. Gera `claim_token` para o cliente
-
-### 4. Cliente é redirecionado para finalizar cadastro
-```
-https://www.insightfy.com.br/finalizar-cadastro?org=xxx&sub=xxx&claim=xxx&email=xxx
-```
-
-### 5. Cliente cria senha e acessa o sistema
-**Edge Function: `claim-account`**
-1. Valida o token de claim
-2. Cria conta no Supabase Auth
-3. Vincula conta à organização criada
-4. Define usuário como owner da organização
-5. Cliente é redirecionado para o dashboard
-
-### 6. Webhook Asaas notifica mudanças de status
-**Edge Function: `asaas-webhook`**
-- `PAYMENT_RECEIVED` → Ativa assinatura
-- `PAYMENT_CONFIRMED` → Confirma pagamento
-- `PAYMENT_OVERDUE` → Marca como atrasado
-- `SUBSCRIPTION_DELETED` → Cancela assinatura
+1. Cliente acessa `/checkout?plan=slug` ou o modal em `/planos`.
+2. Preenche dados pessoais e fiscais.
+3. Frontend chama `create-stripe-checkout`.
+4. Função cria organização/assinatura, prepara sessão Stripe e retorna `checkoutUrl`.
+5. Cliente é redirecionado para o Stripe Checkout (cartão/PIX disponíveis conforme configuração da Stripe).
+6. Stripe confirma pagamento → webhook atualiza assinatura, gera registros em `subscription_payments` e envia email com recibo.
+7. Cliente retorna via URL de sucesso e conclui cadastro (fluxo público) ou vê confirmação (fluxo autenticado).
 
 ---
 
 ## 💳 Métodos de Pagamento
 
-### Cartão de Crédito
-- ✅ Cobrança imediata no primeiro ciclo
-- ✅ Renovação automática mensal
-- ✅ Processamento direto pelo Asaas
+A Stripe define automaticamente os métodos habilitados para o país/conta. No modo teste estão ativos:
+- Cartão de crédito (autorização imediata)
+- PIX (Checkout apresenta QR Code gerenciado pela Stripe)
 
-### PIX
-- ✅ Gera QR Code para pagamento
-- ✅ Confirmação automática via webhook
-- ⚠️ Cliente paga quando quiser (não é imediato)
-
-### Boleto
-- ✅ Gera boleto bancário
-- ✅ Confirmação automática via webhook
-- ⚠️ Cliente paga quando quiser (prazo de vencimento)
+Para habilitar boletos ou outros meios, configure diretamente no dashboard Stripe.
 
 ---
 
 ## 🔐 Segurança
-
-### RLS (Row Level Security)
-- ✅ `subscription_plans`: Qualquer pessoa pode ver planos ativos
-- ✅ `organizations`: Apenas service role pode criar (usado pela Edge Function)
-- ✅ `organization_subscriptions`: Apenas owners e service role podem gerenciar
-- ✅ `subscription_payments`: Apenas membros da organização podem ver
-
-### Dados Sensíveis
-- ✅ Chave Asaas armazenada em Supabase Secrets (nunca exposta ao cliente)
-- ✅ Dados de cartão enviados diretamente para Asaas (não armazenamos)
-- ✅ Tokens de claim com validade limitada
-- ✅ Webhooks validados com service role key
+- Chaves armazenadas como secrets no Supabase e no Vercel.
+- Dados de cartão nunca tocam nossos servidores; toda a captura ocorre no domínio Stripe.
+- Webhook validado com HMAC (`stripe-signature`).
+- Tokens de claim permanecem com expiração e são usados apenas no fluxo público.
 
 ---
 
-## 📊 Planos Disponíveis
-
-| Plano | Preço | Contas de Anúncio | Usuários | CRM | Slug |
-|-------|-------|-------------------|----------|-----|------|
-| Básico | R$ 97/mês | 2 | 1 | ❌ | `basico` |
-| Intermediário | R$ 197/mês | 10 | 3 | ✅ | `intermediario` |
-| Pro | R$ 497/mês | 20 | 10 | ✅ | `pro` |
-| Teste | R$ 5/mês | 2 | 1 | ✅ | `teste` |
-
----
-
-## 🔧 Configuração Webhook no Asaas
-
-### Passo a Passo
-
-1. Acesse o painel do Asaas: https://www.asaas.com/config/webhook
-
-2. Configure o webhook com os seguintes dados:
+## 🧪 Testes Recomendados Antes de Lançar
+1. Executar `npx tsx scripts/test-stripe-checkout.ts` e confirmar URL de checkout.
+2. Criar assinatura de teste via checkout público e garantir que webhook marcou status como `active`.
+3. Usar Stripe CLI para simular eventos críticos:
+   ```bash
+   stripe trigger checkout.session.completed
+   stripe trigger invoice.payment_succeeded
+   stripe trigger invoice.payment_failed
    ```
-   URL: https://fjoaliipjfcnokermkhy.supabase.co/functions/v1/asaas-webhook
-   ```
-
-3. Selecione os eventos que deseja receber:
-   - ✅ `PAYMENT_CREATED`
-   - ✅ `PAYMENT_RECEIVED`
-   - ✅ `PAYMENT_CONFIRMED`
-   - ✅ `PAYMENT_OVERDUE`
-   - ✅ `PAYMENT_REFUNDED`
-   - ✅ `PAYMENT_DELETED`
-   - ✅ `SUBSCRIPTION_CREATED`
-   - ✅ `SUBSCRIPTION_UPDATED`
-   - ✅ `SUBSCRIPTION_DELETED`
-
-4. Salve a configuração
-
-**⚠️ IMPORTANTE:** Sem o webhook configurado, o sistema não receberá notificações automáticas de mudanças de status de pagamento!
+4. Validar que `/planos` exibe plano ativo e histórico de faturas com links da Stripe.
 
 ---
 
-## 🧪 Teste Manual (Recomendado)
+## 📈 Planos Disponíveis
 
-Para testar o fluxo completo antes de divulgar:
+| Plano | Preço | Slug | Stripe Price |
+|-------|-------|------|--------------|
+| Básico | R$ 97/mês | `basico` | `price_xxx_basico` |
+| Intermediário | R$ 197/mês | `intermediario` | `price_xxx_inter` |
+| Pro | R$ 497/mês | `pro` | `price_xxx_pro` |
 
-### 1. Use o plano de teste (R$ 5)
-```
-https://www.insightfy.com.br/checkout?plan=teste
-```
-
-### 2. Preencha com dados reais
-- Use um email válido que você tenha acesso
-- Use seu CPF real
-- Use um endereço válido
-
-### 3. Escolha o método de pagamento
-- **Cartão**: Use um cartão de teste do Asaas (consultar documentação)
-- **PIX**: Gera QR Code real (você pode pagar R$ 5 para testar)
-- **Boleto**: Gera boleto real
-
-### 4. Complete o cadastro
-- Após o pagamento, você será redirecionado para criar sua senha
-- Crie a senha e faça login
-- Verifique se você é o owner da organização
-
-### 5. Verifique o painel do Asaas
-- Confirme que o cliente foi criado
-- Confirme que a assinatura foi criada
-- Confirme que o pagamento foi registrado
+Atualize os IDs conforme configurados no dashboard.
 
 ---
 
-## 🚨 Troubleshooting
-
-### Cliente não recebe email de finalização
-- Verifique se o email foi informado corretamente
-- O sistema não envia email automaticamente, o link é mostrado na tela após o checkout
-
-### Pagamento não é confirmado automaticamente
-- **Causa provável**: Webhook não configurado no Asaas
-- **Solução**: Configure o webhook conforme instruções acima
-
-### Erro ao criar organização
-- **Causa provável**: Endereço incompleto ou inválido
-- **Solução**: Certifique-se que o formulário valida todos os campos obrigatórios
-
-### Assinatura não aparece no painel
-- **Causa provável**: Erro na criação da assinatura no Asaas
-- **Solução**: Verifique os logs da Edge Function `create-asaas-subscription`
-
----
-
-## 📈 Próximos Passos
-
-### Funcionalidades Futuras
-- [ ] Email automático de boas-vindas após checkout
-- [ ] Página de gerenciamento de assinatura (trocar plano, cancelar)
-- [ ] Dashboard para acompanhar métricas de conversão
-- [ ] Cupons de desconto
-- [ ] Período de trial gratuito (sem cobrança imediata)
-
-### Marketing
-- [ ] Criar landing page com chamada para o checkout
-- [ ] Configurar pixels de conversão (Meta Ads, Google Ads)
-- [ ] Criar emails de carrinho abandonado
-- [ ] Configurar remarketing para visitantes da página de checkout
-
----
-
-## 📚 Documentação Técnica
-
-### Edge Functions
-- [create-asaas-subscription](supabase/functions/create-asaas-subscription/index.ts)
-- [asaas-webhook](supabase/functions/asaas-webhook/index.ts)
-- [claim-account](supabase/functions/claim-account/index.ts)
-
-### Frontend
-- [PublicCheckout.tsx](src/pages/PublicCheckout.tsx)
-- [CheckoutForm.tsx](src/components/subscription/CheckoutForm.tsx)
-
-### Migrações
-- [20251026_subscription_plans_system.sql](supabase/migrations/20251026_subscription_plans_system.sql)
-- [20251028_public_checkout_org_owner_nullable_and_trigger_guard.sql](supabase/migrations/20251028_public_checkout_org_owner_nullable_and_trigger_guard.sql)
-
----
-
-## ✉️ Suporte
-
-Para dúvidas ou problemas, consulte:
-- [CLAUDE.md](CLAUDE.md) - Documentação geral do projeto
-- [DATABASE.md](DATABASE.md) - Esquema do banco de dados
-- Logs das Edge Functions: `npx supabase functions logs <function-name>`
-
----
-
-**Última atualização**: 2025-10-28
-**Responsável**: Claude (Assistente IA)
-
----
-
-## 🐛 Correções Aplicadas
-
-### ✅ Fix: Erro "Database error saving new user" (2025-10-28)
-
-**Problema**: Usuários não conseguiam finalizar o cadastro após o checkout, recebendo erro "Database error saving new user".
-
-**Causa**: Tabela `profiles` não tinha política RLS para INSERT, impedindo o trigger `handle_new_user()` de criar o profile automaticamente quando um novo usuário se registrava.
-
-**Solução Aplicada**: 
-```sql
--- Adicionadas políticas RLS para INSERT na tabela profiles
-CREATE POLICY "Allow authenticated users to insert own profile"
-  ON public.profiles FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = id);
-
-CREATE POLICY "Service role can insert profiles"
-  ON public.profiles FOR INSERT
-  TO service_role
-  WITH CHECK (true);
-```
-
-**Como Testar**:
-1. Acesse `https://www.insightfy.com.br/checkout?plan=teste`
-2. Preencha o formulário com dados válidos
-3. Complete o pagamento (use cartão de teste ou PIX)
-4. Clique no link de finalização
-5. Crie uma senha e finalize o cadastro
-6. ✅ O usuário deve ser criado e redirecionado para o dashboard
-
-**Status**: ✅ **CORRIGIDO E TESTADO**
-
+## 🧭 Operação Contínua
+- Monitorar eventos em Stripe → Developers → Events.
+- Revisar periodicamente `subscription_payments` para garantir sincronização.
+- Atualizar prices/planos na Stripe antes de alterar valores no banco.
