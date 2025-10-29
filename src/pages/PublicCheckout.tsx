@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { TwoStepCheckout } from "@/components/subscription/TwoStepCheckout";
-import { type AccountData } from "@/components/subscription/AccountCreationStep";
-import { type PaymentData } from "@/components/subscription/PaymentStep";
+import { CheckoutForm, type CheckoutFormData } from "@/components/subscription/CheckoutForm";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
@@ -68,97 +66,34 @@ export default function PublicCheckout() {
     fetchPlan();
   }, [planParam]);
 
-  const handleSubmit = async (accountData: AccountData, _paymentData: PaymentData) => {
+  const handleSubmit = async (checkoutData: CheckoutFormData) => {
     if (!plan) {
       toast.error("Plano inválido.");
       return;
     }
     setSubmitting(true);
     try {
-      const password = accountData.accountPassword;
-      const email = accountData.billingEmail.trim().toLowerCase();
-      const sanitizedPhone = stripNonNumeric(accountData.billingPhone);
-      const sanitizedCpfCnpj = stripNonNumeric(accountData.billingCpfCnpj);
-      const sanitizedPostalCode = stripNonNumeric(accountData.postalCode);
-
-      let accountReady = false;
-
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: accountData.billingName,
-            phone: sanitizedPhone,
-            document: sanitizedCpfCnpj,
-          },
-        },
-      });
-
-      if (signUpError) {
-        const msg = String(signUpError.message || signUpError).toLowerCase();
-        const isAlreadyRegistered =
-          msg.includes("already") || msg.includes("registrado") || msg.includes("existing");
-
-        if (isAlreadyRegistered) {
-          const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
-          if (loginError) {
-            throw new Error(
-              "Email já cadastrado. Use sua senha atual ou recupere o acesso para continuar."
-            );
-          }
-          accountReady = true;
-        } else {
-          throw signUpError;
-        }
-      } else {
-        accountReady = true;
-        const currentSession = signUpData?.session;
-        if (!currentSession) {
-          const { error: loginError } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
-          if (loginError) {
-            console.warn("Falha ao obter sessão após signUp:", loginError);
-          }
-        }
-
-        // Promote new user to owner with organization creation
-        if (signUpData?.user) {
-          try {
-            const { error: promoteError } = await supabase.functions.invoke("promote-owner", {
-              body: { userId: signUpData.user.id }
-            });
-            if (promoteError) {
-              console.warn("Falha ao promover usuário a owner:", promoteError);
-            } else {
-              console.log("Usuário promovido a owner com sucesso");
-            }
-          } catch (promoteErr) {
-            console.warn("Erro ao promover usuário:", promoteErr);
-          }
-        }
-      }
-
-      if (!accountReady) {
-        throw new Error("Não foi possível validar sua conta. Tente novamente em instantes.");
-      }
+      const billingEmail = checkoutData.billingEmail.trim().toLowerCase();
+      const sanitizedPhone = stripNonNumeric(checkoutData.billingPhone);
+      const sanitizedCpfCnpj = stripNonNumeric(checkoutData.billingCpfCnpj);
+      const sanitizedPostalCode = checkoutData.postalCode
+        ? stripNonNumeric(checkoutData.postalCode)
+        : "";
 
       const requestBody = {
         planSlug: plan.slug,
-        billingName: accountData.billingName,
-        billingEmail: email,
+        billingName: checkoutData.billingName,
+        billingEmail,
         billingCpfCnpj: sanitizedCpfCnpj,
         billingPhone: sanitizedPhone,
         billingAddress: {
           postalCode: sanitizedPostalCode,
-          addressNumber: accountData.addressNumber,
-          street: accountData.street?.trim(),
-          province: accountData.province?.trim(),
-          city: accountData.city?.trim(),
-          state: accountData.state?.trim().toUpperCase(),
-          addressComplement: accountData.complement || undefined,
+          addressNumber: checkoutData.addressNumber,
+          street: checkoutData.street?.trim(),
+          province: checkoutData.province?.trim(),
+          city: checkoutData.city?.trim(),
+          state: checkoutData.state ? checkoutData.state.trim().toUpperCase() : undefined,
+          addressComplement: checkoutData.complement || undefined,
         },
       };
 
@@ -254,7 +189,7 @@ export default function PublicCheckout() {
               </div>
             )}
             {!loadingPlan && plan && (
-              <TwoStepCheckout
+              <CheckoutForm
                 planName={plan.name}
                 planPrice={plan.price}
                 onSubmit={handleSubmit}
