@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, MapPin, User, FileText, CreditCard, QrCode } from "lucide-react";
+import { Loader2, MapPin, User, FileText, CreditCard, UserCheck, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -14,6 +14,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   formatCpfCnpj,
   validateCpfCnpj,
@@ -24,6 +25,11 @@ import {
   validateCEP,
 } from "@/lib/cpf-cnpj-validator";
 import { PaymentMethodSelector } from "@/components/subscription/PaymentMethodSelector";
+import { useCheckoutEnhancements } from "@/hooks/useCheckoutEnhancements";
+import { QuickLoginDialog } from "./QuickLoginDialog";
+import { ValidationIndicator, PasswordStrengthIndicator } from "./ValidationIndicator";
+import { useRealTimeValidation } from "@/hooks/useRealTimeValidation";
+import { toast } from "sonner";
 
 const creditCardSchema = z.object({
   holderName: z.string().min(3, "Nome impresso no cartão é obrigatório"),
@@ -36,8 +42,8 @@ const creditCardSchema = z.object({
   expiry: z
     .string()
     .transform((val) => val.replace(/\s/g, ""))
-    .refine((val) => /^(0[1-9]|1[0-2])\/(\d{2})$/.test(val), {
-      message: "Validade inválida (MM/AA)",
+    .refine((val) => /^(0[1-9]|1[0-2])\/(\d{2}|\d{4})$/.test(val), {
+      message: "Validade inválida (MM/AA ou MM/AAAA)",
     }),
   ccv: z
     .string()
@@ -64,7 +70,7 @@ const checkoutSchema = z
     province: z.string().optional(),
     city: z.string().optional(),
     state: z.string().optional(),
-    paymentMethod: z.enum(["CREDIT_CARD", "PIX"]),
+    paymentMethod: z.enum(["CREDIT_CARD"]),
     creditCard: z.object({
       holderName: z.string().optional(),
       number: z.string().optional(),
@@ -194,11 +200,85 @@ export function CheckoutForm({
       confirmPassword: "",
     },
   });
+  
   const paymentMethod = form.watch("paymentMethod");
+  const billingEmail = form.watch("billingEmail");
+  const billingCpfCnpj = form.watch("billingCpfCnpj");
+
+  // Integração com as melhorias do checkout
+  const {
+    isCheckingUser,
+    existingUser,
+    showLoginOption,
+    checkExistingUserByEmail,
+    autoFillByCpfCnpj,
+    quickLogin,
+    clearProgress,
+    setShowLoginOption,
+  } = useCheckoutEnhancements({
+    form,
+    onExistingUserFound: (userData) => {
+      console.log("Usuário existente encontrado:", userData);
+    },
+  });
+
+  const {
+    emailValidation,
+    cpfCnpjValidation,
+    phoneValidation,
+    cepValidation,
+    validateEmail,
+    validateCpfCnpj,
+    validatePhone,
+    validateCep,
+  } = useRealTimeValidation();
 
   useEffect(() => {
     onPaymentMethodChange?.(paymentMethod);
   }, [paymentMethod, onPaymentMethodChange]);
+
+  // Verificar email existente com debounce
+  useEffect(() => {
+    if (billingEmail && billingEmail.includes("@")) {
+      const timeoutId = setTimeout(() => {
+        checkExistingUserByEmail(billingEmail);
+      }, 1000); // Debounce de 1 segundo
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [billingEmail, checkExistingUserByEmail]);
+
+  // Auto-preenchimento por CPF/CNPJ com debounce
+  useEffect(() => {
+    if (billingCpfCnpj && validateCpfCnpj(billingCpfCnpj)) {
+      const timeoutId = setTimeout(() => {
+        autoFillByCpfCnpj(billingCpfCnpj);
+      }, 800); // Debounce de 800ms
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [billingCpfCnpj, autoFillByCpfCnpj]);
+
+  // Validações em tempo real
+  useEffect(() => {
+    validateEmail(billingEmail);
+  }, [billingEmail, validateEmail]);
+
+  useEffect(() => {
+    validateCpfCnpj(billingCpfCnpj);
+  }, [billingCpfCnpj, validateCpfCnpj]);
+
+  useEffect(() => {
+    validatePhone(form.watch("billingPhone"));
+  }, [form.watch("billingPhone"), validatePhone]);
+
+  useEffect(() => {
+    if (form.watch("postalCode")) {
+      validateCep(form.watch("postalCode"));
+    }
+  }, [form.watch("postalCode"), validateCep]);
+
+
 
   // Auto-fetch address from CEP using ViaCEP API
   const handleCepChange = async (cep: string) => {
@@ -230,9 +310,31 @@ export function CheckoutForm({
     }
   };
 
+  // Handler melhorado para o submit
+  const handleEnhancedSubmit = async (data: CheckoutFormData) => {
+    try {
+      await onSubmit(data);
+      // Limpar progresso salvo após sucesso
+      clearProgress();
+      toast.success("Cadastro realizado com sucesso!");
+    } catch (error) {
+      console.error("Erro no checkout:", error);
+      toast.error("Erro ao processar checkout. Tente novamente.");
+    }
+  };
+
+  // Handler para continuar como novo usuário
+  const handleContinueAsNew = () => {
+    setShowLoginOption(false);
+    toast.info("Continuando como novo usuário", {
+      description: "Você pode prosseguir com o cadastro normalmente"
+    });
+  };
+
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+    <>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(handleEnhancedSubmit)} className="space-y-8">
         {/* Plan Summary - Minimalista */}
         <div className="bg-gradient-to-br from-card to-accent/20 border border-border rounded-xl p-6 hover-lift">
           <div className="flex items-center justify-between">
@@ -248,6 +350,25 @@ export function CheckoutForm({
             </div>
           </div>
         </div>
+
+        {/* Alertas informativos */}
+        {isCheckingUser && (
+          <Alert className="border-blue-200 bg-blue-50">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <AlertDescription>
+              Verificando se você já possui uma conta...
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {existingUser && !showLoginOption && (
+          <Alert className="border-green-200 bg-green-50">
+            <UserCheck className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Dados encontrados!</strong> Preenchemos automaticamente suas informações com base no CPF/CNPJ.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Payment method */}
         <FormField
@@ -308,6 +429,10 @@ export function CheckoutForm({
                           maxLength={23}
                         />
                       </FormControl>
+                      <ValidationIndicator 
+                        status={creditCardValidation.status} 
+                        message={creditCardValidation.message} 
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -330,6 +455,10 @@ export function CheckoutForm({
                           maxLength={4}
                         />
                       </FormControl>
+                      <ValidationIndicator 
+                        status={cvvValidation.status} 
+                        message={cvvValidation.message} 
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -350,11 +479,13 @@ export function CheckoutForm({
                           const digits = e.target.value.replace(/\D/g, "");
                           let formatted = digits;
                           if (digits.length >= 3) {
-                            formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;
+                            // Permite até 6 dígitos (MM + AAAA)
+                            formatted = `${digits.slice(0, 2)}/${digits.slice(2, 6)}`;
                           }
                           field.onChange(formatted);
+                          // Removendo validação em tempo real - só valida no submit
                         }}
-                        maxLength={5}
+                        maxLength={7}
                       />
                     </FormControl>
                     <FormMessage />
@@ -365,22 +496,7 @@ export function CheckoutForm({
           </div>
         )}
 
-        {paymentMethod === "PIX" && (
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="bg-gradient-to-r from-success/10 to-success/5 border-b border-border px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-success to-emerald-600 rounded-lg flex items-center justify-center shadow-md">
-                  <QrCode className="w-5 h-5 text-white" />
-                </div>
-                <h3 className="text-xl font-bold text-foreground">Pagamento via PIX</h3>
-              </div>
-            </div>
-            <div className="p-6 space-y-3 text-sm text-muted-foreground">
-              <p>Após confirmar os dados, geramos um QR Code e um código PIX com validade de 1 hora.</p>
-              <p>Assim que o pagamento for reconhecido, você receberá a confirmação por email.</p>
-            </div>
-          </div>
-        )}
+
 
         {/* Personal Information */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -416,6 +532,10 @@ export function CheckoutForm({
                   <FormControl>
                     <Input type="email" placeholder="joao@empresa.com.br" {...field} />
                   </FormControl>
+                  <ValidationIndicator 
+                    status={emailValidation.status} 
+                    message={emailValidation.message} 
+                  />
                   <FormMessage />
                 </FormItem>
               )}
@@ -439,6 +559,10 @@ export function CheckoutForm({
                         maxLength={18}
                       />
                     </FormControl>
+                    <ValidationIndicator 
+                      status={cpfCnpjValidation.status} 
+                      message={cpfCnpjValidation.message} 
+                    />
                     <FormDescription>CPF ou CNPJ para emissão da nota fiscal</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -462,6 +586,10 @@ export function CheckoutForm({
                         maxLength={15}
                       />
                     </FormControl>
+                    <ValidationIndicator 
+                      status={phoneValidation.status} 
+                      message={phoneValidation.message} 
+                    />
                     <FormMessage />
                   </FormItem>
                 )}
@@ -478,6 +606,7 @@ export function CheckoutForm({
                     <FormControl>
                       <Input type="password" placeholder="Mínimo 8 caracteres" {...field} />
                     </FormControl>
+                    <PasswordStrengthIndicator password={field.value || ""} />
                     <FormDescription>
                       A senha será usada para acessar o painel após a confirmação.
                     </FormDescription>
@@ -543,6 +672,10 @@ export function CheckoutForm({
                       )}
                     </div>
                   </FormControl>
+                  <ValidationIndicator 
+                    status={cepValidation.status} 
+                    message={cepValidation.message} 
+                  />
                   <FormDescription>
                     Digite o CEP para preencher automaticamente o endereço
                   </FormDescription>
@@ -680,5 +813,15 @@ export function CheckoutForm({
         </div>
       </form>
     </Form>
+
+    {/* Dialog de Login Rápido */}
+    <QuickLoginDialog
+      open={showLoginOption}
+      onOpenChange={setShowLoginOption}
+      email={billingEmail}
+      onLogin={quickLogin}
+      onContinueAsNew={handleContinueAsNew}
+    />
+  </>
   );
 }

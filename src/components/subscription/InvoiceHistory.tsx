@@ -90,7 +90,6 @@ export function InvoiceHistory({ subscriptionId }: InvoiceHistoryProps) {
   const getPaymentMethodLabel = (method: string | null) => {
     const labels: Record<string, string> = {
       CREDIT_CARD: "Cartão de Crédito",
-      PIX: "PIX",
       BOLETO: "Boleto Bancário",
       DEBIT_CARD: "Cartão de Débito",
     };

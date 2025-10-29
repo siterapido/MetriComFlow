@@ -1,23 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { CheckoutForm, type CheckoutFormData } from "@/components/subscription/CheckoutForm";
+import { TwoStepCheckout } from "@/components/subscription/TwoStepCheckout";
+import { type AccountData } from "@/components/subscription/AccountCreationStep";
+import { type PaymentData } from "@/components/subscription/PaymentStep";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { stripNonNumeric } from "@/lib/cpf-cnpj-validator";
-import { Copy, ExternalLink, QrCode, Clock } from "lucide-react";
 import { formatDateTime } from "@/lib/formatters";
-
-type PixPaymentDetails = {
-  paymentId?: string | null;
-  status?: string | null;
-  dueDate?: string | null;
-  pixExpiresAt?: string | null;
-  copyPasteCode?: string | null;
-  qrCodeImage?: string | null;
-  paymentLink?: string | null;
-};
 
 type Plan = {
   id: string;
@@ -33,10 +24,8 @@ export default function PublicCheckout() {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [pixDetails, setPixDetails] = useState<PixPaymentDetails | null>(null);
   const [pendingFinalizeUrl, setPendingFinalizeUrl] = useState<string | null>(null);
   const [loggedInAfterCheckout, setLoggedInAfterCheckout] = useState(false);
-  const [pixClaimSuccess, setPixClaimSuccess] = useState(false);
 
   const planParam = useMemo(() => searchParams.get("plan") || "", [searchParams]);
 
@@ -82,23 +71,21 @@ export default function PublicCheckout() {
     fetchPlan();
   }, [planParam]);
 
-  const handleSubmit = async (formData: CheckoutFormData) => {
+  const handleSubmit = async (accountData: AccountData, paymentData: PaymentData) => {
     if (!plan) {
       toast.error("Plano inválido.");
       return;
     }
     setSubmitting(true);
     try {
-      setPixDetails(null);
       setPendingFinalizeUrl(null);
-      setPixClaimSuccess(false);
       setLoggedInAfterCheckout(false);
-      const paymentMethod = formData.paymentMethod; // CREDIT_CARD | PIX
-      const password = formData.accountPassword;
-      const email = formData.billingEmail.trim().toLowerCase();
-      const sanitizedPhone = stripNonNumeric(formData.billingPhone);
-      const sanitizedCpfCnpj = stripNonNumeric(formData.billingCpfCnpj);
-      const sanitizedPostalCode = stripNonNumeric(formData.postalCode);
+      const paymentMethod = paymentData.paymentMethod; // CREDIT_CARD
+      const password = accountData.accountPassword;
+      const email = accountData.billingEmail.trim().toLowerCase();
+      const sanitizedPhone = stripNonNumeric(accountData.billingPhone);
+      const sanitizedCpfCnpj = stripNonNumeric(accountData.billingCpfCnpj);
+      const sanitizedPostalCode = stripNonNumeric(accountData.postalCode);
 
       let loggedIn = false;
       let accountReady = false;
@@ -108,7 +95,7 @@ export default function PublicCheckout() {
         password,
         options: {
           data: {
-            full_name: formData.billingName,
+            full_name: accountData.billingName,
             phone: sanitizedPhone,
             document: sanitizedCpfCnpj,
           },
@@ -173,39 +160,39 @@ export default function PublicCheckout() {
       // Parse expiry
       let expiryMonth = "";
       let expiryYear = "";
-      if (paymentMethod === "CREDIT_CARD" && formData.creditCard?.expiry) {
-        const [mm, yy] = String(formData.creditCard.expiry).split("/");
+      if (paymentMethod === "CREDIT_CARD" && paymentData.creditCard?.expiry) {
+        const [mm, yy] = String(paymentData.creditCard.expiry).split("/");
         expiryMonth = mm;
         // Convert YY to YYYY (assume 20YY)
         expiryYear = yy?.length === 2 ? `20${yy}` : yy;
       }
 
-      const creditCardData = formData.creditCard;
+      const creditCardData = paymentData.creditCard;
 
       const requestBody = {
         planSlug: plan.slug,
-        billingName: formData.billingName,
+        billingName: accountData.billingName,
         billingEmail: email,
         billingCpfCnpj: sanitizedCpfCnpj,
         billingPhone: sanitizedPhone,
         billingAddress: {
           postalCode: sanitizedPostalCode,
-          addressNumber: formData.addressNumber,
-          street: formData.street?.trim(),
-          province: formData.province?.trim(),
-          city: formData.city?.trim(),
-          state: formData.state?.trim().toUpperCase(),
-          addressComplement: formData.complement || undefined,
+          addressNumber: accountData.addressNumber,
+          street: accountData.street?.trim(),
+          province: accountData.province?.trim(),
+          city: accountData.city?.trim(),
+          state: accountData.state?.trim().toUpperCase(),
+          addressComplement: accountData.complement || undefined,
         },
         billingType: paymentMethod,
         creditCard:
-          paymentMethod === "CREDIT_CARD"
+          paymentMethod === "CREDIT_CARD" && creditCardData
             ? {
-                holderName: creditCardData?.holderName ?? "",
-                number: String(creditCardData?.number ?? "").replace(/\s/g, ""),
+                holderName: creditCardData.holderName ?? "",
+                number: String(creditCardData.number ?? "").replace(/\s/g, ""),
                 expiryMonth,
                 expiryYear,
-                ccv: stripNonNumeric(creditCardData?.ccv ?? ""),
+                ccv: stripNonNumeric(creditCardData.ccv ?? ""),
               }
             : undefined,
       };
@@ -301,30 +288,7 @@ export default function PublicCheckout() {
         data.claimToken || ""
       )}&email=${encodeURIComponent(email)}`;
 
-      if (paymentMethod === "PIX") {
-        const pixPayload: PixPaymentDetails | null = data.pixDetails
-          ? {
-              ...data.pixDetails,
-              paymentLink: data.pixDetails.paymentLink ?? data.paymentLink ?? null,
-            }
-          : data.paymentLink
-          ? {
-              paymentLink: data.paymentLink,
-            }
-          : null;
 
-        setPixDetails(pixPayload);
-        setPendingFinalizeUrl(finalizeUrl);
-        setPixClaimSuccess(claimSucceeded);
-
-        if (pixPayload?.copyPasteCode || pixPayload?.paymentLink) {
-          toast.success("Cobrança via PIX gerada! Utilize o QR Code ou código para pagar.");
-        } else {
-          toast.success("Cobrança via PIX criada. Enviamos as instruções por email.");
-        }
-
-        return;
-      }
 
       if (claimSucceeded) {
         toast.success("Assinatura criada! Redirecionando para o painel...");
@@ -365,139 +329,18 @@ export default function PublicCheckout() {
               </div>
             )}
             {!loadingPlan && plan && (
-              <CheckoutForm
+              <TwoStepCheckout
                 planName={plan.name}
                 planPrice={plan.price}
                 onSubmit={handleSubmit}
                 isLoading={submitting}
-                onPaymentMethodChange={(method) => {
-                  if (method !== "PIX") {
-                    setPixDetails(null);
-                    setPendingFinalizeUrl(null);
-                    setPixClaimSuccess(false);
-                  }
-                }}
               />
             )}
           </CardContent>
         </Card>
       </div>
 
-      {pixDetails && (
-        <div className="max-w-3xl mx-auto mt-6">
-          <Card className="border-primary/40">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-foreground">
-                <QrCode className="w-5 h-5 text-primary" />
-                Pagamento PIX gerado
-              </CardTitle>
-              <CardDescription>
-                Escaneie o QR Code ou copie o código para concluir o pagamento.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-6 md:grid-cols-[220px_1fr]">
-                <div className="rounded-lg border border-border bg-muted/40 flex items-center justify-center p-4 min-h-[220px]">
-                  {pixDetails.qrCodeImage ? (
-                    <img
-                      src={
-                        pixDetails.qrCodeImage.startsWith("http") || pixDetails.qrCodeImage.startsWith("data:")
-                          ? pixDetails.qrCodeImage
-                          : `data:image/png;base64,${pixDetails.qrCodeImage}`
-                      }
-                      alt="QR Code PIX"
-                      className="max-w-full max-h-[200px]"
-                    />
-                  ) : (
-                    <div className="text-center text-sm text-muted-foreground">
-                      QR Code indisponível. Utilize o código copia e cola.
-                    </div>
-                  )}
-                </div>
 
-                <div className="space-y-4">
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    <div>
-                      Status do pagamento: <span className="font-medium text-foreground">{pixDetails.status || "PENDING"}</span>
-                    </div>
-                    {pixDetails.pixExpiresAt && (
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-muted-foreground" />
-                        Código válido até {formatDateTime(pixDetails.pixExpiresAt)}
-                      </div>
-                    )}
-                    {!pixDetails.pixExpiresAt && pixDetails.dueDate && (
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-muted-foreground" />
-                        Vencimento em {formatDateTime(pixDetails.dueDate)}
-                      </div>
-                    )}
-                  </div>
-
-                  {pixDetails.copyPasteCode && (
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium text-foreground">PIX Copia e Cola</span>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                        <div className="flex-1">
-                          <div className="bg-muted border border-border rounded-md p-3 text-xs font-mono break-all select-all">
-                            {pixDetails.copyPasteCode}
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              await navigator.clipboard.writeText(pixDetails.copyPasteCode || "");
-                              toast.success("Código PIX copiado!");
-                            } catch (copyErr) {
-                              console.error(copyErr);
-                              toast.error("Não foi possível copiar o código PIX.");
-                            }
-                          }}
-                          className="shrink-0"
-                        >
-                          <Copy className="w-4 h-4 mr-2" />
-                          Copiar código
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-3">
-                    {pixDetails.paymentLink && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => window.open(pixDetails.paymentLink ?? "", "_blank", "noopener")}
-                      >
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        Abrir link PIX
-                      </Button>
-                    )}
-                    {pendingFinalizeUrl && (
-                      <Button
-                        type="button"
-                        onClick={() => navigate(pendingFinalizeUrl)}
-                        disabled={!loggedInAfterCheckout && !pixClaimSuccess}
-                      >
-                        Finalizar cadastro
-                      </Button>
-                    )}
-                  </div>
-
-                  <p className="text-xs text-muted-foreground">
-                    Assim que o pagamento for confirmado, você receberá um email. {pixClaimSuccess
-                      ? "Sua conta já está vinculada à organização."
-                      : "Finalize o cadastro após o pagamento para acessar o painel."}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }

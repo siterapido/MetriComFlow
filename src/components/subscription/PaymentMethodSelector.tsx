@@ -1,8 +1,8 @@
-import { CreditCard, QrCode } from "lucide-react";
+import { CreditCard } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-export type PaymentMethod = "CREDIT_CARD" | "PIX";
+export type PaymentMethod = "CREDIT_CARD";
 
 interface PaymentMethodSelectorProps {
   value: PaymentMethod;
@@ -14,16 +14,9 @@ export function PaymentMethodSelector({ value, onChange }: PaymentMethodSelector
     {
       value: "CREDIT_CARD" as PaymentMethod,
       label: "Cartão de Crédito",
-      description: "Aprovação imediata",
+      description: "Pagamento seguro com cartão de crédito",
       icon: CreditCard,
-      color: "from-primary to-secondary",
-    },
-    {
-      value: "PIX" as PaymentMethod,
-      label: "PIX",
-      description: "Aprovação em até 1 hora",
-      icon: QrCode,
-      color: "from-success to-green-600",
+      color: "from-blue-500 to-blue-600",
     },
   ];
 
@@ -50,26 +43,35 @@ export function PaymentMethodSelector({ value, onChange }: PaymentMethodSelector
                       : "border-border hover:border-primary/50"
                   }`}
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center space-x-4">
                     <RadioGroupItem
                       value={method.value}
                       id={method.value}
+                      className="mt-1"
                     />
 
-                    <div
-                      className={`w-11 h-11 bg-gradient-to-br ${method.color} rounded-lg flex items-center justify-center flex-shrink-0 shadow-md`}
-                    >
-                      <Icon className="w-6 h-6 text-white" />
+                    <div className="flex-1 flex items-center space-x-4">
+                      <div
+                        className={`w-12 h-12 rounded-lg bg-gradient-to-br ${method.color} flex items-center justify-center shadow-md`}
+                      >
+                        <Icon className="w-6 h-6 text-white" />
+                      </div>
+
+                      <div className="flex-1">
+                        <div className="font-semibold text-foreground text-lg">
+                          {method.label}
+                        </div>
+                        <div className="text-muted-foreground text-sm">
+                          {method.description}
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex-1">
-                      <div className="font-bold text-base text-foreground">
-                        {method.label}
+                    {isSelected && (
+                      <div className="absolute top-3 right-3">
+                        <div className="w-3 h-3 bg-primary rounded-full animate-pulse" />
                       </div>
-                      <div className="text-sm text-muted-foreground mt-0.5">
-                        {method.description}
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               </Label>

@@ -93,11 +93,7 @@ export function UpgradePlanDialog({
 
       toast({
         title: "✅ Plano atualizado com sucesso!",
-        description: `Você agora está no plano ${newPlan.name}. ${
-          data.paymentMethod === "PIX"
-            ? "Você receberá as instruções de pagamento por email."
-            : "Seu cartão será cobrado automaticamente."
-        }`,
+        description: `Você agora está no plano ${newPlan.name}. Seu cartão será cobrado automaticamente.`,
       });
 
       onOpenChange(false);

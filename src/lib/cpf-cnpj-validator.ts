@@ -5,14 +5,18 @@
 /**
  * Remove all non-numeric characters
  */
-export function stripNonNumeric(value: string): string {
+export function stripNonNumeric(value: string | undefined | null): string {
+  if (!value || typeof value !== 'string') {
+    return '';
+  }
   return value.replace(/\D/g, '');
 }
 
 /**
  * Format CPF: 000.000.000-00
  */
-export function formatCPF(value: string): string {
+export function formatCPF(value: string | undefined | null): string {
+  if (!value) return '';
   const numbers = stripNonNumeric(value);
 
   if (numbers.length <= 3) return numbers;
@@ -25,7 +29,8 @@ export function formatCPF(value: string): string {
 /**
  * Format CNPJ: 00.000.000/0000-00
  */
-export function formatCNPJ(value: string): string {
+export function formatCNPJ(value: string | undefined | null): string {
+  if (!value) return '';
   const numbers = stripNonNumeric(value);
 
   if (numbers.length <= 2) return numbers;
@@ -39,7 +44,8 @@ export function formatCNPJ(value: string): string {
 /**
  * Auto-format CPF or CNPJ based on length
  */
-export function formatCpfCnpj(value: string): string {
+export function formatCpfCnpj(value: string | undefined | null): string {
+  if (!value) return '';
   const numbers = stripNonNumeric(value);
 
   if (numbers.length <= 11) {
@@ -52,7 +58,8 @@ export function formatCpfCnpj(value: string): string {
 /**
  * Validate CPF
  */
-export function validateCPF(cpf: string): boolean {
+export function validateCPF(cpf: string | undefined | null): boolean {
+  if (!cpf) return false;
   const numbers = stripNonNumeric(cpf);
 
   if (numbers.length !== 11) return false;
@@ -84,7 +91,8 @@ export function validateCPF(cpf: string): boolean {
 /**
  * Validate CNPJ
  */
-export function validateCNPJ(cnpj: string): boolean {
+export function validateCNPJ(cnpj: string | undefined | null): boolean {
+  if (!cnpj) return false;
   const numbers = stripNonNumeric(cnpj);
 
   if (numbers.length !== 14) return false;
@@ -118,7 +126,8 @@ export function validateCNPJ(cnpj: string): boolean {
 /**
  * Validate CPF or CNPJ based on length
  */
-export function validateCpfCnpj(value: string): boolean {
+export function validateCpfCnpj(value: string | undefined | null): boolean {
+  if (!value) return false;
   const numbers = stripNonNumeric(value);
 
   if (numbers.length === 11) {
@@ -135,12 +144,14 @@ export function validateCpfCnpj(value: string): boolean {
 /**
  * Check if value is CPF (11 digits) or CNPJ (14 digits)
  */
-export function isCPF(value: string): boolean {
+export function isCPF(value: string | undefined | null): boolean {
+  if (!value) return false;
   const numbers = stripNonNumeric(value);
   return numbers.length === 11;
 }
 
-export function isCNPJ(value: string): boolean {
+export function isCNPJ(value: string | undefined | null): boolean {
+  if (!value) return false;
   const numbers = stripNonNumeric(value);
   return numbers.length === 14;
 }
@@ -148,7 +159,8 @@ export function isCNPJ(value: string): boolean {
 /**
  * Format phone number: (00) 00000-0000 or (00) 0000-0000
  */
-export function formatPhone(value: string): string {
+export function formatPhone(value: string | undefined | null): string {
+  if (!value) return '';
   const numbers = stripNonNumeric(value);
 
   if (numbers.length <= 2) return `(${numbers}`;
@@ -162,7 +174,8 @@ export function formatPhone(value: string): string {
 /**
  * Format CEP: 00000-000
  */
-export function formatCEP(value: string): string {
+export function formatCEP(value: string | undefined | null): string {
+  if (!value) return '';
   const numbers = stripNonNumeric(value);
 
   if (numbers.length <= 5) return numbers;
@@ -173,7 +186,8 @@ export function formatCEP(value: string): string {
 /**
  * Validate phone (10 or 11 digits)
  */
-export function validatePhone(phone: string): boolean {
+export function validatePhone(phone: string | undefined | null): boolean {
+  if (!phone) return false;
   const numbers = stripNonNumeric(phone);
   return numbers.length === 10 || numbers.length === 11;
 }
@@ -181,7 +195,8 @@ export function validatePhone(phone: string): boolean {
 /**
  * Validate CEP (8 digits)
  */
-export function validateCEP(cep: string): boolean {
+export function validateCEP(cep: string | undefined | null): boolean {
+  if (!cep) return false;
   const numbers = stripNonNumeric(cep);
   return numbers.length === 8;
 }

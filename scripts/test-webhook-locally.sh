@@ -66,7 +66,7 @@ echo ""
 # Wait a bit
 sleep 2
 
-# Test 3: PAYMENT_RECEIVED (PIX/Boleto)
+# Test 3: PAYMENT_RECEIVED (Boleto)
 echo "✅ Test 3: PAYMENT_RECEIVED event"
 echo "----------------------------------"
 curl -s -X POST "$WEBHOOK_URL" \
@@ -80,7 +80,7 @@ curl -s -X POST "$WEBHOOK_URL" \
       \"value\": 97.00,
       \"dueDate\": \"2025-11-26\",
       \"paymentDate\": \"$(date -u +"%Y-%m-%d")\",
-      \"billingType\": \"PIX\",
+      \"billingType\": \"BOLETO\",
       \"subscription\": \"$SUBSCRIPTION_ID\"
     }
   }"
