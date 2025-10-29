@@ -582,6 +582,9 @@ export type Database = {
           display_order: number
           is_active: boolean
           is_popular: boolean
+          stripe_price_id: string | null
+          stripe_product_id: string | null
+          stripe_metadata: Json | null
           created_at: string | null
           updated_at: string | null
         }
@@ -599,6 +602,9 @@ export type Database = {
           display_order?: number
           is_active?: boolean
           is_popular?: boolean
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          stripe_metadata?: Json | null
           created_at?: string | null
           updated_at?: string | null
         }
@@ -616,6 +622,9 @@ export type Database = {
           display_order?: number
           is_active?: boolean
           is_popular?: boolean
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          stripe_metadata?: Json | null
           created_at?: string | null
           updated_at?: string | null
         }
@@ -648,6 +657,11 @@ export type Database = {
           billing_phone?: string | null
           billing_address?: string | null
           payment_gateway?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_invoice_id?: string | null
         }
         Insert: {
           id?: string
@@ -675,6 +689,11 @@ export type Database = {
           billing_phone?: string | null
           billing_address?: string | null
           payment_gateway?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_invoice_id?: string | null
         }
         Update: {
           id?: string
@@ -702,13 +721,83 @@ export type Database = {
           billing_phone?: string | null
           billing_address?: string | null
           payment_gateway?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_invoice_id?: string | null
         }
         Relationships: [
-          {
+          { 
             foreignKeyName: "organization_subscriptions_plan_id_fkey",
             columns: ["plan_id"],
             isOneToOne: false,
             referencedRelation: "subscription_plans",
+            referencedColumns: ["id"],
+          },
+        ]
+      }
+      subscription_payments: {
+        Row: {
+          id: string
+          subscription_id: string
+          amount: number
+          payment_method: string | null
+          status: string
+          due_date: string
+          payment_date: string | null
+          asaas_payment_id?: string | null
+          asaas_invoice_url?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_invoice_id?: string | null
+          stripe_hosted_invoice_url?: string | null
+          stripe_receipt_url?: string | null
+          metadata: Json | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          subscription_id: string
+          amount: number
+          payment_method?: string | null
+          status: string
+          due_date: string
+          payment_date?: string | null
+          asaas_payment_id?: string | null
+          asaas_invoice_url?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_invoice_id?: string | null
+          stripe_hosted_invoice_url?: string | null
+          stripe_receipt_url?: string | null
+          metadata?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          subscription_id?: string
+          amount?: number
+          payment_method?: string | null
+          status?: string
+          due_date?: string
+          payment_date?: string | null
+          asaas_payment_id?: string | null
+          asaas_invoice_url?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_invoice_id?: string | null
+          stripe_hosted_invoice_url?: string | null
+          stripe_receipt_url?: string | null
+          metadata?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_payments_subscription_id_fkey",
+            columns: ["subscription_id"],
+            isOneToOne: false,
+            referencedRelation: "organization_subscriptions",
             referencedColumns: ["id"],
           },
         ]
