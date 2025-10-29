@@ -35,8 +35,8 @@ interface BillingAddress {
 interface CreateCheckoutRequest {
   subscriptionId?: string;
   planSlug: string;
-  billingName: string;
-  billingEmail: string;
+  billingName?: string;
+  billingEmail?: string;
   billingCpfCnpj?: string;
   billingPhone?: string;
   billingAddress?: BillingAddress;
@@ -128,7 +128,10 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       throw new Error("Plano não informado");
     }
 
-    if (!billingName || !billingEmail) {
+    const trimmedName = (billingName || "").trim();
+    const trimmedEmail = (billingEmail || "").trim().toLowerCase();
+
+    if (subscriptionId && (!trimmedName || !trimmedEmail)) {
       throw new Error("Nome e email são obrigatórios");
     }
 
@@ -147,6 +150,9 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     }
 
     const normalizedAppUrl = normalizeAppUrl(APP_URL || "http://localhost:8082");
+
+    const effectiveName = trimmedName || `Cliente ${plan.name}`;
+    const effectiveEmail = trimmedEmail;
 
     const isPublicCheckout = !subscriptionId;
 
@@ -168,7 +174,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       organizationId = existingSubscription.organization_id;
     } else {
       // Create organization on the fly for public checkout
-      const orgName = billingName?.trim() || `Cliente ${plan.name}`;
+      const orgName = effectiveName;
       const slugBase = orgName
         .toLowerCase()
         .normalize("NFD")
@@ -221,7 +227,11 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     if (isPublicCheckout) {
       claimToken = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
       currentMetadata.claim_token = claimToken;
-      currentMetadata.claim_email = billingEmail;
+      if (effectiveEmail) {
+        currentMetadata.claim_email = effectiveEmail;
+      } else {
+        delete currentMetadata.claim_email;
+      }
       currentMetadata.checkout_completed_at = new Date().toISOString();
     }
 
@@ -235,8 +245,10 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
 
     if (!stripeCustomerId) {
       const customerParams = new URLSearchParams();
-      customerParams.set("name", billingName);
-      customerParams.set("email", billingEmail.toLowerCase());
+      customerParams.set("name", effectiveName);
+      if (effectiveEmail) {
+        customerParams.set("email", effectiveEmail);
+      }
       customerParams.set("metadata[subscription_id]", subscription.id);
       customerParams.set("metadata[organization_id]", organizationId);
       customerParams.set("metadata[plan_slug]", plan.slug);
@@ -271,16 +283,15 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       currentMetadata.stripe_customer_created_at = new Date().toISOString();
     }
 
+    const publicSuccessBase = `${normalizedAppUrl}/finalizar-cadastro?org=${encodeURIComponent(
+      organizationId,
+    )}&sub=${encodeURIComponent(subscription.id)}&claim=${encodeURIComponent(claimToken || "")}`;
     const successUrl = isPublicCheckout
-      ? `${normalizedAppUrl}/finalizar-cadastro?org=${encodeURIComponent(organizationId)}&sub=${encodeURIComponent(
-          subscription.id,
-        )}&claim=${encodeURIComponent(claimToken || "")}&email=${encodeURIComponent(
-          billingEmail.toLowerCase(),
-        )}&session_id={CHECKOUT_SESSION_ID}`
+      ? `${publicSuccessBase}${effectiveEmail ? `&email=${encodeURIComponent(effectiveEmail)}` : ""}&session_id={CHECKOUT_SESSION_ID}`
       : `${normalizedAppUrl}/planos?status=success&session_id={CHECKOUT_SESSION_ID}`;
 
     const cancelUrl = isPublicCheckout
-      ? `${normalizedAppUrl}/checkout?plan=${encodeURIComponent(plan.slug)}&status=cancelled`
+      ? `${normalizedAppUrl}/#planos`
       : `${normalizedAppUrl}/planos?status=cancelled`;
 
     const sessionParams = new URLSearchParams();
@@ -314,8 +325,8 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
 
     const updatePayload: Record<string, any> = {
       plan_id: plan.id,
-      billing_name: billingName,
-      billing_email: billingEmail,
+      billing_name: effectiveName,
+      billing_email: effectiveEmail || null,
       billing_cpf_cnpj: billingCpfCnpj || null,
       billing_phone: billingPhone || null,
       billing_address: serializedAddress,

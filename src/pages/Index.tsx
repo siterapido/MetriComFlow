@@ -7,6 +7,8 @@ import type { SubscriptionPlan, BillingPeriod } from "@/hooks/useSubscription";
 import { useSubscriptionPlans } from "@/hooks/useSubscription";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 
 // Landing page sem formulário: removido schema e validação
 
@@ -373,6 +375,7 @@ function FAQ() {
 function PricingPlansSection() {
   const track = useTracker();
   const [period, setPeriod] = useState<BillingPeriod>("monthly");
+  const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
   // Buscar planos oficiais diretamente do Supabase para manter sincronização com /planos
   const { data: allPlans, isLoading, error } = useSubscriptionPlans();
 
@@ -386,13 +389,38 @@ function PricingPlansSection() {
   // Se o período selecionado não tiver planos disponíveis, mostramos mensagem amigável
   const plans = period === "monthly" ? monthlyPlans : yearlyPlans;
 
-  const handleSelect = (planId: string) => {
+  const handleSelect = async (planId: string) => {
     track({ event: "lp_plan_select", planId, period });
     const plan = plans.find((p) => p.id === planId);
     const planSlugOrId = plan?.slug || planId;
-    // Nova navegação: checkout público direto, sem redirecionar para login
-    const next = `/checkout?plan=${encodeURIComponent(planSlugOrId)}`;
-    window.location.href = next;
+
+    setCheckoutPlanId(planId);
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke("create-stripe-checkout", {
+        body: {
+          planSlug: planSlugOrId,
+        },
+      });
+
+      if (fnError) {
+        throw fnError;
+      }
+
+      const checkoutUrl = (data as { checkoutUrl?: string } | null)?.checkoutUrl;
+
+      if (!checkoutUrl) {
+        throw new Error("Não foi possível iniciar o checkout na Stripe.");
+      }
+
+      window.location.href = checkoutUrl;
+    } catch (err: any) {
+      console.error("Erro ao iniciar checkout da Stripe:", err);
+      toast.error("Falha ao redirecionar para o pagamento.", {
+        description: err?.message ? String(err.message) : "Tente novamente em instantes.",
+      });
+    } finally {
+      setCheckoutPlanId(null);
+    }
   };
 
   return (
@@ -442,7 +470,13 @@ function PricingPlansSection() {
       ) : (
         <div className="grid gap-6 md:grid-cols-3">
           {plans.map((plan) => (
-            <PlanCard key={plan.id} plan={plan} onSelect={handleSelect} />
+            <PlanCard
+              key={plan.id}
+              plan={plan}
+              onSelect={handleSelect}
+              loading={checkoutPlanId === plan.id}
+              disabled={Boolean(checkoutPlanId && checkoutPlanId !== plan.id)}
+            />
           ))}
         </div>
       )}
