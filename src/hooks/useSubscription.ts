@@ -50,7 +50,7 @@ export interface OrganizationSubscription {
   plan?: SubscriptionPlan;
 }
 
-const TEST_PLAN_SLUGS = new Set(["teste", "trial"]);
+const TEST_PLAN_SLUGS = new Set(["trial"]);
 
 const PRO_PLAN_CAPABILITY_FALLBACK: Pick<SubscriptionPlan, "max_ad_accounts" | "max_users" | "has_crm_access" | "features"> = {
   max_ad_accounts: 20,

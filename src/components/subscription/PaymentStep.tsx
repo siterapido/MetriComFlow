@@ -255,22 +255,12 @@ export function PaymentStep({
                 />
               </div>
 
-              {/* Test Data Notice */}
+              {/* Security Notice */}
               <Alert>
                 <Shield className="h-4 w-4" />
                 <AlertDescription>
-                    <strong>Ambiente de Teste - Cartões Válidos:</strong>
-                    <br />
-                    <strong>Mastercard:</strong> João da Silva | 5162306219378829 | CCV: 318 | 05/2028
-                    <br />
-                    <strong>Visa:</strong> Maria Santos | 4000000000000010 | CCV: 123 | 12/2028
-                    <br />
-                    <strong>Elo:</strong> Carlos Oliveira | 6362970000457013 | CCV: 123 | 03/2028
-                    <br />
-                    <strong>Hipercard:</strong> Ana Costa | 6062825624254001 | CCV: 123 | 09/2028
-                    <br />
-                    <em>Todos os cartões acima são válidos para teste no ambiente sandbox.</em>
-                  </AlertDescription>
+                  <strong>Pagamento Seguro:</strong> Seus dados de cartão são processados de forma segura e criptografada. Nunca armazenamos informações completas do seu cartão.
+                </AlertDescription>
               </Alert>
 
               {/* Submit Button */}
