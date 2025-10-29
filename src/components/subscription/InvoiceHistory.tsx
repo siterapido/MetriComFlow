@@ -13,6 +13,10 @@ interface Payment {
   id: string;
   asaas_payment_id: string | null;
   asaas_invoice_url: string | null;
+  stripe_invoice_id?: string | null;
+  stripe_payment_intent_id?: string | null;
+  stripe_hosted_invoice_url?: string | null;
+  stripe_receipt_url?: string | null;
   amount: number;
   payment_method: string | null;
   status: string;
@@ -90,6 +94,8 @@ export function InvoiceHistory({ subscriptionId }: InvoiceHistoryProps) {
   const getPaymentMethodLabel = (method: string | null) => {
     const labels: Record<string, string> = {
       CREDIT_CARD: "Cartão de Crédito",
+      CARD: "Cartão (Stripe)",
+      card: "Cartão (Stripe)",
       BOLETO: "Boleto Bancário",
       DEBIT_CARD: "Cartão de Débito",
     };
@@ -204,7 +210,7 @@ export function InvoiceHistory({ subscriptionId }: InvoiceHistoryProps) {
                       {formatCurrency(payment.amount)}
                     </div>
 
-                    {payment.asaas_invoice_url && (
+                    {(payment.stripe_hosted_invoice_url || payment.stripe_receipt_url || payment.asaas_invoice_url) && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -212,7 +218,12 @@ export function InvoiceHistory({ subscriptionId }: InvoiceHistoryProps) {
                         className="w-full"
                       >
                         <a
-                          href={payment.asaas_invoice_url}
+                          href={
+                            payment.stripe_hosted_invoice_url ||
+                            payment.stripe_receipt_url ||
+                            payment.asaas_invoice_url ||
+                            "#"
+                          }
                           target="_blank"
                           rel="noopener noreferrer"
                         >

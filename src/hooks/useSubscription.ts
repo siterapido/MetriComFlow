@@ -341,7 +341,7 @@ export const useUpgradePlan = () => {
         return data;
       } else {
         // Create new subscription (first-time subscription)
-        // Note: Status will be updated to "active" by create-asaas-subscription Edge Function
+        // Note: Status will be updated to "active" by create-stripe-checkout Edge Function
         const now = new Date();
         const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
 

@@ -54,9 +54,9 @@ export function UpgradePlanDialog({
 
     setIsProcessing(true);
     try {
-      // Call Edge Function to create subscription in Asaas
+      // Call Edge Function to create Stripe checkout session
       const { data: result, error } = await supabase.functions.invoke(
-        "create-asaas-subscription",
+        "create-stripe-checkout",
         {
           body: {
             subscriptionId: currentSubscription.id,
@@ -74,35 +74,26 @@ export function UpgradePlanDialog({
               state: data.state?.trim().toUpperCase(),
               addressComplement: data.complement || undefined,
             },
-            billingType: data.paymentMethod,
-            creditCard:
-              data.paymentMethod === "CREDIT_CARD" && data.creditCard
-                ? {
-                    holderName: data.creditCard.holderName,
-                    number: stripNonNumeric(data.creditCard.number),
-                    expiryMonth: (data.creditCard.expiry || "").slice(0, 2),
-                    expiryYear: `20${(data.creditCard.expiry || "").slice(3, 5)}`,
-                    ccv: stripNonNumeric(data.creditCard.ccv),
-                  }
-                : undefined,
           },
         }
       );
 
       if (error) throw error;
 
+      if (!result?.success) {
+        throw new Error(result?.error || "Falha ao iniciar checkout");
+      }
+
+      if (!result.checkoutUrl) {
+        throw new Error("Não foi possível iniciar o checkout da Stripe.");
+      }
+
       toast({
-        title: "✅ Plano atualizado com sucesso!",
-        description: `Você agora está no plano ${newPlan.name}. Seu cartão será cobrado automaticamente.`,
+        title: "Redirecionando para pagamento seguro",
+        description: `Conclua a contratação do plano ${newPlan.name} na Stripe.`,
       });
 
-      onOpenChange(false);
-      setStep("confirm");
-
-      // Redirect to subscription page to see payment details
-      setTimeout(() => {
-        window.location.href = "/planos";
-      }, 1500);
+      window.location.href = result.checkoutUrl;
     } catch (error: any) {
       console.error("Subscription error:", error);
       toast({

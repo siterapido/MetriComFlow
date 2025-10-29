@@ -106,9 +106,7 @@ export function TwoStepCheckout({
       case "account":
         return "Preencha seus dados pessoais e de endereço";
       case "payment":
-        return userCreated 
-          ? "Finalize sua assinatura com os dados do cartão" 
-          : "Finalize sua assinatura com os dados do cartão";
+        return "Finalize sua assinatura no checkout seguro da Stripe";
       default:
         return "";
     }
