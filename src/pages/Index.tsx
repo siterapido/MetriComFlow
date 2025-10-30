@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { PlanCard } from "@/components/subscription/PlanCard";
+import { toast } from "sonner";
 import type { SubscriptionPlan, BillingPeriod } from "@/hooks/useSubscription";
 import { useSubscriptionPlans } from "@/hooks/useSubscription";
-import { resolveStripeProductId } from "@/lib/stripePlanProducts";
+// Stripe integration removed
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -390,14 +391,13 @@ function PricingPlansSection() {
   const handleSelect = (planId: string) => {
     track({ event: "lp_plan_select", planId, period });
     const plan = plans.find((p) => p.id === planId);
-    const fallbackProductId = plan ? resolveStripeProductId(plan) : null;
-    const productId = plan?.stripe_product_id?.trim() || fallbackProductId || undefined;
     const planSlugOrId = plan?.slug || planId;
-    // Prioriza redirecionar pelo produto configurado na Stripe, com fallback para slug/id
-    const next = productId
-      ? `/checkout?product=${encodeURIComponent(productId)}`
-      : `/checkout?plan=${encodeURIComponent(planSlugOrId)}`;
-    window.location.href = next;
+    // Checkout removido - direcionando para página de planos
+    toast("Checkout em reconstrução", {
+      description: "Estamos atualizando o fluxo de contratação. Em breve estará disponível novamente.",
+    });
+    // Opcionalmente, manter navegação para /planos sem abrir checkout
+    // window.location.href = "/planos";
   };
 
   return (

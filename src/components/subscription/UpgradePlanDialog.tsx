@@ -9,11 +9,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Check, AlertTriangle, TrendingUp, Users, BarChart3, ArrowLeft } from "lucide-react";
+import { Check, AlertTriangle, TrendingUp, Users, BarChart3 } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
 import type { SubscriptionPlan } from "@/hooks/useSubscription";
 import { useCurrentSubscription } from "@/hooks/useSubscription";
-import { CheckoutForm } from "./CheckoutForm";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { stripNonNumeric } from "@/lib/cpf-cnpj-validator";
@@ -38,73 +37,10 @@ export function UpgradePlanDialog({
 }: UpgradePlanDialogProps) {
   const { toast } = useToast();
   const { data: currentSubscription } = useCurrentSubscription();
-  const [step, setStep] = useState<"confirm" | "checkout">("confirm");
+  const [step] = useState<"confirm" | "checkout">("confirm");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleProceedToCheckout = () => {
-    setStep("checkout");
-  };
-
-  const handleBackToConfirm = () => {
-    setStep("confirm");
-  };
-
-  const handleCheckoutSubmit = async (data: any) => {
-    if (!newPlan || !currentSubscription) return;
-
-    setIsProcessing(true);
-    try {
-      // Call Edge Function to create Stripe checkout session
-      const { data: result, error } = await supabase.functions.invoke(
-        "create-stripe-checkout",
-        {
-          body: {
-            subscriptionId: currentSubscription.id,
-            planSlug: newPlan.slug,
-            billingName: data.billingName,
-            billingEmail: data.billingEmail,
-            billingCpfCnpj: stripNonNumeric(data.billingCpfCnpj),
-            billingPhone: stripNonNumeric(data.billingPhone),
-            billingAddress: {
-              postalCode: stripNonNumeric(data.postalCode),
-              addressNumber: data.addressNumber,
-              street: data.street?.trim(),
-              province: data.province?.trim(),
-              city: data.city?.trim(),
-              state: data.state?.trim().toUpperCase(),
-              addressComplement: data.complement || undefined,
-            },
-          },
-        }
-      );
-
-      if (error) throw error;
-
-      if (!result?.success) {
-        throw new Error(result?.error || "Falha ao iniciar checkout");
-      }
-
-      if (!result.checkoutUrl) {
-        throw new Error("Não foi possível iniciar o checkout da Stripe.");
-      }
-
-      toast({
-        title: "Redirecionando para pagamento seguro",
-        description: `Conclua a contratação do plano ${newPlan.name} na Stripe.`,
-      });
-
-      window.location.href = result.checkoutUrl;
-    } catch (error: any) {
-      console.error("Subscription error:", error);
-      toast({
-        title: "❌ Erro ao processar assinatura",
-        description: error.message || "Tente novamente ou entre em contato com o suporte.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+  // Checkout desativado temporariamente para reinimplementação
 
   const isFirstSubscription = !currentPlan; // New: detect first-time subscription
   const isDowngrade = currentPlan && newPlan && newPlan.price < currentPlan.price;
@@ -125,35 +61,20 @@ export function UpgradePlanDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
-          {step === "checkout" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleBackToConfirm}
-              className="absolute left-6 top-6"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Voltar
-            </Button>
-          )}
           <DialogTitle className="text-2xl font-bold text-foreground flex items-center gap-2">
             <TrendingUp className="w-6 h-6 text-primary" />
-            {step === "confirm"
-              ? isFirstSubscription
-                ? "Contratar Plano"
-                : isDowngrade
-                ? "Downgrade de Plano"
-                : "Upgrade de Plano"
-              : "Finalizar Contratação"}
+            {isFirstSubscription
+              ? "Contratar Plano"
+              : isDowngrade
+              ? "Downgrade de Plano"
+              : "Upgrade de Plano"}
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            {step === "confirm"
-              ? isFirstSubscription
-                ? `Você está prestes a contratar o plano ${newPlan.name}.`
-                : isDowngrade
-                ? "Você está prestes a fazer downgrade do seu plano."
-                : "Você está prestes a fazer upgrade do seu plano."
-              : "Preencha os dados de cobrança para finalizar"}
+            {isFirstSubscription
+              ? `Você está prestes a contratar o plano ${newPlan.name}.`
+              : isDowngrade
+              ? "Você está prestes a fazer downgrade do seu plano."
+              : "Você está prestes a fazer upgrade do seu plano."}
           </DialogDescription>
         </DialogHeader>
 
@@ -292,29 +213,25 @@ export function UpgradePlanDialog({
           </div>
         )}
 
-        {step === "confirm" && (
-          <div className="flex gap-3 mt-6">
-            <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleProceedToCheckout}
-              disabled={wouldExceedLimits}
-              className="bg-primary hover:bg-primary/90 flex-1"
-            >
-              Continuar para Pagamento
-            </Button>
-          </div>
-        )}
-
-        {step === "checkout" && (
-          <CheckoutForm
-            planName={newPlan.name}
-            planPrice={newPlan.price}
-            onSubmit={handleCheckoutSubmit}
-            isLoading={isProcessing}
-          />
-        )}
+        <div className="flex gap-3 mt-6">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => {
+              // Inform that checkout is under reconstruction
+              toast({
+                title: "Checkout em reconstrução",
+                description:
+                  "Estamos atualizando o fluxo de pagamento. Em breve estará disponível novamente.",
+              });
+            }}
+            disabled={wouldExceedLimits || isProcessing}
+            className="bg-primary hover:bg-primary/90 flex-1"
+          >
+            Continuar para Pagamento
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

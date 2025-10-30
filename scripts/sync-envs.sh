@@ -69,9 +69,7 @@ export VITE_SUPABASE_URL="$(read_env VITE_SUPABASE_URL)"
 export VITE_SUPABASE_ANON_KEY="$(read_env VITE_SUPABASE_ANON_KEY)"
 export SUPABASE_URL="$(read_env SUPABASE_URL)"
 export SUPABASE_SERVICE_ROLE_KEY="$(read_env SUPABASE_SERVICE_ROLE_KEY)"
-export VITE_STRIPE_PUBLISHABLE_KEY="$(read_env VITE_STRIPE_PUBLISHABLE_KEY)"
-export STRIPE_SECRET_KEY="$(read_env STRIPE_SECRET_KEY)"
-export STRIPE_WEBHOOK_SECRET="$(read_env STRIPE_WEBHOOK_SECRET)"
+# Stripe environment variables removed
 export APP_URL="$(read_env APP_URL)"
 
 # Funções auxiliares
@@ -135,7 +133,7 @@ if [[ "$DO_VERCEL" == true ]]; then
       # Também é útil manter Supabase client vars em Vercel
       set_vercel_env "VITE_SUPABASE_URL" "${VITE_SUPABASE_URL:-}" "production"
       set_vercel_env "VITE_SUPABASE_ANON_KEY" "${VITE_SUPABASE_ANON_KEY:-}" "production"
-      set_vercel_env "VITE_STRIPE_PUBLISHABLE_KEY" "${VITE_STRIPE_PUBLISHABLE_KEY:-}" "production"
+      # Stripe variables removed
     fi
 
     if [[ "$TARGET_PREVIEW" == true ]]; then
@@ -145,7 +143,7 @@ if [[ "$DO_VERCEL" == true ]]; then
       set_vercel_env "VITE_APP_URL" "${VITE_APP_URL:-}" "preview"
       set_vercel_env "VITE_SUPABASE_URL" "${VITE_SUPABASE_URL:-}" "preview"
       set_vercel_env "VITE_SUPABASE_ANON_KEY" "${VITE_SUPABASE_ANON_KEY:-}" "preview"
-      set_vercel_env "VITE_STRIPE_PUBLISHABLE_KEY" "${VITE_STRIPE_PUBLISHABLE_KEY:-}" "preview"
+      # Stripe variables removed
     fi
   else
     echo "⏭️  Pulando atualização de variáveis na Vercel por falta de autenticação."
@@ -184,8 +182,7 @@ if [[ "$DO_SUPABASE" == true ]]; then
   # Evitar prefixo proibido SUPABASE_ pelo CLI; usar nomes alternativos lidos pela função
   set_supabase_secret "PROJECT_URL" "${SUPABASE_URL:-${VITE_SUPABASE_URL:-}}"
   set_supabase_secret "SERVICE_ROLE_KEY" "${SUPABASE_SERVICE_ROLE_KEY:-}"
-  set_supabase_secret "STRIPE_SECRET_KEY" "${STRIPE_SECRET_KEY:-}"
-  set_supabase_secret "STRIPE_WEBHOOK_SECRET" "${STRIPE_WEBHOOK_SECRET:-}"
+  # Stripe secrets removed
   set_supabase_secret "APP_URL" "${APP_URL:-${VITE_APP_URL:-}}"
 fi
 

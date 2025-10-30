@@ -53,7 +53,7 @@ export default function SubscriptionPlans() {
     }
   };
 
-  // Se vier com ?plan=slug|id nos params, abre o checkout diretamente
+  // Se vier com ?plan=slug|id nos params, apenas abre o diálogo de upgrade (checkout desativado)
   useEffect(() => {
     if (!plans || plans.length === 0) return;
     const params = new URLSearchParams(location.search);

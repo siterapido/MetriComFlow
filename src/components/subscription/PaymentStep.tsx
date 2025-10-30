@@ -9,7 +9,7 @@ import { Form } from "@/components/ui/form";
 import { formatCurrency } from "@/lib/formatters";
 
 const paymentSchema = z.object({
-  paymentMethod: z.literal("stripe"),
+  paymentMethod: z.literal("checkout"),
 });
 
 export type PaymentData = z.infer<typeof paymentSchema>;
@@ -38,12 +38,12 @@ export function PaymentStep({
   const form = useForm<PaymentData>({
     resolver: zodResolver(paymentSchema),
     defaultValues: {
-      paymentMethod: "stripe",
+      paymentMethod: "checkout",
     },
   });
 
   const handleSubmit = async () => {
-    await onSubmit({ paymentMethod: "stripe" });
+    await onSubmit({ paymentMethod: "checkout" });
   };
 
   return (
@@ -63,7 +63,7 @@ export function PaymentStep({
         <div>
           <h2 className="text-2xl font-bold">Pagamento</h2>
           <p className="text-muted-foreground">
-            Revise as informações e finalize no ambiente seguro da Stripe
+            Revise as informações e finalize o pagamento
           </p>
         </div>
       </div>
@@ -95,14 +95,13 @@ export function PaymentStep({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CreditCard className="h-5 w-5" />
-            Pagamento com Stripe
+            Finalizar Pagamento
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Alert className="border-blue-200 bg-blue-50">
-            <AlertDescription className="text-sm text-blue-900">
-              Você será redirecionado para o checkout oficial da Stripe para inserir os dados do cartão com total segurança.
-              Após a confirmação, retornaremos automaticamente para finalizar seu cadastro.
+          <Alert className="border-orange-200 bg-orange-50">
+            <AlertDescription className="text-sm text-orange-900">
+              O checkout está sendo reconstruído. Em breve você poderá finalizar seu pagamento com total segurança.
             </AlertDescription>
           </Alert>
 
@@ -116,9 +115,9 @@ export function PaymentStep({
               <Button
                 type="submit"
                 className="w-full"
-                disabled={isLoading}
+                disabled={true}
               >
-                {isLoading ? "Redirecionando..." : "Ir para pagamento seguro"}
+                Checkout em reconstrução
               </Button>
             </form>
           </Form>

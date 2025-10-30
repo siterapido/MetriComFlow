@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useActiveOrganization } from "./useActiveOrganization";
 import { toast } from "@/hooks/use-toast";
-import { attachStripeProductId } from "@/lib/stripePlanProducts";
 
 // =====================================================
 // TYPES
@@ -27,9 +26,6 @@ export interface SubscriptionPlan {
   is_popular: boolean;
   created_at: string;
   updated_at: string;
-  stripe_product_id?: string | null;
-  stripe_price_id?: string | null;
-  stripe_metadata?: Record<string, any> | null;
 }
 
 export interface OrganizationSubscription {
@@ -146,7 +142,7 @@ export const useSubscriptionPlans = () => {
 
       return rawPlans.map((plan) => {
         const safeFeatures = Array.isArray(plan.features) ? plan.features : [];
-        const basePlan = attachStripeProductId({ ...plan, features: safeFeatures });
+        const basePlan = { ...plan, features: safeFeatures };
         return normalizePlanCapabilities(basePlan, sanitizedProPlan);
       });
     },
@@ -345,7 +341,7 @@ export const useUpgradePlan = () => {
         return data;
       } else {
         // Create new subscription (first-time subscription)
-        // Note: Status will be updated to "active" by create-stripe-checkout Edge Function
+        // Note: Status will be updated to "active" by payment processing
         const now = new Date();
         const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
 

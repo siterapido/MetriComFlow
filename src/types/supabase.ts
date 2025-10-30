@@ -582,9 +582,6 @@ export type Database = {
           display_order: number
           is_active: boolean
           is_popular: boolean
-          stripe_price_id: string | null
-          stripe_product_id: string | null
-          stripe_metadata: Json | null
           created_at: string | null
           updated_at: string | null
         }
@@ -602,9 +599,6 @@ export type Database = {
           display_order?: number
           is_active?: boolean
           is_popular?: boolean
-          stripe_price_id?: string | null
-          stripe_product_id?: string | null
-          stripe_metadata?: Json | null
           created_at?: string | null
           updated_at?: string | null
         }
@@ -622,9 +616,6 @@ export type Database = {
           display_order?: number
           is_active?: boolean
           is_popular?: boolean
-          stripe_price_id?: string | null
-          stripe_product_id?: string | null
-          stripe_metadata?: Json | null
           created_at?: string | null
           updated_at?: string | null
         }
@@ -657,11 +648,6 @@ export type Database = {
           billing_phone?: string | null
           billing_address?: string | null
           payment_gateway?: string | null
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
-          stripe_checkout_session_id?: string | null
-          stripe_payment_intent_id?: string | null
-          stripe_invoice_id?: string | null
         }
         Insert: {
           id?: string
@@ -689,11 +675,6 @@ export type Database = {
           billing_phone?: string | null
           billing_address?: string | null
           payment_gateway?: string | null
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
-          stripe_checkout_session_id?: string | null
-          stripe_payment_intent_id?: string | null
-          stripe_invoice_id?: string | null
         }
         Update: {
           id?: string
@@ -721,11 +702,6 @@ export type Database = {
           billing_phone?: string | null
           billing_address?: string | null
           payment_gateway?: string | null
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
-          stripe_checkout_session_id?: string | null
-          stripe_payment_intent_id?: string | null
-          stripe_invoice_id?: string | null
         }
         Relationships: [
           { 
@@ -748,10 +724,6 @@ export type Database = {
           payment_date: string | null
           asaas_payment_id?: string | null
           asaas_invoice_url?: string | null
-          stripe_payment_intent_id?: string | null
-          stripe_invoice_id?: string | null
-          stripe_hosted_invoice_url?: string | null
-          stripe_receipt_url?: string | null
           metadata: Json | null
           created_at: string | null
           updated_at: string | null
@@ -766,10 +738,6 @@ export type Database = {
           payment_date?: string | null
           asaas_payment_id?: string | null
           asaas_invoice_url?: string | null
-          stripe_payment_intent_id?: string | null
-          stripe_invoice_id?: string | null
-          stripe_hosted_invoice_url?: string | null
-          stripe_receipt_url?: string | null
           metadata?: Json | null
           created_at?: string | null
           updated_at?: string | null
@@ -784,10 +752,6 @@ export type Database = {
           payment_date?: string | null
           asaas_payment_id?: string | null
           asaas_invoice_url?: string | null
-          stripe_payment_intent_id?: string | null
-          stripe_invoice_id?: string | null
-          stripe_hosted_invoice_url?: string | null
-          stripe_receipt_url?: string | null
           metadata?: Json | null
           created_at?: string | null
           updated_at?: string | null

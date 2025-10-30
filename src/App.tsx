@@ -27,7 +27,6 @@ import Team from "./pages/Team";
 import TeamManagement from "./pages/TeamManagement";
 import AcceptInvitation from "./pages/AcceptInvitation";
 import SubscriptionPlans from "./pages/SubscriptionPlans";
-import PublicCheckout from "./pages/PublicCheckout";
 import FinalizeSignup from "./pages/FinalizeSignup";
 import PublicLeadForm from "./pages/PublicLeadForm";
 
@@ -48,8 +47,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Auth />} />
-            {/* Checkout público e finalização de cadastro */}
-            <Route path="/checkout" element={<PublicCheckout />} />
+            {/* Checkout removido temporariamente para reinimplementação */}
             <Route path="/finalizar-cadastro" element={<FinalizeSignup />} />
             <Route path="/setup-admin" element={<SetupAdmin />} />
             <Route path="/forms/:formId" element={<PublicLeadForm />} />
