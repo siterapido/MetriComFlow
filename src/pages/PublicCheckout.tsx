@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { stripNonNumeric } from "@/lib/cpf-cnpj-validator";
+import { attachStripeProductId, resolveStripeProductId } from "@/lib/stripePlanProducts";
 
 type Plan = {
   id: string;
@@ -15,6 +16,8 @@ type Plan = {
   slug: string;
   price: number;
   billing_period: "monthly" | "yearly";
+  display_order: number | null;
+  stripe_product_id: string | null;
 };
 
 export default function PublicCheckout() {
@@ -25,32 +28,75 @@ export default function PublicCheckout() {
   const [submitting, setSubmitting] = useState(false);
 
   const planParam = useMemo(() => searchParams.get("plan") || "", [searchParams]);
+  const productParam = useMemo(() => searchParams.get("product") || "", [searchParams]);
 
   useEffect(() => {
     const fetchPlan = async () => {
       setLoadingPlan(true);
       try {
-        if (!planParam) {
+        if (!planParam && !productParam) {
           toast("Selecione um plano na página inicial para continuar.");
           return;
         }
-        // Try by slug first
-        const { data, error } = await supabase
-          .from("subscription_plans")
-          .select("id, name, slug, price, billing_period")
-          .eq("slug", planParam)
-          .single();
+        const planColumns = "id, name, slug, price, billing_period, display_order, stripe_product_id";
 
-        let planData: Plan | null = data as Plan | null;
+        let planData: Plan | null = null;
 
-        if (error) {
-          // Fallback: try by id
-          const res = await supabase
+        const mapPlan = (raw: any): Plan => {
+          let displayOrder: number | null = null;
+          if (typeof raw?.display_order === "number" && Number.isFinite(raw.display_order)) {
+            displayOrder = raw.display_order;
+          } else if (typeof raw?.display_order === "string") {
+            const parsed = parseInt(raw.display_order, 10);
+            displayOrder = Number.isFinite(parsed) ? parsed : null;
+          }
+          const withDefaults = {
+            ...raw,
+            display_order: displayOrder,
+          };
+          const normalized = attachStripeProductId(withDefaults);
+          return {
+            ...normalized,
+            display_order:
+              typeof normalized.display_order === "number" && Number.isFinite(normalized.display_order)
+                ? normalized.display_order
+                : displayOrder,
+            stripe_product_id: normalized.stripe_product_id ?? null,
+          };
+        };
+
+        if (productParam) {
+          const { data, error } = await supabase
             .from("subscription_plans")
-            .select("id, name, slug, price, billing_period")
-            .eq("id", planParam)
-            .single();
-          planData = res.data as Plan | null;
+            .select(planColumns)
+            .eq("stripe_product_id", productParam)
+            .maybeSingle();
+          if (!error && data) {
+            planData = mapPlan(data);
+          }
+        }
+
+        if (!planData && planParam) {
+          // Try by slug first
+          const { data, error } = await supabase
+            .from("subscription_plans")
+            .select(planColumns)
+            .eq("slug", planParam)
+            .maybeSingle();
+
+          planData = !error && data ? mapPlan(data) : null;
+
+          if (!planData) {
+            // Fallback: try by id
+            const res = await supabase
+              .from("subscription_plans")
+              .select(planColumns)
+              .eq("id", planParam)
+              .maybeSingle();
+            if (!res.error && res.data) {
+              planData = mapPlan(res.data);
+            }
+          }
         }
 
         if (!planData) {
@@ -66,7 +112,7 @@ export default function PublicCheckout() {
       }
     };
     fetchPlan();
-  }, [planParam]);
+  }, [planParam, productParam]);
 
   const handleSubmit = async (accountData: AccountData, _paymentData: PaymentData) => {
     if (!plan) {
@@ -145,8 +191,11 @@ export default function PublicCheckout() {
         throw new Error("Não foi possível validar sua conta. Tente novamente em instantes.");
       }
 
-      const requestBody = {
+    const productId = plan.stripe_product_id || resolveStripeProductId(plan) || undefined;
+
+    const requestBody = {
         planSlug: plan.slug,
+        stripeProductId: productId,
         billingName: accountData.billingName,
         billingEmail: email,
         billingCpfCnpj: sanitizedCpfCnpj,

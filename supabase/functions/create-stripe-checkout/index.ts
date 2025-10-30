@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 // @ts-ignore allow jsr imports without deno tooling locally
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { resolveStripeProductId } from "../../../../src/lib/stripePlanProducts.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,6 +36,7 @@ interface BillingAddress {
 interface CreateCheckoutRequest {
   subscriptionId?: string;
   planSlug: string;
+  stripeProductId?: string;
   billingName: string;
   billingEmail: string;
   billingCpfCnpj?: string;
@@ -44,18 +46,35 @@ interface CreateCheckoutRequest {
 
 const stripeApiBase = "https://api.stripe.com/v1";
 
-async function stripeRequest(path: string, params: URLSearchParams) {
+type StripeRequestOptions = {
+  method?: "GET" | "POST";
+};
+
+async function stripeRequest(path: string, params: URLSearchParams = new URLSearchParams(), options?: StripeRequestOptions) {
   if (!STRIPE_SECRET_KEY) {
     throw new Error("Stripe secret key is not configured");
   }
 
-  const response = await fetch(`${stripeApiBase}${path}`, {
-    method: "POST",
+  const method = options?.method ?? "POST";
+  let url = `${stripeApiBase}${path}`;
+  let body: string | undefined;
+
+  if (method === "GET") {
+    const query = params.toString();
+    if (query) {
+      url = `${url}?${query}`;
+    }
+  } else {
+    body = params.toString();
+  }
+
+  const response = await fetch(url, {
+    method,
     headers: {
       Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: params.toString(),
+    body,
   });
 
   const bodyText = await response.text();
@@ -75,6 +94,89 @@ async function stripeRequest(path: string, params: URLSearchParams) {
   }
 
   return data;
+}
+
+async function ensureStripeIdentifiers(
+  plan: any,
+  supabaseClient: ReturnType<typeof createClient>,
+  explicitProductId?: string | null,
+) {
+  let priceId: string | null = plan.stripe_price_id ?? null;
+  let productId: string | null = plan.stripe_product_id ?? explicitProductId ?? null;
+
+  if (!priceId) {
+    if (!productId) {
+      productId = resolveStripeProductId({
+        slug: plan.slug,
+        billing_period: plan.billing_period,
+        display_order: plan.display_order,
+      });
+    }
+
+    if (!productId) {
+      throw new Error(
+        "Plano sem Stripe Product configurado. Defina stripe_product_id em subscription_plans ou atualize o mapeamento de produtos.",
+      );
+    }
+
+    const product = await stripeRequest(`/products/${productId}`, new URLSearchParams(), { method: "GET" });
+    const defaultPrice = product?.default_price;
+
+    if (typeof defaultPrice === "string") {
+      priceId = defaultPrice;
+    } else if (defaultPrice?.id) {
+      priceId = defaultPrice.id as string;
+    }
+
+    if (!priceId) {
+      const priceSearch = new URLSearchParams();
+      priceSearch.set("product", productId);
+      priceSearch.set("limit", "1");
+      priceSearch.set("active", "true");
+      const prices = await stripeRequest("/prices", priceSearch, { method: "GET" });
+      const candidate = prices?.data?.[0];
+      if (candidate?.id) {
+        priceId = candidate.id as string;
+      }
+    }
+
+    if (!priceId) {
+      throw new Error(
+        "Plano sem Stripe Price configurado. Defina stripe_price_id em subscription_plans ou associe um preço padrão ao produto.",
+      );
+    }
+  }
+
+  if (!productId && priceId) {
+    const price = await stripeRequest(`/prices/${priceId}`, new URLSearchParams(), { method: "GET" });
+    if (price?.product && typeof price.product === "string") {
+      productId = price.product;
+    }
+  }
+
+  const updates: Record<string, any> = {};
+  if (!plan.stripe_price_id && priceId) {
+    updates.stripe_price_id = priceId;
+  }
+  if (!plan.stripe_product_id && productId) {
+    updates.stripe_product_id = productId;
+  }
+
+  if (Object.keys(updates).length) {
+    const { error: updateError } = await supabaseClient
+      .from("subscription_plans")
+      .update(updates)
+      .eq("id", plan.id);
+
+    if (updateError) {
+      console.warn("Failed to persist Stripe identifiers for plan", plan.id, updateError);
+    }
+  }
+
+  plan.stripe_price_id = priceId;
+  plan.stripe_product_id = productId;
+
+  return { priceId, productId };
 }
 
 function sanitizeJsonMetadata(value: unknown): Record<string, any> {
@@ -117,6 +219,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     const {
       subscriptionId,
       planSlug,
+      stripeProductId,
       billingName,
       billingEmail,
       billingCpfCnpj,
@@ -134,7 +237,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
 
     const { data: plan, error: planError } = await supabase
       .from("subscription_plans")
-      .select("id, name, slug, stripe_price_id, stripe_product_id, metadata")
+      .select("id, name, slug, billing_period, display_order, stripe_price_id, stripe_product_id, metadata")
       .eq("slug", planSlug)
       .maybeSingle();
 
@@ -142,7 +245,14 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       throw new Error("Plano não encontrado");
     }
 
-    if (!plan.stripe_price_id) {
+    const sanitizedProductId =
+      typeof stripeProductId === "string" && stripeProductId.trim().length > 0
+        ? stripeProductId.trim()
+        : null;
+
+    const { priceId, productId } = await ensureStripeIdentifiers(plan, supabase, sanitizedProductId);
+
+    if (!priceId) {
       throw new Error("Plano sem Stripe Price configurado. Defina stripe_price_id em subscription_plans.");
     }
 
@@ -227,6 +337,9 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
 
     currentMetadata.plan_slug = plan.slug;
     currentMetadata.plan_id = plan.id;
+    if (productId) {
+      currentMetadata.plan_product_id = productId;
+    }
 
     let stripeCustomerId = subscription.stripe_customer_id as string | null;
 
@@ -240,8 +353,8 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       customerParams.set("metadata[subscription_id]", subscription.id);
       customerParams.set("metadata[organization_id]", organizationId);
       customerParams.set("metadata[plan_slug]", plan.slug);
-      if (plan.stripe_product_id) {
-        customerParams.set("metadata[plan_product_id]", plan.stripe_product_id);
+      if (productId) {
+        customerParams.set("metadata[plan_product_id]", productId);
       }
       if (billingCpfCnpj) {
         customerParams.set("metadata[billing_document]", billingCpfCnpj);
@@ -292,12 +405,15 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     sessionParams.set("allow_promotion_codes", "true");
     sessionParams.set("billing_address_collection", "auto");
     sessionParams.set("payment_method_types[0]", "card");
-    sessionParams.set("line_items[0][price]", plan.stripe_price_id);
+    sessionParams.set("line_items[0][price]", priceId);
     sessionParams.set("line_items[0][quantity]", "1");
     sessionParams.set("subscription_data[metadata][subscription_id]", subscription.id);
     sessionParams.set("subscription_data[metadata][organization_id]", organizationId);
     sessionParams.set("subscription_data[metadata][plan_slug]", plan.slug);
     sessionParams.set("subscription_data[metadata][plan_id]", plan.id);
+    if (productId) {
+      sessionParams.set("subscription_data[metadata][plan_product_id]", productId);
+    }
     if (billingCpfCnpj) {
       sessionParams.set("subscription_data[metadata][billing_document]", billingCpfCnpj);
     }

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useActiveOrganization } from "./useActiveOrganization";
 import { toast } from "@/hooks/use-toast";
+import { attachStripeProductId } from "@/lib/stripePlanProducts";
 
 // =====================================================
 // TYPES
@@ -26,6 +27,9 @@ export interface SubscriptionPlan {
   is_popular: boolean;
   created_at: string;
   updated_at: string;
+  stripe_product_id?: string | null;
+  stripe_price_id?: string | null;
+  stripe_metadata?: Record<string, any> | null;
 }
 
 export interface OrganizationSubscription {
@@ -142,7 +146,7 @@ export const useSubscriptionPlans = () => {
 
       return rawPlans.map((plan) => {
         const safeFeatures = Array.isArray(plan.features) ? plan.features : [];
-        const basePlan = { ...plan, features: safeFeatures };
+        const basePlan = attachStripeProductId({ ...plan, features: safeFeatures });
         return normalizePlanCapabilities(basePlan, sanitizedProPlan);
       });
     },

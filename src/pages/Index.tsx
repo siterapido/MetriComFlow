@@ -5,6 +5,7 @@ import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Cart
 import { PlanCard } from "@/components/subscription/PlanCard";
 import type { SubscriptionPlan, BillingPeriod } from "@/hooks/useSubscription";
 import { useSubscriptionPlans } from "@/hooks/useSubscription";
+import { resolveStripeProductId } from "@/lib/stripePlanProducts";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -389,9 +390,13 @@ function PricingPlansSection() {
   const handleSelect = (planId: string) => {
     track({ event: "lp_plan_select", planId, period });
     const plan = plans.find((p) => p.id === planId);
+    const fallbackProductId = plan ? resolveStripeProductId(plan) : null;
+    const productId = plan?.stripe_product_id?.trim() || fallbackProductId || undefined;
     const planSlugOrId = plan?.slug || planId;
-    // Nova navegação: checkout público direto, sem redirecionar para login
-    const next = `/checkout?plan=${encodeURIComponent(planSlugOrId)}`;
+    // Prioriza redirecionar pelo produto configurado na Stripe, com fallback para slug/id
+    const next = productId
+      ? `/checkout?product=${encodeURIComponent(productId)}`
+      : `/checkout?plan=${encodeURIComponent(planSlugOrId)}`;
     window.location.href = next;
   };
 
