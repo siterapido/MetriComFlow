@@ -129,6 +129,17 @@ async function handleCheckoutSessionCompleted(supabase: any, session: any) {
   }
 
   const metadata = sanitizeMetadata(current?.metadata);
+  const sessionMetadata = sanitizeMetadata(session.metadata);
+  let planIdFromStripe = sessionMetadata.plan_id ?? null;
+  let planSlugFromStripe = sessionMetadata.plan_slug ?? null;
+
+  if (!planIdFromStripe && metadata.pending_plan_id) {
+    planIdFromStripe = metadata.pending_plan_id;
+  }
+  if (!planSlugFromStripe && metadata.pending_plan_slug) {
+    planSlugFromStripe = metadata.pending_plan_slug;
+  }
+
   metadata.stripe_checkout_completed_at = new Date().toISOString();
   metadata.stripe_checkout_session_id = session.id;
 
@@ -154,9 +165,29 @@ async function handleCheckoutSessionCompleted(supabase: any, session: any) {
       if (stripeSubscription?.current_period_end) {
         updatePayload.current_period_end = new Date(stripeSubscription.current_period_end * 1000).toISOString();
       }
+
+      const subscriptionMetadata = sanitizeMetadata(stripeSubscription?.metadata);
+      if (!planIdFromStripe && subscriptionMetadata.plan_id) {
+        planIdFromStripe = subscriptionMetadata.plan_id;
+      }
+      if (!planSlugFromStripe && subscriptionMetadata.plan_slug) {
+        planSlugFromStripe = subscriptionMetadata.plan_slug;
+      }
     }
   } catch (err) {
     console.warn("Unable to fetch Stripe subscription details", err);
+  }
+
+  if (planIdFromStripe) {
+    updatePayload.plan_id = planIdFromStripe;
+    metadata.plan_id = planIdFromStripe;
+    if (planSlugFromStripe) {
+      metadata.plan_slug = planSlugFromStripe;
+    }
+    delete metadata.pending_plan_id;
+    delete metadata.pending_plan_slug;
+    delete metadata.plan_change_requested_at;
+    metadata.plan_activated_at = new Date().toISOString();
   }
 
   const { error: updateError } = await supabase
