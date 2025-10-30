@@ -225,8 +225,20 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       currentMetadata.checkout_completed_at = new Date().toISOString();
     }
 
-    currentMetadata.plan_slug = plan.slug;
-    currentMetadata.plan_id = plan.id;
+    const isExistingSubscription = Boolean(subscriptionId);
+    const isPlanChange = isExistingSubscription && subscription.plan_id !== plan.id;
+
+    if (isPlanChange) {
+      currentMetadata.pending_plan_id = plan.id;
+      currentMetadata.pending_plan_slug = plan.slug;
+      currentMetadata.plan_change_requested_at = new Date().toISOString();
+    } else {
+      currentMetadata.plan_id = plan.id;
+      currentMetadata.plan_slug = plan.slug;
+      delete currentMetadata.pending_plan_id;
+      delete currentMetadata.pending_plan_slug;
+      delete currentMetadata.plan_change_requested_at;
+    }
 
     let stripeCustomerId = subscription.stripe_customer_id as string | null;
 
@@ -294,6 +306,8 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     sessionParams.set("payment_method_types[0]", "card");
     sessionParams.set("line_items[0][price]", plan.stripe_price_id);
     sessionParams.set("line_items[0][quantity]", "1");
+    sessionParams.set("metadata[plan_id]", plan.id);
+    sessionParams.set("metadata[plan_slug]", plan.slug);
     sessionParams.set("subscription_data[metadata][subscription_id]", subscription.id);
     sessionParams.set("subscription_data[metadata][organization_id]", organizationId);
     sessionParams.set("subscription_data[metadata][plan_slug]", plan.slug);
@@ -313,7 +327,6 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     const serializedAddress = billingAddress ? JSON.stringify(billingAddress) : null;
 
     const updatePayload: Record<string, any> = {
-      plan_id: plan.id,
       billing_name: billingName,
       billing_email: billingEmail,
       billing_cpf_cnpj: billingCpfCnpj || null,
@@ -325,6 +338,10 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       metadata: currentMetadata,
       updated_at: new Date().toISOString(),
     };
+
+    if (!isPlanChange) {
+      updatePayload.plan_id = plan.id;
+    }
 
     if (!subscriptionId) {
       updatePayload.status = "trial";
