@@ -9,20 +9,28 @@ import {
   type MetaMetricsFilters,
 } from "@/lib/metaMetrics";
 
-const DEFAULT_FILTERS: Required<Pick<MetaMetricsFilters, "dateRange" | "period">> = {
-  period: "90",
-  dateRange: {
-    start: "2025-02-27",
-    end: "2025-05-27",
-  },
+const DEFAULT_PERIOD = "90";
+
+const getDateRangeForPeriod = (period: string) => {
+  const days = Number.parseInt(period, 10);
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - Math.max(days - 1, 0));
+
+  return {
+    start: start.toISOString().split("T")[0],
+    end: end.toISOString().split("T")[0],
+  };
 };
 
 const buildFilters = (filters?: MetaMetricsFilters): MetaMetricsFilters => {
-  if (!filters) return DEFAULT_FILTERS;
+  const period = filters?.period ?? DEFAULT_PERIOD;
+  const dateRange = filters?.dateRange ?? getDateRangeForPeriod(period);
+
   return {
-    ...DEFAULT_FILTERS,
     ...filters,
-    dateRange: filters.dateRange ?? DEFAULT_FILTERS.dateRange,
+    period,
+    dateRange,
   };
 };
 

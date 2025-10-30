@@ -21,6 +21,7 @@ interface AdAccount {
   connected_by: string;
   created_at: string;
   updated_at: string;
+  is_active: boolean;
 }
 
 interface AvailableAdAccount {
