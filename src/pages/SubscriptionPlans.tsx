@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -19,9 +20,14 @@ import {
   type OrganizationPlanLimits,
 } from "@/hooks/useSubscription";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
+import { supabase } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 
 export default function SubscriptionPlans() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { data: org } = useActiveOrganization();
   const { data: plans, isLoading: plansLoading } = useSubscriptionPlans();
   const { data: currentSubscription, isLoading: subscriptionLoading } = useCurrentSubscription();
@@ -31,6 +37,7 @@ export default function SubscriptionPlans() {
 
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
+  const [isFinalizingCheckout, setIsFinalizingCheckout] = useState(false);
 
   const isLoading = plansLoading || subscriptionLoading || limitsLoading;
 
@@ -65,6 +72,80 @@ export default function SubscriptionPlans() {
       setUpgradeDialogOpen(true);
     }
   }, [plans, location.search, currentPlan?.id]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const canceled = params.get("checkout_canceled");
+    const sessionId = params.get("session_id");
+
+    const removeParams = (...keys: string[]) => {
+      const nextParams = new URLSearchParams(location.search);
+      keys.forEach((key) => nextParams.delete(key));
+      navigate(
+        {
+          pathname: location.pathname,
+          search: nextParams.toString() ? `?${nextParams.toString()}` : "",
+        },
+        { replace: true },
+      );
+    };
+
+    if (canceled) {
+      toast({
+        title: "Pagamento cancelado",
+        description: "Você pode tentar novamente quando estiver pronto.",
+      });
+      removeParams("checkout_canceled");
+      return;
+    }
+
+    if (!sessionId || isFinalizingCheckout) return;
+
+    setIsFinalizingCheckout(true);
+
+    supabase.functions
+      .invoke("finalize-stripe-checkout", {
+        body: { sessionId },
+      })
+      .then(({ data, error }) => {
+        if (error) throw new Error(error.message || "Falha ao confirmar pagamento.");
+        if (!data?.success) {
+          throw new Error("Não foi possível validar o pagamento com a Stripe.");
+        }
+
+        toast({
+          title: "Plano ativado!",
+          description: "Sua assinatura foi atualizada com sucesso.",
+        });
+
+        queryClient.invalidateQueries({ queryKey: ["current-subscription"] });
+        queryClient.invalidateQueries({ queryKey: ["organization-plan-limits"] });
+        queryClient.invalidateQueries({ queryKey: ["subscription-payments"] });
+        setUpgradeDialogOpen(false);
+        setSelectedPlan(null);
+        removeParams("session_id");
+        navigate("/dashboard", { replace: true });
+      })
+      .catch((err) => {
+        console.error("Erro ao finalizar checkout Stripe:", err);
+        toast({
+          title: "Erro ao confirmar pagamento",
+          description: err instanceof Error ? err.message : "Tente novamente em instantes.",
+          variant: "destructive",
+        });
+        removeParams("session_id");
+      })
+      .finally(() => {
+        setIsFinalizingCheckout(false);
+      });
+  }, [
+    isFinalizingCheckout,
+    location.pathname,
+    location.search,
+    navigate,
+    queryClient,
+    toast,
+  ]);
 
   if (isLoading) {
     return (
@@ -191,6 +272,15 @@ export default function SubscriptionPlans() {
                 ? new Date(currentSubscription.next_billing_date).toLocaleDateString("pt-BR")
                 : "A definir"}
             </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {isFinalizingCheckout && (
+        <Alert className="bg-primary/10 border-primary">
+          <Loader2 className="h-4 w-4 text-primary animate-spin" />
+          <AlertDescription className="text-foreground">
+            Confirmando pagamento com a Stripe...
           </AlertDescription>
         </Alert>
       )}

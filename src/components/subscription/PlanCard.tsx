@@ -11,9 +11,19 @@ interface PlanCardProps {
   onSelect?: (planId: string) => void;
   disabled?: boolean;
   loading?: boolean;
+  ctaHref?: string | null;
+  ctaLabel?: string;
 }
 
-export function PlanCard({ plan, isCurrentPlan, onSelect, disabled, loading }: PlanCardProps) {
+export function PlanCard({
+  plan,
+  isCurrentPlan,
+  onSelect,
+  disabled,
+  loading,
+  ctaHref,
+  ctaLabel,
+}: PlanCardProps) {
   const getIcon = () => {
     if (plan.slug === "pro") return <Crown className="w-6 h-6 text-white" />;
     if (plan.slug === "intermediario") return <Zap className="w-6 h-6 text-white" />;
@@ -23,9 +33,13 @@ export function PlanCard({ plan, isCurrentPlan, onSelect, disabled, loading }: P
   const getButtonText = () => {
     if (isCurrentPlan) return "Plano Atual";
     if (loading) return "Processando...";
+    if (ctaLabel) return ctaLabel;
     // Show "Contratar" when there's no current plan, otherwise "Selecionar"
     return "Contratar Plano";
   };
+
+  const isDisabled = isCurrentPlan || disabled || loading;
+  const buttonText = getButtonText();
 
   return (
     <Card
@@ -110,17 +124,35 @@ export function PlanCard({ plan, isCurrentPlan, onSelect, disabled, loading }: P
         </div>
 
         {/* CTA Button */}
-        <Button
-          onClick={() => onSelect?.(plan.id)}
-          disabled={isCurrentPlan || disabled || loading}
-          className={`w-full ${
-            isCurrentPlan
-              ? "bg-muted text-muted-foreground cursor-not-allowed"
-              : "bg-primary hover:bg-primary/90"
-          }`}
-        >
-          {getButtonText()}
-        </Button>
+        {ctaHref && !isDisabled ? (
+          <Button
+            asChild
+            className={`w-full ${
+              isCurrentPlan
+                ? "bg-muted text-muted-foreground cursor-not-allowed"
+                : "bg-primary hover:bg-primary/90"
+            }`}
+          >
+            <a href={ctaHref} target="_blank" rel="noreferrer">
+              {buttonText}
+            </a>
+          </Button>
+        ) : (
+          <Button
+            onClick={() => {
+              if (isDisabled) return;
+              onSelect?.(plan.id);
+            }}
+            disabled={isDisabled}
+            className={`w-full ${
+              isCurrentPlan
+                ? "bg-muted text-muted-foreground cursor-not-allowed"
+                : "bg-primary hover:bg-primary/90"
+            }`}
+          >
+            {buttonText}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

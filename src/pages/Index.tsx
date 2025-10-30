@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { PlanCard } from "@/components/subscription/PlanCard";
-import { toast } from "sonner";
 import type { SubscriptionPlan, BillingPeriod } from "@/hooks/useSubscription";
 import { useSubscriptionPlans } from "@/hooks/useSubscription";
+import { PAYMENT_LINKS, getPaymentLink, normalizePlanSlug } from "@/config/paymentLinks";
 // Stripe integration removed
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/hooks/useAuth";
+
+const LANDING_PAGE_CHECKOUT_URL = PAYMENT_LINKS.basico.url;
 
 // Landing page sem formulário: removido schema e validação
 
@@ -31,6 +35,7 @@ function useTracker() {
 
 function HeaderLanding() {
   const track = useTracker();
+  const paymentLinkUrl = LANDING_PAGE_CHECKOUT_URL;
   return (
     <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -47,10 +52,18 @@ function HeaderLanding() {
           <Button variant="ghost" onClick={() => track({ event: "lp_header_cta_click", label: "login" })} asChild>
             <a href="/login">Entrar</a>
           </Button>
-          <Button onClick={() => {
+          <Button variant="outline" onClick={() => {
             track({ event: "lp_header_cta_click", label: "ver_planos" });
             document.getElementById("planos")?.scrollIntoView({ behavior: "smooth" });
-          }}>Ver planos</Button>
+          }}>
+            Ver planos
+          </Button>
+          <Button
+            asChild
+            onClick={() => track({ event: "lp_header_cta_click", label: "assinar" })}
+          >
+            <a href={paymentLinkUrl}>Contrar plano</a>
+          </Button>
         </div>
       </div>
     </header>
@@ -59,6 +72,7 @@ function HeaderLanding() {
 
 function Hero() {
   const track = useTracker();
+  const paymentLinkUrl = LANDING_PAGE_CHECKOUT_URL;
   const heroChartData = [
     { name: "Jan", leads: 24, mql: 10 },
     { name: "Fev", leads: 30, mql: 14 },
@@ -86,10 +100,11 @@ function Hero() {
               Dashboard e CRM integrados com Meta Lead Ads, metas da equipe e relatórios prontos em um único fluxo.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Button className="accent-ring" size="lg" onClick={() => {
-                track({ event: "lp_hero_cta_click", label: "comece_gratis" });
-                document.getElementById("planos")?.scrollIntoView({ behavior: "smooth" });
-              }}>Ver planos</Button>
+              <Button className="accent-ring" size="lg" asChild onClick={() => {
+                track({ event: "lp_hero_cta_click", label: "assinar_agora" });
+              }}>
+                <a href={paymentLinkUrl}>Contrar plano</a>
+              </Button>
               <Button className="accent-ring" size="lg" variant="outline" onClick={() => {
                 track({ event: "lp_hero_cta_click", label: "agendar_demo" });
                 document.getElementById("planos")?.scrollIntoView({ behavior: "smooth" });
@@ -375,6 +390,8 @@ function FAQ() {
 function PricingPlansSection() {
   const track = useTracker();
   const [period, setPeriod] = useState<BillingPeriod>("monthly");
+  const navigate = useNavigate();
+  const { user } = useAuth();
   // Buscar planos oficiais diretamente do Supabase para manter sincronização com /planos
   const { data: allPlans, isLoading, error } = useSubscriptionPlans();
 
@@ -388,16 +405,37 @@ function PricingPlansSection() {
   // Se o período selecionado não tiver planos disponíveis, mostramos mensagem amigável
   const plans = period === "monthly" ? monthlyPlans : yearlyPlans;
 
+  const buildPlanParam = (plan: SubscriptionPlan | undefined, planFallbackId: string) => {
+    const planIdentifier = plan?.slug || planFallbackId;
+    return encodeURIComponent(planIdentifier);
+  };
+
   const handleSelect = (planId: string) => {
-    track({ event: "lp_plan_select", planId, period });
     const plan = plans.find((p) => p.id === planId);
-    const planSlugOrId = plan?.slug || planId;
-    // Checkout removido - direcionando para página de planos
-    toast("Checkout em reconstrução", {
-      description: "Estamos atualizando o fluxo de contratação. Em breve estará disponível novamente.",
+    const normalizedSlug = normalizePlanSlug(plan?.slug ?? plan?.id ?? null);
+    const paymentLink = getPaymentLink(normalizedSlug);
+
+    track({
+      event: "lp_plan_select",
+      planId: plan?.id ?? planId,
+      planSlug: normalizedSlug ?? plan?.slug ?? null,
+      period,
     });
-    // Opcionalmente, manter navegação para /planos sem abrir checkout
-    // window.location.href = "/planos";
+
+    if (paymentLink) {
+      window.location.href = paymentLink;
+      return;
+    }
+
+    const encodedPlan = buildPlanParam(plan, planId);
+
+    if (user) {
+      navigate(`/planos?plan=${encodedPlan}`);
+      return;
+    }
+
+    const next = `/planos?plan=${encodedPlan}`;
+    window.location.href = `/login?mode=register&next=${encodeURIComponent(next)}`;
   };
 
   return (
@@ -447,7 +485,13 @@ function PricingPlansSection() {
       ) : (
         <div className="grid gap-6 md:grid-cols-3">
           {plans.map((plan) => (
-            <PlanCard key={plan.id} plan={plan} onSelect={handleSelect} />
+            <PlanCard
+              key={plan.id}
+              plan={plan}
+              onSelect={handleSelect}
+              ctaHref={getPaymentLink(normalizePlanSlug(plan.slug)) ?? undefined}
+              ctaLabel="Contrar plano"
+            />
           ))}
         </div>
       )}
@@ -496,8 +540,16 @@ function PricingPlansSection() {
       <div className="mt-8 text-center">
         <Button size="lg" className="accent-ring" onClick={() => {
           track({ event: "lp_pricing_bottom_cta_click", period });
-          const next = `/planos${plans.length ? `?plan=${encodeURIComponent(plans[0].slug || plans[0].id)}` : ""}`;
-          window.location.href = `/login?next=${encodeURIComponent(next)}&mode=register`;
+          const firstPlan = plans[0];
+          const encodedPlan = plans.length ? buildPlanParam(firstPlan, firstPlan.id) : "";
+
+          if (user) {
+            navigate(`/planos${encodedPlan ? `?plan=${encodedPlan}` : ""}`);
+            return;
+          }
+
+          const next = `/planos${encodedPlan ? `?plan=${encodedPlan}` : ""}`;
+          window.location.href = `/login?mode=register&next=${encodeURIComponent(next)}`;
         }}>
           Contratar agora
         </Button>
