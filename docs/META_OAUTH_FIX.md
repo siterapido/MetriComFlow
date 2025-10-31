@@ -23,11 +23,11 @@ Este erro ocorre quando as URLs de redirecionamento não correspondem entre:
 
 ### 2. Configuração no Meta Developer Console
 
-**App ID**: `336112808735379` (CRMads)
+**App ID**: `3361128087359379` (InsightFy)
 
 **Passos para configurar:**
 
-1. Acesse: https://developers.facebook.com/apps/336112808735379/settings/basic/
+1. Acesse: https://developers.facebook.com/apps/3361128087359379/settings/basic/
 
 2. Role até a seção **"URIs de redirecionamento OAuth válidos"**
 
@@ -48,7 +48,7 @@ Já foram atualizadas automaticamente pelo script:
 ```bash
 VITE_APP_URL=https://www.insightfy.com.br
 VITE_META_REDIRECT_URI=https://www.insightfy.com.br/meta-ads-config
-VITE_META_APP_ID=336112808735379
+VITE_META_APP_ID=3361128087359379
 VITE_META_APP_SECRET=7e6216e859be7639fa4de061536ce944
 ```
 
@@ -148,9 +148,9 @@ npm run verify:meta
 **Causa**: APP_ID incorreto ou não configurado
 
 **Solução**:
-1. Verifique que `VITE_META_APP_ID=336112808735379` (CRMads)
+1. Verifique que `VITE_META_APP_ID=3361128087359379` (InsightFy)
 2. Verifique Supabase secrets: `npx supabase secrets list`
-3. Se necessário, configure: `npx supabase secrets set META_APP_ID="336112808735379"`
+3. Se necessário, configure: `npx supabase secrets set META_APP_ID="3361128087359379"`
 
 ### Edge Function retorna erro
 
@@ -163,10 +163,10 @@ npx supabase functions logs meta-auth --project-id fjoaliipjfcnokermkhy
 ```
 ==================== META AUTH DEBUG ====================
 Action: get_auth_url
-META_APP_ID: 336112808735379
+META_APP_ID: 3361128087359379
 META_APP_ID is numeric: true
-Expected APP_ID: 336112808735379 (CRMads)
-✅ Using correct App ID: CRMads
+Expected APP_ID: 3361128087359379 (InsightFy)
+✅ Using correct App ID: InsightFy
 ========================================================
 ```
 
@@ -185,7 +185,7 @@ Use este checklist para validar a configuração:
 
 ## 🔗 Links Importantes
 
-- **Meta Developer Console**: https://developers.facebook.com/apps/336112808735379
+- **Meta Developer Console**: https://developers.facebook.com/apps/3361128087359379
 - **Vercel Dashboard**: https://vercel.com/mafcos-projects-ca629a4f/metri-com-flow
 - **Supabase Dashboard**: https://supabase.com/dashboard/project/fjoaliipjfcnokermkhy
 - **Meta Graph API Explorer**: https://developers.facebook.com/tools/explorer/

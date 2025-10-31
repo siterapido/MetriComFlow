@@ -14,6 +14,7 @@ export function UsageMeter({ label, current, max, icon, showWarning = true }: Us
   const percentage = max > 0 ? Math.round((current / max) * 100) : 0;
   const isNearLimit = percentage >= 80;
   const isAtLimit = percentage >= 100;
+  const remaining = Math.max(0, max - current);
 
   const getStatusColor = () => {
     if (isAtLimit) return "text-destructive";
@@ -57,9 +58,14 @@ export function UsageMeter({ label, current, max, icon, showWarning = true }: Us
           </div>
 
           {/* Usage Count */}
-          <div className="flex items-baseline gap-1">
-            <span className={`text-2xl font-bold ${getStatusColor()}`}>{current}</span>
-            <span className="text-sm text-muted-foreground">/ {max}</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-baseline gap-1">
+              <span className={`text-2xl font-bold ${getStatusColor()}`}>{current}</span>
+              <span className="text-sm text-muted-foreground">/ {max}</span>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Disponíveis: <span className="font-medium text-foreground">{remaining}</span>
+            </div>
           </div>
 
           {/* Progress Bar */}

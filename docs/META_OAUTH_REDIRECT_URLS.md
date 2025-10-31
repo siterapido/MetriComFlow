@@ -18,9 +18,9 @@ As URLs de redirecionamento OAuth devem ser configuradas no Meta for Developers.
 
 ### 1. Acesse o Meta for Developers
 
-**App:** CRMads
-**App ID:** 336112808735379
-**URL:** https://developers.facebook.com/apps/336112808735379/
+**App:** InsightFy
+**App ID:** 3361128087359379
+**URL:** https://developers.facebook.com/apps/3361128087359379/
 
 ### 2. Navegue até Configurações de Login
 
@@ -43,8 +43,8 @@ As URLs de redirecionamento OAuth devem ser configuradas no Meta for Developers.
 
 ```
 http://localhost:8082/meta-ads-config
-https://metricom-flow.vercel.app/meta-ads-config
-https://metri-com-flow.vercel.app/meta-ads-config
+https://www.insightfy.com.br/meta-ads-config
+https://metri-com-flow-mafcos-projects-ca629a4f.vercel.app/meta-ads-config
 ```
 
 **Formato:**
@@ -69,8 +69,9 @@ Na mesma página de **Login do Facebook**, verifique:
 Na seção **"Configurações básicas"** (Basic Settings):
 ```
 localhost
-metricom-flow.vercel.app
-metri-com-flow.vercel.app
+www.insightfy.com.br
+insightfy.com.br
+metri-com-flow-mafcos-projects-ca629a4f.vercel.app
 ```
 
 ### 5. Salvar Alterações
@@ -100,7 +101,7 @@ Após configurar, teste com este checklist:
 
 ### Teste em Produção (Vercel)
 
-1. Acesse: https://metricom-flow.vercel.app/meta-ads-config
+1. Acesse: https://www.insightfy.com.br/meta-ads-config
 2. Clique em "Conectar Meta Business"
 3. **Esperado:** Redirecionar para facebook.com com tela de permissões
 4. **Erro:** "URL bloqueada" → URLs não configuradas corretamente
@@ -111,18 +112,18 @@ Após configurar, teste com este checklist:
 
 | Configuração | URL |
 |-------------|-----|
-| Dashboard Principal | https://developers.facebook.com/apps/336112808735379/ |
-| Configurações Básicas | https://developers.facebook.com/apps/336112808735379/settings/basic/ |
-| Login do Facebook | https://developers.facebook.com/apps/336112808735379/fb-login/settings/ |
-| Casos de Uso | https://developers.facebook.com/apps/336112808735379/use_cases/ |
+| Dashboard Principal | https://developers.facebook.com/apps/3361128087359379/ |
+| Configurações Básicas | https://developers.facebook.com/apps/3361128087359379/settings/basic/ |
+| Login do Facebook | https://developers.facebook.com/apps/3361128087359379/fb-login/settings/ |
+| Casos de Uso | https://developers.facebook.com/apps/3361128087359379/use_cases/ |
 
 ### Aplicação
 
 | Ambiente | URL de Redirecionamento OAuth |
 |----------|-------------------------------|
 | Desenvolvimento (local) | http://localhost:8082/meta-ads-config |
-| Produção (Vercel - principal) | https://metricom-flow.vercel.app/meta-ads-config |
-| Produção (Vercel - alternativa) | https://metri-com-flow.vercel.app/meta-ads-config |
+| Produção (domínio principal) | https://www.insightfy.com.br/meta-ads-config |
+| Produção (domínio Vercel) | https://metri-com-flow-mafcos-projects-ca629a4f.vercel.app/meta-ads-config |
 
 ## Modo do App
 
@@ -208,7 +209,7 @@ const authUrl = `${baseUrl}?${params.toString()}`;
    ↓
 2. Edge Function gera URL:
    https://www.facebook.com/v24.0/dialog/oauth?
-     client_id=336112808735379&
+     client_id=3361128087359379&
      redirect_uri=http://localhost:8082/meta-ads-config&
      scope=ads_management,ads_read,business_management&
      response_type=code&

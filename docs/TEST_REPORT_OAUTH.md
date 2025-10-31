@@ -52,7 +52,7 @@ Todas as variáveis necessárias estão configuradas no ambiente de **Production
 ```bash
 VITE_APP_URL=https://www.insightfy.com.br
 VITE_META_REDIRECT_URI=https://www.insightfy.com.br/meta-ads-config
-VITE_META_APP_ID=336112808735379
+VITE_META_APP_ID=3361128087359379
 VITE_META_APP_SECRET=<encrypted>
 ```
 
@@ -105,7 +105,7 @@ VITE_META_APP_SECRET=<encrypted>
 │     └─ META_APP_SECRET secret ✅                                 │
 ├─────────────────────────────────────────────────────────────────┤
 │  4. Meta Developer Console (Configuração Manual)                │
-│     ├─ App ID: 336112808735379                                  │
+│     ├─ App ID: 3361128087359379                                  │
 │     ├─ Redirect URIs: [PENDENTE VERIFICAÇÃO MANUAL]            │
 │     │   ├─ https://www.insightfy.com.br/meta-ads-config        │
 │     │   └─ http://localhost:8082/meta-ads-config               │
@@ -123,7 +123,7 @@ VITE_META_APP_SECRET=<encrypted>
 
 Para completar a configuração do OAuth, você deve adicionar as URLs no Meta Developer Console:
 
-1. **Acesse**: https://developers.facebook.com/apps/336112808735379/settings/basic/
+1. **Acesse**: https://developers.facebook.com/apps/3361128087359379/settings/basic/
 
 2. **Login** com a conta do Meta Developer
 
@@ -192,8 +192,8 @@ npx supabase functions logs meta-auth --project-id fjoaliipjfcnokermkhy
 # Logs esperados:
 # ==================== META AUTH DEBUG ====================
 # Action: get_auth_url ou exchange_code
-# META_APP_ID: 336112808735379
-# ✅ Using correct App ID: CRMads
+# META_APP_ID: 3361128087359379
+# ✅ Using correct App ID: InsightFy
 # Redirect URI: https://www.insightfy.com.br/meta-ads-config
 # ========================================================
 ```

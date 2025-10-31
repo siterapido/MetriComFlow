@@ -32,7 +32,7 @@
 ```
 http://localhost:8082/meta-ads-config
 https://www.insightfy.com.br/meta-ads-config
-https://metricom-flow.vercel.app/meta-ads-config
+https://metri-com-flow-mafcos-projects-ca629a4f.vercel.app/meta-ads-config
 ```
 
 ### 2. Configurar App Domains
@@ -40,7 +40,7 @@ https://metricom-flow.vercel.app/meta-ads-config
 ```
 localhost
 insightfy.com.br
-metricom-flow.vercel.app
+metri-com-flow-mafcos-projects-ca629a4f.vercel.app
 ```
 
 ### 3. Ativar Facebook Login
@@ -56,7 +56,7 @@ metricom-flow.vercel.app
 ```
 http://localhost:8082/meta-ads-config
 https://www.insightfy.com.br/meta-ads-config
-https://metricom-flow.vercel.app/meta-ads-config
+https://metri-com-flow-mafcos-projects-ca629a4f.vercel.app/meta-ads-config
 ```
 
 ### 4. Configurar Marketing API

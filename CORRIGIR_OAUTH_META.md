@@ -10,13 +10,13 @@ O erro **"URL bloqueada"** acontece porque as URLs de redirecionamento OAuth **n
 
 ### 1️⃣ Configurar Meta Developer Console (⚠️ AÇÃO MANUAL - MAIS IMPORTANTE)
 
-**Acesse:** https://developers.facebook.com/apps/336112808735379/settings/basic/
+**Acesse:** https://developers.facebook.com/apps/3361128087359379/settings/basic/
 
 **Localize a seção:** "URIs de redirecionamento OAuth válidos" (OAuth Redirect URIs)
 
 **Adicione EXATAMENTE estas URLs:**
 ```
-https://metri-com-flow.vercel.app/meta-ads-config
+https://www.insightfy.com.br/meta-ads-config
 https://metri-com-flow-mafcos-projects-ca629a4f.vercel.app/meta-ads-config
 http://localhost:8082/meta-ads-config
 ```
@@ -41,11 +41,11 @@ Ou manualmente:
 ```bash
 # Atualizar VITE_APP_URL
 vercel env rm VITE_APP_URL production --yes
-echo "https://metri-com-flow.vercel.app" | vercel env add VITE_APP_URL production
+echo "https://www.insightfy.com.br" | vercel env add VITE_APP_URL production
 
 # Atualizar VITE_META_REDIRECT_URI
 vercel env rm VITE_META_REDIRECT_URI production --yes
-echo "https://metri-com-flow.vercel.app/meta-ads-config" | vercel env add VITE_META_REDIRECT_URI production
+echo "https://www.insightfy.com.br/meta-ads-config" | vercel env add VITE_META_REDIRECT_URI production
 ```
 
 ---
@@ -62,7 +62,7 @@ Aguarde o deploy completar (~1-2 minutos).
 
 ### 4️⃣ Testar
 
-1. Acesse: https://metri-com-flow.vercel.app/meta-ads-config
+1. Acesse: https://www.insightfy.com.br/meta-ads-config
 2. Clique em **"Conectar Meta Business"**
 3. Autorize no Meta
 4. ✅ Deve redirecionar de volta sem erro!
@@ -72,13 +72,13 @@ Aguarde o deploy completar (~1-2 minutos).
 ## 🔍 URLs Importantes
 
 ### Produção (Vercel)
-- **URL Principal:** https://metri-com-flow.vercel.app
-- **Meta Ads Config:** https://metri-com-flow.vercel.app/meta-ads-config
+- **URL Principal:** https://www.insightfy.com.br
+- **Meta Ads Config:** https://www.insightfy.com.br/meta-ads-config
 
 ### Meta Developer
-- **Console:** https://developers.facebook.com/apps/336112808735379/
-- **Configurações:** https://developers.facebook.com/apps/336112808735379/settings/basic/
-- **App ID:** `336112808735379` (CRMads)
+- **Console:** https://developers.facebook.com/apps/3361128087359379/
+- **Configurações:** https://developers.facebook.com/apps/3361128087359379/settings/basic/
+- **App ID:** `3361128087359379` (InsightFy)
 
 ### Supabase
 - **Project:** https://fjoaliipjfcnokermkhy.supabase.co
@@ -108,7 +108,7 @@ Para mais detalhes, consulte: [docs/META_OAUTH_SETUP.md](docs/META_OAUTH_SETUP.m
 **Solução:**
 ```bash
 # Atualizar App ID no Supabase
-npx supabase secrets set META_APP_ID="336112808735379"
+npx supabase secrets set META_APP_ID="3361128087359379"
 
 # Redeploy Edge Function
 npx supabase functions deploy meta-auth
@@ -121,7 +121,7 @@ npx supabase functions deploy meta-auth
 npx supabase functions logs meta-auth --project-ref fjoaliipjfcnokermkhy
 
 # Vercel Production
-vercel logs https://metri-com-flow.vercel.app
+vercel logs https://www.insightfy.com.br
 ```
 
 ---
@@ -132,7 +132,7 @@ vercel logs https://metri-com-flow.vercel.app
 - [ ] Alterações salvas no Meta Developer Console
 - [ ] Variáveis VITE_APP_URL e VITE_META_REDIRECT_URI atualizadas no Vercel
 - [ ] Redeploy feito no Vercel
-- [ ] Testado OAuth em produção (https://metri-com-flow.vercel.app/meta-ads-config)
+- [ ] Testado OAuth em produção (https://www.insightfy.com.br/meta-ads-config)
 - [ ] OAuth funcionando sem erro "URL bloqueada"
 
 ---

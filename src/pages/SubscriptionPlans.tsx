@@ -272,7 +272,16 @@ export default function SubscriptionPlans() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Plano Atual</p>
-                  <p className="text-xl font-bold text-foreground">{limitsSafe.plan_name || "Nenhum"}</p>
+                  <p className="text-xl font-bold text-foreground">{currentPlan?.name || limitsSafe.plan_name || "Nenhum"}</p>
+                  {(() => {
+                    const maxAds = Math.max(limitsSafe.max_ad_accounts ?? 0, currentPlan?.max_ad_accounts ?? 0);
+                    const maxUsers = Math.max(limitsSafe.max_users ?? 0, currentPlan?.max_users ?? 0);
+                    return (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Limites: {maxAds} contas de anúncio • {maxUsers} usuários
+                      </p>
+                    );
+                  })()}
                 </div>
               </div>
             </CardContent>
@@ -281,7 +290,7 @@ export default function SubscriptionPlans() {
           <UsageMeter
             label="Contas de Anúncio"
             current={limitsSafe.current_ad_accounts}
-            max={limitsSafe.max_ad_accounts}
+            max={Math.max(limitsSafe.max_ad_accounts ?? 0, currentPlan?.max_ad_accounts ?? 0)}
             icon={<BarChart3 className="h-5 w-5 text-primary" />}
             showWarning={!!currentPlan}
           />
@@ -289,7 +298,7 @@ export default function SubscriptionPlans() {
           <UsageMeter
             label="Usuários Ativos"
             current={limitsSafe.current_users}
-            max={limitsSafe.max_users}
+            max={Math.max(limitsSafe.max_users ?? 0, currentPlan?.max_users ?? 0)}
             icon={<Users className="h-5 w-5 text-primary" />}
             showWarning={!!currentPlan}
           />

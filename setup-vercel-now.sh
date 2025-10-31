@@ -1,14 +1,14 @@
 #!/bin/bash
 
-echo "🚀 Configurando Vercel - URL Correta: metri-com-flow.vercel.app"
+echo "🚀 Configurando Vercel - URL Correta: www.insightfy.com.br"
 echo "================================================================"
 echo ""
 
 # Variáveis corretas
-APP_ID="336112808735379"
+APP_ID="3361128087359379"
 APP_SECRET="7e6216e859be7639fa4de061536ce944"
-REDIRECT_URI="https://metri-com-flow.vercel.app/meta-ads-config"
-APP_URL="https://metri-com-flow.vercel.app"
+REDIRECT_URI="https://www.insightfy.com.br/meta-ads-config"
+APP_URL="https://www.insightfy.com.br"
 
 echo "📝 Adicione estas variáveis MANUALMENTE no Dashboard da Vercel:"
 echo ""
@@ -52,9 +52,9 @@ echo ""
 echo "⚠️  LEMBRETE: Você também precisa atualizar o Meta for Developers!"
 echo ""
 echo "   URI CORRETA para adicionar no Meta:"
-echo "   ✅ https://metri-com-flow.vercel.app/meta-ads-config"
+echo "   ✅ https://www.insightfy.com.br/meta-ads-config"
 echo ""
-echo "   Link: https://developers.facebook.com/apps/336112808735379"
+echo "   Link: https://developers.facebook.com/apps/3361128087359379"
 echo "   Local: Produtos > Login do Facebook para Empresas > Configurações"
 echo ""
 echo "================================================================"

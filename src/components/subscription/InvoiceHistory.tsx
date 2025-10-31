@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Info,
   AlertTriangle,
+  RefreshCcw,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
 import { format } from "date-fns";
@@ -68,7 +69,7 @@ interface InvoiceHistoryProps {
 }
 
 export function InvoiceHistory({ subscriptionId }: InvoiceHistoryProps) {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["subscription-payments", subscriptionId],
     queryFn: async () => {
       if (!subscriptionId) return [];
@@ -159,12 +160,23 @@ export function InvoiceHistory({ subscriptionId }: InvoiceHistoryProps) {
         payments.push(...(legacyPayments ?? []).map(mapLegacyPayment));
       }
 
+      // Ensure deterministic order: newest by due date/created
+      const sorted = [...payments].sort((a, b) => {
+        const left = new Date(a.dueDate ?? a.createdAt ?? 0).getTime();
+        const right = new Date(b.dueDate ?? b.createdAt ?? 0).getTime();
+        return right - left;
+      });
+
       return {
-        payments,
+        payments: sorted,
         warning,
       };
     },
     enabled: !!subscriptionId,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: true,
+    refetchInterval: 60 * 1000,
+    refetchIntervalInBackground: true,
   });
 
   const payments = data?.payments ?? [];
@@ -311,13 +323,23 @@ export function InvoiceHistory({ subscriptionId }: InvoiceHistoryProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="w-5 h-5" />
-          Histórico de Pagamentos
-        </CardTitle>
-        <CardDescription>
-          {payments.length} {payments.length === 1 ? "pagamento" : "pagamentos"}
-        </CardDescription>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Histórico de Pagamentos
+            </CardTitle>
+            <CardDescription>
+              {payments.length} {payments.length === 1 ? "pagamento" : "pagamentos"}
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
+              <RefreshCcw className={`w-4 h-4 mr-1 ${isFetching ? "animate-spin" : ""}`} />
+              {isFetching ? "Atualizando" : "Atualizar"}
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       {warning && (
         <CardContent className="pt-0 pb-2">
@@ -446,6 +468,9 @@ export function InvoiceHistory({ subscriptionId }: InvoiceHistoryProps) {
             </Card>
           );
         })}
+        {isFetching && (
+          <div className="text-xs text-muted-foreground text-center">Atualizando…</div>
+        )}
       </CardContent>
     </Card>
   );

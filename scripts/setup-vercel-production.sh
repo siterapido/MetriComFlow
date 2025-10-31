@@ -37,16 +37,16 @@ echo "➕ Adicionando novas variáveis..."
 
 # Adicionar novas variáveis
 echo "1️⃣ VITE_META_APP_ID..."
-echo "336112808735379" | vercel env add VITE_META_APP_ID production --yes
+echo "3361128087359379" | vercel env add VITE_META_APP_ID production --yes
 
 echo "2️⃣ VITE_META_APP_SECRET..."
 echo "7e6216e859be7639fa4de061536ce944" | vercel env add VITE_META_APP_SECRET production --yes
 
 echo "3️⃣ VITE_META_REDIRECT_URI..."
-echo "https://metri-com-flow.vercel.app/meta-ads-config" | vercel env add VITE_META_REDIRECT_URI production --yes
+echo "https://www.insightfy.com.br/meta-ads-config" | vercel env add VITE_META_REDIRECT_URI production --yes
 
 echo "4️⃣ VITE_APP_URL..."
-echo "https://metri-com-flow.vercel.app" | vercel env add VITE_APP_URL production --yes
+echo "https://www.insightfy.com.br" | vercel env add VITE_APP_URL production --yes
 
 echo ""
 echo "========================================"
@@ -55,16 +55,16 @@ echo ""
 echo "📋 Próximos passos:"
 echo ""
 echo "   1. Configurar Meta for Developers:"
-echo "      🔗 https://developers.facebook.com/apps/336112808735379"
+echo "      🔗 https://developers.facebook.com/apps/3361128087359379"
 echo ""
 echo "      Adicione esta URI de redirecionamento:"
-echo "      ✅ https://metri-com-flow.vercel.app/meta-ads-config"
+echo "      ✅ https://www.insightfy.com.br/meta-ads-config"
 echo ""
 echo "   2. Fazer deploy:"
 echo "      $ vercel --prod"
 echo ""
 echo "   3. Testar:"
-echo "      🔗 https://metri-com-flow.vercel.app/meta-ads-config"
+echo "      🔗 https://www.insightfy.com.br/meta-ads-config"
 echo ""
 echo "========================================"
 echo ""
@@ -78,7 +78,7 @@ then
     vercel --prod
     echo ""
     echo "✅ Deploy concluído!"
-    echo "🔗 Acesse: https://metri-com-flow.vercel.app/meta-ads-config"
+    echo "🔗 Acesse: https://www.insightfy.com.br/meta-ads-config"
 else
     echo ""
     echo "⏭️  Deploy cancelado."

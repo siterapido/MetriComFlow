@@ -23,11 +23,11 @@ if ! command -v vercel &> /dev/null; then
 fi
 
 # URLs de produção
-PRODUCTION_URL="https://metri-com-flow.vercel.app"
+PRODUCTION_URL="https://www.insightfy.com.br"
 PRODUCTION_REDIRECT_URI="${PRODUCTION_URL}/meta-ads-config"
 
 # Meta App ID (fixo)
-META_APP_ID="336112808735379"
+META_APP_ID="3361128087359379"
 
 echo -e "${YELLOW}ℹ️  URLs que serão configuradas:${NC}"
 echo "   VITE_APP_URL: ${PRODUCTION_URL}"

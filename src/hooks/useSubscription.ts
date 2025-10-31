@@ -259,7 +259,14 @@ export const useOrganizationPlanLimits = () => {
   const { data: currentSub } = useCurrentSubscription();
 
   return useQuery<OrganizationPlanLimits | null>({
-    queryKey: ["organization-plan-limits", org?.id],
+    // Include subscription/plan in the key so limits refetch when subscription resolves/changes
+    queryKey: [
+      "organization-plan-limits",
+      org?.id ?? null,
+      currentSub?.id ?? null,
+      currentSub?.plan?.id ?? null,
+      currentSub?.status ?? null,
+    ],
     queryFn: async ({ signal }): Promise<OrganizationPlanLimits | null> => {
       if (!org?.id) return null;
 
@@ -464,6 +471,7 @@ export const useUpgradePlan = () => {
       queryClient.invalidateQueries({ queryKey: ["current-subscription"] });
       queryClient.invalidateQueries({ queryKey: ["organization-plan-limits"] });
       queryClient.invalidateQueries({ queryKey: ["user-permissions"] });
+      queryClient.invalidateQueries({ queryKey: ["subscription-payments"] });
 
       const isFirstSubscription = !currentSubscription;
       toast({
@@ -511,6 +519,7 @@ export const useCancelSubscription = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["current-subscription"] });
+      queryClient.invalidateQueries({ queryKey: ["subscription-payments"] });
 
       toast({
         title: "Assinatura cancelada",
@@ -561,6 +570,7 @@ export const useReactivateSubscription = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["current-subscription"] });
+      queryClient.invalidateQueries({ queryKey: ["subscription-payments"] });
 
       toast({
         title: "Assinatura reativada!",

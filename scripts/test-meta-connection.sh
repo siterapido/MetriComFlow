@@ -14,7 +14,7 @@ if [ -f .env ]; then
     source .env
 fi
 
-META_APP_ID="${VITE_META_APP_ID:-336112808735379}"
+META_APP_ID="${VITE_META_APP_ID:-3361128087359379}"
 REDIRECT_URI="${VITE_META_REDIRECT_URI:-http://localhost:8082/meta-ads-config}"
 
 echo "📋 Configuração atual:"

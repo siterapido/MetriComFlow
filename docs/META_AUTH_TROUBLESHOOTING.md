@@ -116,12 +116,12 @@ npx supabase secrets list
 ```
 
 Should show:
-- `META_APP_ID`: 336112808735379
+- `META_APP_ID`: 3361128087359379
 - `META_APP_SECRET`: (hidden)
 
 If missing, set them:
 ```bash
-npx supabase secrets set META_APP_ID="336112808735379"
+npx supabase secrets set META_APP_ID="3361128087359379"
 npx supabase secrets set META_APP_SECRET="your-secret-here"
 ```
 
@@ -143,8 +143,8 @@ npx supabase secrets set META_APP_SECRET="your-secret-here"
    ✅ User authenticated successfully: user@example.com
    ==================== META AUTH DEBUG ====================
    Action: get_auth_url
-   META_APP_ID: 336112808735379
-   ✅ Using correct App ID: CRMads
+   META_APP_ID: 3361128087359379
+   ✅ Using correct App ID: InsightFy
    ========================================================
    ```
 
@@ -158,13 +158,13 @@ npx supabase secrets set META_APP_SECRET="your-secret-here"
 ```env
 VITE_SUPABASE_URL="https://fjoaliipjfcnokermkhy.supabase.co"
 VITE_SUPABASE_ANON_KEY="..."
-VITE_META_APP_ID="336112808735379"
+VITE_META_APP_ID="3361128087359379"
 VITE_META_REDIRECT_URI="http://localhost:8082/meta-ads-config"
 ```
 
 ### Server (Supabase Secrets)
 ```
-META_APP_ID=336112808735379
+META_APP_ID=3361128087359379
 META_APP_SECRET=(secret)
 PROJECT_URL=https://fjoaliipjfcnokermkhy.supabase.co
 SERVICE_ROLE_KEY=(secret)
@@ -237,7 +237,7 @@ If you're still experiencing issues after following this guide:
    - Try with a different user account
 
 3. Verify Meta App configuration:
-   - Check App ID is correct (336112808735379)
+   - Check App ID is correct (3361128087359379)
    - Verify redirect URI matches in Meta for Developers
    - Ensure app is in Development mode (for testing)
 

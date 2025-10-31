@@ -4,10 +4,10 @@ Este guia detalha como configurar corretamente o OAuth do Meta (Facebook) para o
 
 ## 📋 Informações do App Meta
 
-- **Nome do App:** CRMads
-- **App ID:** `336112808735379`
+- **Nome do App:** InsightFy
+- **App ID:** `3361128087359379`
 - **Ambiente:** Produção
-- **Console:** https://developers.facebook.com/apps/336112808735379/
+- **Console:** https://developers.facebook.com/apps/3361128087359379/
 
 ---
 
@@ -15,7 +15,7 @@ Este guia detalha como configurar corretamente o OAuth do Meta (Facebook) para o
 
 ### Passo 1: Acessar Configurações do App
 
-1. Acesse: https://developers.facebook.com/apps/336112808735379/settings/basic/
+1. Acesse: https://developers.facebook.com/apps/3361128087359379/settings/basic/
 2. Faça login com a conta administradora do app
 
 ### Passo 2: Configurar URLs de Redirecionamento OAuth
@@ -24,7 +24,7 @@ Na seção **"URIs de redirecionamento OAuth válidos"** (OAuth Redirect URIs), 
 
 #### URLs de Produção (Vercel):
 ```
-https://metri-com-flow.vercel.app/meta-ads-config
+https://www.insightfy.com.br/meta-ads-config
 https://metri-com-flow-mafcos-projects-ca629a4f.vercel.app/meta-ads-config
 https://metri-com-flow-git-main-mafcos-projects-ca629a4f.vercel.app/meta-ads-config
 ```
@@ -44,7 +44,9 @@ http://localhost:8082/meta-ads-config
 Na seção **"Domínios do aplicativo"** (App Domains), adicione:
 
 ```
-metri-com-flow.vercel.app
+www.insightfy.com.br
+insightfy.com.br
+metri-com-flow-mafcos-projects-ca629a4f.vercel.app
 localhost
 ```
 
@@ -88,9 +90,9 @@ vercel env rm VITE_META_REDIRECT_URI production --yes
 vercel env rm VITE_META_APP_ID production --yes
 
 # Adicionar novas variáveis
-echo "https://metri-com-flow.vercel.app" | vercel env add VITE_APP_URL production
-echo "https://metri-com-flow.vercel.app/meta-ads-config" | vercel env add VITE_META_REDIRECT_URI production
-echo "336112808735379" | vercel env add VITE_META_APP_ID production
+echo "https://www.insightfy.com.br" | vercel env add VITE_APP_URL production
+echo "https://www.insightfy.com.br/meta-ads-config" | vercel env add VITE_META_REDIRECT_URI production
+echo "3361128087359379" | vercel env add VITE_META_APP_ID production
 ```
 
 ### Verificar Variáveis
@@ -128,7 +130,7 @@ Devem existir:
 Se algum estiver faltando, adicione:
 
 ```bash
-npx supabase secrets set META_APP_ID="336112808735379"
+npx supabase secrets set META_APP_ID="3361128087359379"
 npx supabase secrets set META_APP_SECRET="seu_secret_aqui"
 ```
 
@@ -161,7 +163,7 @@ vercel --prod
 # 2. Aguardar build completar
 
 # 3. Acessar
-# https://metri-com-flow.vercel.app/meta-ads-config
+# https://www.insightfy.com.br/meta-ads-config
 
 # 4. Clicar em "Conectar Meta Business"
 
@@ -191,10 +193,10 @@ vercel --prod
 
 **Solução:**
 1. Verifique o App ID no Meta Developer Console
-2. Confirme que é `336112808735379` (CRMads)
+2. Confirme que é `3361128087359379` (InsightFy)
 3. Atualize os secrets do Supabase:
    ```bash
-   npx supabase secrets set META_APP_ID="336112808735379"
+   npx supabase secrets set META_APP_ID="3361128087359379"
    ```
 4. Redeploy Edge Function:
    ```bash
@@ -239,7 +241,7 @@ vercel --prod
 npx supabase functions logs meta-auth --project-ref fjoaliipjfcnokermkhy
 
 # Logs Vercel (produção)
-vercel logs https://metri-com-flow.vercel.app
+vercel logs https://www.insightfy.com.br
 
 # Logs locais (dev console)
 # Abra DevTools → Console no navegador

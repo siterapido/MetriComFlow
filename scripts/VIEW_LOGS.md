@@ -34,7 +34,7 @@ You should now see detailed output including:
 ✅ User authenticated successfully: user@example.com
 ==================== META AUTH DEBUG ====================
 Action: get_auth_url
-META_APP_ID: 336112808735379
+META_APP_ID: 3361128087359379
 ... (more debug info)
 ```
 

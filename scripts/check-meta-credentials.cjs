@@ -18,17 +18,17 @@ console.log(`   Redirect URI: ${process.env.VITE_META_REDIRECT_URI || 'NÃO DEFI
 console.log(`   App URL: ${process.env.VITE_APP_URL || 'NÃO DEFINIDO'}`);
 
 console.log('\n📄 DOCUMENTAÇÃO (CONFIGURACAO_PRODUCAO_META_BUSINESS.md):');
-console.log('   App ID: 336112808735379');
+console.log('   App ID: 3361128087359379');
 console.log('   App Secret: ✅ Definido (oculto)');
-console.log('   Redirect URI: https://metri-com-flow.vercel.app/meta-ads-config');
-console.log('   App URL: https://metri-com-flow.vercel.app/');
+console.log('   Redirect URI: https://www.insightfy.com.br/meta-ads-config');
+console.log('   App URL: https://www.insightfy.com.br/');
 
 console.log('\n🔍 VERIFICAÇÃO DE DOCS:');
 console.log('   docs/META_VERIFICATION_GUIDE.md menciona: 336125808735379');
 
 console.log('\n⚠️  INCONSISTÊNCIAS DETECTADAS:');
 const envAppId = process.env.VITE_META_APP_ID;
-const docAppId = '336112808735379';
+const docAppId = '3361128087359379';
 const guideAppId = '336125808735379';
 
 if (envAppId === docAppId) {

@@ -43,7 +43,7 @@ Todas as referências atualizadas para o novo domínio.
 
 ### ⚠️ Ação Manual Requerida
 
-**URL**: https://developers.facebook.com/apps/336112808735379/settings/basic/
+**URL**: https://developers.facebook.com/apps/3361128087359379/settings/basic/
 
 **Passos:**
 
@@ -127,7 +127,7 @@ npm run dev
 npx supabase functions logs meta-auth --project-id fjoaliipjfcnokermkhy
 
 # Deve mostrar:
-# ✅ Using correct App ID: CRMads
+# ✅ Using correct App ID: InsightFy
 # redirect_uri = https://www.insightfy.com.br/meta-ads-config
 ```
 
@@ -172,7 +172,7 @@ npx supabase functions logs meta-auth --project-id fjoaliipjfcnokermkhy
 ## 🔗 Links Importantes
 
 - **Aplicação (Produção)**: https://www.insightfy.com.br
-- **Meta Developer Console**: https://developers.facebook.com/apps/336112808735379
+- **Meta Developer Console**: https://developers.facebook.com/apps/3361128087359379
 - **Vercel Dashboard**: https://vercel.com/mafcos-projects-ca629a4f/metri-com-flow
 - **Supabase Dashboard**: https://supabase.com/dashboard/project/fjoaliipjfcnokermkhy
 

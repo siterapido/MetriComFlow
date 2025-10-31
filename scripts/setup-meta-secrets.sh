@@ -9,13 +9,13 @@ echo "🔐 Configurando Secrets do Meta no Supabase"
 echo "=============================================="
 echo ""
 
-# Configurações do Meta App (CRMads)
-META_APP_ID="336112808735379"
+# Configurações do Meta App (InsightFy)
+META_APP_ID="3361128087359379"
 META_APP_SECRET="7e6216e859be7639fa4de061536ce944"
 META_ACCESS_TOKEN="EAAvw7ZA2xD5MBPqL3QcMZC5C7JgxY5E1PLEbzDjSpoONuuTknzJiejKyTIkpQqf8LAoZB1QIbVV4r10gheLZCok97qNYZAiYE0OEhIimKxs9yWgPIOGm5AXvdE5cgRRAVr0CC6nTZAN8yAZAmRPFAfQx1aBnr4OzIPCEd5aGcaKVtE4ZCnes4K4T0ZCvFyMdZCepUCwZAtQIgJw"
 
 echo "📋 Informações do App Meta:"
-echo "   Nome: CRMads"
+echo "   Nome: InsightFy"
 echo "   App ID: $META_APP_ID"
 echo "   App Secret: ${META_APP_SECRET:0:10}..."
 echo "   Token válido até: 14/12/2025"

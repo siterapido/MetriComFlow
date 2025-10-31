@@ -72,8 +72,8 @@ async function testMetaAuth() {
     const appId = url.searchParams.get('client_id');
     console.log('Meta App Configuration:');
     console.log('  App ID from URL:', appId);
-    console.log('  Expected App ID: 336112808735379 (CRMads)');
-    console.log('  Match:', appId === '336112808735379' ? '✅' : '❌');
+    console.log('  Expected App ID: 3361128087359379 (InsightFy)');
+    console.log('  Match:', appId === '3361128087359379' ? '✅' : '❌');
 
   } catch (err) {
     console.error('❌ Unexpected error:', err);
