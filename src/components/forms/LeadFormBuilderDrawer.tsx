@@ -96,10 +96,15 @@ export const LeadFormBuilderDrawer = ({ form, open, onClose }: LeadFormBuilderDr
         .order("order_index");
 
       if (error) {
+        const status = (error as any)?.status ?? 0;
+        const message = String((error as any)?.message ?? "");
+        if (status === 404 || /not found|does not exist|relation/i.test(message)) {
+          return [] as LeadFormField[];
+        }
         throw error;
       }
 
-      return data ?? [];
+      return (data ?? []) as LeadFormField[];
     },
   });
 

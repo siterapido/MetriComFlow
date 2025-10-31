@@ -1,0 +1,56 @@
+
+🔍 TESTE COM LOGS COMPLETOS
+
+
+1️⃣ Login...
+
+[CONSOLE verbose]: [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o
+✅ Login OK
+
+2️⃣ Navegando para /meta-ads-config...
+
+[CONSOLE log]: [useDashboardSummary] Buscando dados para: JSHandle@object
+[CONSOLE log]: [usePipelineMetrics] Buscando métricas do pipeline: JSHandle@object
+[CONSOLE log]: [usePipelineEvolution] Buscando evolução do pipeline: JSHandle@object
+[REQUEST FAILED]: https://fjoaliipjfcnokermkhy.supabase.co/rest/v1/ad_accounts?select=*&organization_id=eq.34745c52-6035-440d-b7a4-69455cf676eb net::ERR_ABORTED
+[REQUEST FAILED]: https://fjoaliipjfcnokermkhy.supabase.co/rest/v1/organization_memberships?select=*&organization_id=eq.34745c52-6035-440d-b7a4-69455cf676eb&is_active=eq.true net::ERR_ABORTED
+[REQUEST FAILED]: https://fjoaliipjfcnokermkhy.supabase.co/rest/v1/ad_accounts?select=*&organization_id=eq.34745c52-6035-440d-b7a4-69455cf676eb net::ERR_ABORTED
+[REQUEST FAILED]: https://fjoaliipjfcnokermkhy.supabase.co/rest/v1/organization_memberships?select=*&organization_id=eq.34745c52-6035-440d-b7a4-69455cf676eb&is_active=eq.true net::ERR_ABORTED
+✅ Página carregada
+
+3️⃣ Clicando em "Conectar Agora"...
+
+═══════════════════════════════════════════════════
+CAPTURANDO LOGS DO NAVEGADOR:
+═══════════════════════════════════════════════════
+
+
+═══════════════════════════════════════════════════
+RESUMO DOS LOGS:
+═══════════════════════════════════════════════════
+
+Nenhum log relevante capturado.
+
+Todos os logs:
+
+📍 URL final: https://www.insightfy.com.br/meta-ads-config
+
+❌ NÃO redirecionou para Facebook.
+
+Isso indica um erro na Edge Function ou no frontend.
+
+⏸️  Pressione Ctrl+C para fechar
+
+[CONSOLE log]: 🔐 Using session token for meta-auth
+[CONSOLE log]: 🔗 Frontend REDIRECT_URI: https://www.insightfy.com.br/meta-ads-config
+
+[CONSOLE log]: 🌍 Current window.location.origin: https://www.insightfy.com.br
+[CONSOLE log]: ⚙️  Environment variables: JSHandle@object
+[CONSOLE log]: 
+%cEspere! font-family:helvetica; font-size:20px; font-size:50px; font-weight:bold; color:red; -webkit-text-stroke:1px black;
+[CONSOLE log]: 
+%cEste é um recurso de navegador voltado para desenvolvedores. Se alguém disse para você copiar e colar algo aqui para ativar um recurso do Facebook ou "invadir" a conta de outra pessoa, isso é uma fraude e você dará a ele acesso à sua conta. font-family:helvetica; font-size:20px; 
+[CONSOLE log]: 
+%cConsulte https://www.facebook.com/selfxss para obter mais informações. font-family:helvetica; font-size:20px; 
+[CONSOLE log]: 
+%c 

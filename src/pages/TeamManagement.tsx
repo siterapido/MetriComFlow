@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,11 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, Plus, Search, Filter, UserPlus, Mail, TrendingUp } from "lucide-react";
+import { Users, Plus, Search, Filter, UserPlus, Mail, TrendingUp, Save } from "lucide-react";
 import { useTeamManagement, type MemberFilter, type UserTypeFilter } from "@/hooks/useTeamManagement";
 import { InviteMemberDialog } from "@/components/team/InviteMemberDialog";
 import { UnifiedMemberCard } from "@/components/team/UnifiedMemberCard";
 import { InvitationCard } from "@/components/team/InvitationCard";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 
 function MembersSkeleton() {
   return (
@@ -45,6 +48,9 @@ function MembersSkeleton() {
 
 export default function TeamManagement() {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [orgNameDraft, setOrgNameDraft] = useState("");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const {
     organization,
@@ -65,6 +71,30 @@ export default function TeamManagement() {
     setUserTypeFilter,
     stats,
   } = useTeamManagement();
+
+  // Keep draft name in sync when organization loads
+  useEffect(() => {
+    if (organization?.name) setOrgNameDraft(organization.name);
+  }, [organization?.name]);
+
+  const updateOrgNameMutation = useMutation({
+    mutationFn: async (newName: string) => {
+      if (!organization?.id) throw new Error("Organização não encontrada");
+      const { error } = await supabase
+        .from("organizations")
+        .update({ name: newName })
+        .eq("id", organization.id);
+      if (error) throw error;
+      return newName;
+    },
+    onSuccess: (newName) => {
+      toast({ title: "Nome atualizado", description: `Organização renomeada para “${newName}”.` });
+      queryClient.invalidateQueries({ queryKey: ["active-organization"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro ao atualizar", description: String(err?.message ?? err), variant: "destructive" });
+    },
+  });
 
   const handleRoleChange = (membershipId: string, role: "owner" | "admin" | "manager" | "member") => {
     void updateMemberRole({ membershipId, role });
@@ -101,11 +131,37 @@ export default function TeamManagement() {
           </div>
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Gestão de Equipe</h1>
-            <p className="text-muted-foreground mt-1">
-              {organization
-                ? `Gerencie membros, convites e permissões de ${organization.name}`
-                : "Carregando organização..."}
-            </p>
+            <div className="mt-1 flex flex-col gap-2">
+              <p className="text-muted-foreground">
+                {organization
+                  ? `Gerencie membros, convites e permissões de ${organization.name}`
+                  : "Carregando organização..."}
+              </p>
+              {organization && (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={orgNameDraft}
+                    onChange={(e) => setOrgNameDraft(e.target.value)}
+                    placeholder="Nome da organização"
+                    className="w-64"
+                    disabled={!isOwner || updateOrgNameMutation.isPending}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={!isOwner || updateOrgNameMutation.isPending || !orgNameDraft.trim() || orgNameDraft === organization.name}
+                    onClick={() => updateOrgNameMutation.mutate(orgNameDraft.trim())}
+                    className="gap-2"
+                  >
+                    {updateOrgNameMutation.isPending ? (
+                      <>Salvando…</>
+                    ) : (
+                      <><Save className="h-4 w-4" /> Salvar nome</>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

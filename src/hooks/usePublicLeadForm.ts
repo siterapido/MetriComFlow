@@ -103,40 +103,96 @@ function toFieldType(value: unknown): PublicFieldType {
   return "text";
 }
 
-export function usePublicLeadForm(formId?: string | null, variantSlug?: string | null) {
+export function usePublicLeadForm(params: { formId?: string | null; profileSlug?: string | null; formSlug?: string | null; variantSlug?: string | null }) {
+  const { formId, profileSlug, formSlug, variantSlug } = params;
+  const enabled = Boolean(formId) || (Boolean(profileSlug) && Boolean(formSlug));
   return useQuery<PublicLeadFormData | null>({
-    queryKey: ["public-lead-form", formId, variantSlug],
-    enabled: Boolean(formId),
+    queryKey: ["public-lead-form", formId ?? null, profileSlug ?? null, formSlug ?? null, variantSlug ?? null],
+    enabled,
     queryFn: async () => {
-      if (!formId) return null;
-      // 1) Carrega metadados do formulário (sem relacionamentos)
-      const { data: base, error: baseError } = await supabase
-        .from("lead_forms")
-        .select(
-          `id, name, description, success_message, is_active, theme`
-        )
-        .eq("id", formId)
-        .maybeSingle();
+      // Resolve o formulário por ID ou por (profileSlug + formSlug)
+      let resolvedFormId: string | null = formId ?? null;
+      if (!resolvedFormId && profileSlug && formSlug) {
+        // Busca profile id pelo slug
+        const { data: prof, error: profErr } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("slug", profileSlug)
+          .maybeSingle();
+        if (profErr || !prof) return null;
+        const { data: lf, error: lfErr } = await supabase
+          .from("lead_forms")
+          .select("id")
+          .eq("owner_profile_id", prof.id)
+          .eq("slug", formSlug)
+          .maybeSingle();
+        if (lfErr || !lf) return null;
+        resolvedFormId = lf.id as string;
+      }
+      if (!resolvedFormId) return null;
+      // 1) Carrega metadados do formulário (sem relacionamentos) com fallback em caso de colunas ausentes
+      let base: any = null;
+      {
+        const selectFull = `id, name, description, success_message, is_active, theme`;
+        let { data, error } = await supabase
+          .from("lead_forms")
+          .select(selectFull)
+          .eq("id", resolvedFormId)
+          .maybeSingle();
 
-      if (baseError) throw baseError;
+        if (error) {
+          const code = (error as any)?.code ?? "";
+          const message = String((error as any)?.message ?? "");
+          if (code === "PGRST204") {
+            // Coluna ausente (ex.: theme). Volta para um select mínimo
+            const { data: dataMin, error: errMin } = await supabase
+              .from("lead_forms")
+              .select(`id, name, description, success_message, is_active`)
+              .eq("id", resolvedFormId)
+              .maybeSingle();
+            if (errMin) {
+              // Se ainda falhar (ex.: tabela não existe), retorna null como indisponível
+              return null;
+            }
+            base = dataMin;
+          } else if ((error as any)?.status === 404) {
+            return null;
+          } else {
+            throw error;
+          }
+        } else {
+          base = data;
+        }
+      }
       if (!base) return null;
 
       // 2) Carrega campos e variantes em consultas separadas
-      const [{ data: fieldsData, error: fieldsError }, { data: variantsData, error: variantsError }] = await Promise.all([
+      const [fieldsRes, variantsRes] = await Promise.all([
         supabase
           .from("lead_form_fields")
           .select(
             `id, form_id, key, label, type, is_required, order_index, placeholder, help_text, options, validations`
           )
-          .eq("form_id", formId),
+          .eq("form_id", resolvedFormId),
         supabase
           .from("lead_form_variants")
           .select(`id, form_id, name, slug, is_default, campaign_source`)
-          .eq("form_id", formId),
+          .eq("form_id", resolvedFormId),
       ]);
 
-      if (fieldsError) throw fieldsError;
-      if (variantsError) throw variantsError;
+      const fieldsData = fieldsRes.error && ((fieldsRes as any).error.status === 404 || /not found|does not exist|relation/i.test(String((fieldsRes as any).error.message ?? "")))
+        ? []
+        : (fieldsRes.data ?? []);
+      if (fieldsRes.error && fieldsData.length === 0 && (fieldsRes as any).error && (fieldsRes as any).error.status !== 404) {
+        throw fieldsRes.error;
+      }
+
+      const variantsData = variantsRes.error && ((variantsRes as any).error.status === 404 || /not found|does not exist|relation/i.test(String((variantsRes as any).error.message ?? "")))
+        ? []
+        : (variantsRes.data ?? []);
+      if (variantsRes.error && variantsData.length === 0 && (variantsRes as any).error && (variantsRes as any).error.status !== 404) {
+        throw variantsRes.error;
+      }
 
       const fields = (fieldsData ?? [])
         .map((field) => ({

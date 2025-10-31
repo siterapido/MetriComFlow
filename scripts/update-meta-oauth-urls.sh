@@ -1,60 +1,81 @@
 #!/bin/bash
 
-# Script para atualizar as URLs de redirecionamento OAuth do Meta no Vercel
-# Este script configura as URLs corretas para produção
+# Script para atualizar as URLs de OAuth no Meta App
+# Uso: ./scripts/update-meta-oauth-urls.sh
 
 set -e
 
-echo "🔧 Atualizando URLs OAuth do Meta no Vercel..."
+echo "🔧 Atualizando URLs de OAuth no Meta App"
+echo "=========================================="
 echo ""
 
-# URL de produção atual (domínio customizado)
-PRODUCTION_URL="https://www.insightfy.com.br"
+# Carregar variáveis do .env
+if [ ! -f .env ]; then
+    echo "❌ Erro: Arquivo .env não encontrado!"
+    exit 1
+fi
 
-# URLs que devem estar configuradas no Meta OAuth
-echo "📋 URLs que devem ser configuradas no Meta Developer Console:"
-echo "   https://developers.facebook.com/apps/3361128087359379/settings/basic/"
-echo ""
-echo "   URIs de redirecionamento OAuth válidos:"
-echo "   1. ${PRODUCTION_URL}/meta-ads-config"
-echo "   2. http://localhost:8082/meta-ads-config (para desenvolvimento)"
+export $(grep -v '^#' .env | xargs)
+
+APP_ID="$VITE_META_APP_ID"
+APP_SECRET="$VITE_META_APP_SECRET"
+REDIRECT_URI="$VITE_META_REDIRECT_URI"
+
+echo "📋 Informações do App:"
+echo "   App ID: $APP_ID"
+echo "   Redirect URI: $REDIRECT_URI"
 echo ""
 
-# Atualizar variáveis de ambiente no Vercel
-echo "🚀 Atualizando variáveis no Vercel..."
+# Gerar access token do app
+echo "🔑 Gerando App Access Token..."
+APP_TOKEN_RESPONSE=$(curl -s -X GET \
+  "https://graph.facebook.com/oauth/access_token?client_id=${APP_ID}&client_secret=${APP_SECRET}&grant_type=client_credentials")
+
+APP_TOKEN=$(echo "$APP_TOKEN_RESPONSE" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+if [ -z "$APP_TOKEN" ]; then
+    echo "❌ Erro: Não foi possível gerar o access token"
+    echo "Resposta da API: $APP_TOKEN_RESPONSE"
+    exit 1
+fi
+
+echo "   ✅ Token gerado: ${APP_TOKEN:0:20}..."
 echo ""
 
-# Remover variáveis antigas (se existirem)
-echo "🗑️  Removendo variáveis antigas..."
-vercel env rm VITE_APP_URL production -y 2>/dev/null || true
-vercel env rm VITE_META_REDIRECT_URI production -y 2>/dev/null || true
+echo "⚠️  ATENÇÃO: Configuração de OAuth Redirect URIs via API"
+echo "=========================================================="
+echo ""
+echo "A Meta não permite atualizar 'OAuth Redirect URIs' via API Graph diretamente."
+echo "Você PRECISA configurar manualmente no Facebook Developers Console."
+echo ""
+echo "📋 URLs que você deve adicionar:"
+echo ""
+echo "   1. ${VITE_APP_URL}/meta-ads-config"
+echo "   2. ${VITE_APP_URL}"
+echo "   3. http://localhost:8082/meta-ads-config"
+echo ""
+echo "🔗 Acesse o console aqui:"
+echo "   https://developers.facebook.com/apps/${APP_ID}/fb-login/settings/"
+echo ""
+echo "📝 Passo a passo:"
+echo "   1. Clique no link acima para abrir o console"
+echo "   2. No menu lateral, vá em 'Use Cases' → 'Authentication and account creation'"
+echo "      OU vá em 'Settings' → 'Basic'"
+echo "   3. Procure por 'Valid OAuth Redirect URIs'"
+echo "   4. Adicione cada URL em uma linha separada"
+echo "   5. Clique em 'Save Changes' no final da página"
+echo "   6. Aguarde 2-5 minutos para propagação"
+echo ""
+echo "🔍 Verificando configuração atual do app..."
+echo ""
 
-# Adicionar novas variáveis
-echo "➕ Adicionando novas variáveis..."
-echo "${PRODUCTION_URL}" | vercel env add VITE_APP_URL production
-echo "${PRODUCTION_URL}/meta-ads-config" | vercel env add VITE_META_REDIRECT_URI production
+# Tentar buscar informações do app
+APP_INFO=$(curl -s -X GET \
+  "https://graph.facebook.com/v24.0/${APP_ID}?fields=name,namespace,link&access_token=${APP_TOKEN}")
 
+echo "📱 Informações do App:"
+echo "$APP_INFO" | python3 -m json.tool 2>/dev/null || echo "$APP_INFO"
 echo ""
-echo "✅ Variáveis atualizadas no Vercel!"
-echo ""
-echo "📝 Próximos passos:"
-echo ""
-echo "1. Acesse o Meta Developer Console:"
-echo "   https://developers.facebook.com/apps/3361128087359379/settings/basic/"
-echo ""
-echo "2. Role até 'URIs de redirecionamento OAuth válidos'"
-echo ""
-echo "3. Adicione as seguintes URLs (uma por linha):"
-echo "   ${PRODUCTION_URL}/meta-ads-config"
-echo "   http://localhost:8082/meta-ads-config"
-echo ""
-echo "4. Clique em 'Salvar alterações' no Meta Developer Console"
-echo ""
-echo "5. Faça um novo deploy no Vercel para aplicar as variáveis:"
-echo "   vercel --prod"
-echo ""
-echo "⚠️  IMPORTANTE: As URLs devem corresponder EXATAMENTE entre:"
-echo "   - Meta Developer Console (URIs de redirecionamento)"
-echo "   - Variáveis de ambiente do Vercel (VITE_META_REDIRECT_URI)"
-echo "   - Edge Function meta-auth (redirect_uri)"
+
+echo "✅ Script concluído!"
 echo ""

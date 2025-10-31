@@ -170,6 +170,7 @@ export type Database = {
         Row: {
           id: string
           name: string
+          slug: string | null
           description: string | null
           success_message: string | null
           webhook_url: string | null
@@ -179,6 +180,7 @@ export type Database = {
           created_at: string
           updated_at: string
           organization_id: string | null
+          owner_profile_id: string | null
           schema_version: number
           settings: Json
           theme: Json
@@ -188,6 +190,7 @@ export type Database = {
         Insert: {
           id: string
           name: string
+          slug?: string | null
           description?: string | null
           success_message?: string | null
           webhook_url?: string | null
@@ -197,6 +200,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
           organization_id?: string | null
+          owner_profile_id?: string | null
           schema_version?: number
           settings?: Json
           theme?: Json
@@ -206,6 +210,7 @@ export type Database = {
         Update: {
           id?: string
           name?: string
+          slug?: string | null
           description?: string | null
           success_message?: string | null
           webhook_url?: string | null
@@ -215,6 +220,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
           organization_id?: string | null
+          owner_profile_id?: string | null
           schema_version?: number
           settings?: Json
           theme?: Json
@@ -236,7 +242,50 @@ export type Database = {
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lead_forms_owner_profile_id_fkey"
+            columns: ["owner_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      organizations: {
+        Row: {
+          id: string
+          name: string
+          slug: string | null
+          owner_id: string
+          billing_email: string | null
+          is_active: boolean
+          metadata: Json | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          slug?: string | null
+          owner_id: string
+          billing_email?: string | null
+          is_active?: boolean
+          metadata?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          slug?: string | null
+          owner_id?: string
+          billing_email?: string | null
+          is_active?: boolean
+          metadata?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       lead_form_fields: {
         Row: {
@@ -538,6 +587,7 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          slug: string | null
           updated_at: string | null
         }
         Insert: {
@@ -546,6 +596,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          slug?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -554,6 +605,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          slug?: string | null
           updated_at?: string | null
         }
         Relationships: [

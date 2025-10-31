@@ -18,4 +18,13 @@ SET
 FROM pro_plan
 WHERE target.slug IN ('teste', 'trial');
 
-REFRESH MATERIALIZED VIEW public.organization_plan_limits;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_matviews
+    WHERE schemaname = 'public' AND matviewname = 'organization_plan_limits'
+  ) THEN
+    REFRESH MATERIALIZED VIEW public.organization_plan_limits;
+  END IF;
+END $$;
+

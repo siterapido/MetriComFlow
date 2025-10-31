@@ -38,3 +38,4 @@ CREATE TRIGGER trg_ensure_owner_membership_on_update
 
 -- Nota: O trigger existente AFTER INSERT (trg_ensure_owner_membership) permanece válido e continuará funcionando
 -- quando owner_id já estiver definido no momento da criação.
+

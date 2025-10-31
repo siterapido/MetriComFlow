@@ -37,11 +37,16 @@ const buildThemeStyle = (theme: PublicLeadFormTheme | null | undefined) => {
 };
 
 const PublicLeadForm = () => {
-  const { formId } = useParams<{ formId: string }>();
+  const { formId, orgSlug: _orgSlug, profileSlug, formSlug } = useParams<{
+    formId?: string;
+    orgSlug?: string;
+    profileSlug?: string;
+    formSlug?: string;
+  }>();
   const [searchParams] = useSearchParams();
   const variantSlug = searchParams.get("variant");
 
-  const { data, isLoading, error } = usePublicLeadForm(formId, variantSlug);
+  const { data, isLoading, error } = usePublicLeadForm({ formId, profileSlug, formSlug, variantSlug });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionState, setSubmissionState] = useState<SubmitSuccessState | null>(null);
@@ -51,7 +56,8 @@ const PublicLeadForm = () => {
 
   const handleSubmit = useCallback(
     async (values: Record<string, unknown>) => {
-      if (!formId) return;
+      const resolvedFormId = data?.id ?? formId;
+      if (!resolvedFormId) return;
       setIsSubmitting(true);
       setSubmissionError(null);
 
@@ -59,7 +65,7 @@ const PublicLeadForm = () => {
         const tracking = collectFormTrackingData();
         const { data: response, error: invokeError } = await supabase.functions.invoke("submit-lead-form", {
           body: {
-            formId,
+            formId: resolvedFormId,
             variantSlug,
             payload: values,
             tracking,
@@ -97,7 +103,7 @@ const PublicLeadForm = () => {
         setIsSubmitting(false);
       }
     },
-    [formId, variantSlug, data?.successMessage],
+    [formId, data?.id, variantSlug, data?.successMessage],
   );
 
   if (isLoading) {

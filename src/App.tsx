@@ -49,6 +49,8 @@ const App = () => (
             <Route path="/finalizar-cadastro" element={<FinalizeSignup />} />
             <Route path="/setup-admin" element={<SetupAdmin />} />
             <Route path="/forms/:formId" element={<PublicLeadForm />} />
+            <Route path= "/:orgSlug/:formId" element={<PublicLeadForm />} />
+            <Route path= "/:profileSlug/:formSlug" element={<PublicLeadForm />} />
             <Route path="/auth/forgot-password" element={<ForgotPassword />} />
             <Route path="/auth/update-password" element={<UpdatePassword />} />
             <Route path="/auth/callback" element={<AuthCallback />} />

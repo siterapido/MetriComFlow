@@ -314,7 +314,7 @@ export function useMetaAuth() {
     }
   };
 
-  // Find duplicate account by external_id
+  // Find duplicate account by external_id (global check across all organizations)
   const findDuplicateAccount = async (externalId: string): Promise<AdAccount | null> => {
     if (!user) return null;
 
@@ -341,6 +341,42 @@ export function useMetaAuth() {
     }
   };
 
+  // Check if account is already connected globally (by any user/organization)
+  const checkAccountConnected = async (externalId: string): Promise<{
+    isConnected: boolean;
+    connectedByUserName?: string;
+    organizationName?: string;
+    businessName?: string;
+  }> => {
+    try {
+      // Normalize external_id
+      let normalizedId = externalId.trim();
+      if (normalizedId.startsWith('act_')) {
+        normalizedId = normalizedId.substring(4);
+      }
+
+      const { data, error } = await supabase
+        .rpc('is_ad_account_connected', { p_external_id: normalizedId });
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const account = data[0];
+        return {
+          isConnected: true,
+          connectedByUserName: account.connected_by_user_name,
+          organizationName: account.organization_name,
+          businessName: account.business_name,
+        };
+      }
+
+      return { isConnected: false };
+    } catch (error) {
+      console.error('Error checking account connection:', error);
+      return { isConnected: false };
+    }
+  };
+
   // Add a new ad account manually
   const addAdAccount = async (accountData: {
     external_id: string;
@@ -363,6 +399,17 @@ export function useMetaAuth() {
         if (!/^\d{10,}$/.test(normalizedId)) {
           throw new Error('ID da conta Meta inválido. Deve conter apenas números com pelo menos 10 dígitos (ex: 1558732224693082).');
         }
+      }
+
+      // IMPORTANT: Check if account is already connected GLOBALLY (by any user/organization)
+      const connectionCheck = await checkAccountConnected(normalizedId);
+      if (connectionCheck.isConnected) {
+        const { connectedByUserName, organizationName, businessName } = connectionCheck;
+        throw new Error(
+          `Esta conta Meta "${businessName || normalizedId}" já está conectada por ${connectedByUserName || 'outro usuário'} ` +
+          `na organização "${organizationName || 'outra organização'}". ` +
+          `Cada conta Meta só pode ser conectada uma vez no sistema.`
+        );
       }
 
       // Check if account already exists (including inactive ones) in this organization
@@ -695,6 +742,7 @@ export function useMetaAuth() {
     deleteAdAccount,
     mergeAdAccounts,
     findDuplicateAccount,
+    checkAccountConnected,
     listAvailableAccounts,
     refreshData: fetchData,
     hasActiveConnection: connections.length > 0,

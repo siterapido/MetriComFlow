@@ -58,6 +58,9 @@ import { supabase } from "@/lib/supabase";
 import { Tables, TablesInsert } from "@/lib/database.types";
 import LeadFormBuilderDrawer from "@/components/forms/LeadFormBuilderDrawer";
 import { useAdAccounts, useAdCampaigns } from "@/hooks/useMetaMetrics";
+import { useAuth } from "@/hooks/useAuth";
+import { useCurrentProfile } from "@/hooks/useCurrentProfile";
+import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 
 type LeadFormRecord = Tables<"lead_forms"> & {
   lead_form_variants?: Tables<"lead_form_variants">[];
@@ -209,6 +212,9 @@ const LeadForms = () => {
   const [builderForm, setBuilderForm] = useState<LeadFormRecord | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { data: organization } = useActiveOrganization();
+  const { user } = useAuth();
+  const { data: currentProfile } = useCurrentProfile();
 
   const {
     data: formsData = [],
@@ -217,27 +223,62 @@ const LeadForms = () => {
     isError,
     error: formsError,
   } = useQuery<LeadFormRecord[]>({
-    queryKey: ["lead-forms"],
+    queryKey: ["lead-forms", organization?.id],
+    enabled: !!organization?.id,
     queryFn: async () => {
-      // 1) Carrega formulários (sem relacionamentos)
-      const { data: forms, error: formsError } = await supabase
-        .from("lead_forms")
-        .select("*")
-        .order("created_at", { ascending: false });
+      if (!organization?.id) return [] as LeadFormRecord[];
+      // 1) Carrega formulários da organização (sem relacionamentos)
+      let base: Tables<"lead_forms">[] = [];
+      {
+      const { data, error } = await supabase
+          .from("lead_forms")
+          .select("*, owner:profiles!lead_forms_owner_profile_id_fkey(slug)")
+          .eq("organization_id", organization.id)
+          .order("created_at", { ascending: false });
 
-      if (formsError) throw formsError;
-      const base = forms ?? [];
+        if (error) {
+          const code = (error as any)?.code ?? "";
+          const message = String((error as any)?.message ?? "");
+          // Fallback para esquemas antigos sem organization_id
+          if (code === "PGRST204" && /'organization_id'/.test(message)) {
+            const { data: fallbackData, error: fbErr } = await supabase
+              .from("lead_forms")
+              .select("*")
+              .order("created_at", { ascending: false });
+            if (fbErr) throw fbErr;
+            base = (fallbackData ?? []) as Tables<"lead_forms">[];
+          } else {
+            throw error;
+          }
+        } else {
+          base = (data ?? []) as Tables<"lead_forms">[];
+        }
+      }
 
       if (base.length === 0) return [] as LeadFormRecord[];
 
       // 2) Carrega variantes de todos os formulários de uma vez
       const formIds = base.map((f) => f.id);
-      const { data: variants, error: variantsError } = await supabase
-        .from("lead_form_variants")
-        .select("id, form_id, name, slug, campaign_source, campaign_id, meta_campaign_id, meta_ad_account_id, is_default")
-        .in("form_id", formIds);
-
-      if (variantsError) throw variantsError;
+      let variants: any[] = [];
+      {
+        const { data, error } = await supabase
+          .from("lead_form_variants")
+          .select(
+            "id, form_id, name, slug, campaign_source, campaign_id, meta_campaign_id, meta_ad_account_id, is_default"
+          )
+          .in("form_id", formIds);
+        if (error) {
+          const status = (error as any)?.status ?? 0;
+          const message = String((error as any)?.message ?? "");
+          if (status === 404 || /not found|does not exist|relation/i.test(message)) {
+            variants = [];
+          } else {
+            throw error;
+          }
+        } else {
+          variants = (data ?? []) as any[];
+        }
+      }
       const byForm: Record<string, Tables<"lead_form_variants">[]> = {};
       for (const v of variants ?? []) {
         const arr = byForm[v.form_id] || (byForm[v.form_id] = []);
@@ -314,15 +355,27 @@ const LeadForms = () => {
 
   const createFormMutation = useMutation<Tables<"lead_forms">, unknown, CreateLeadFormPayload>({
     mutationFn: async ({ form: formPayload, fields, variant }: CreateLeadFormPayload) => {
-      const { data: createdForm, error } = await supabase
-        .from("lead_forms")
-        .insert(formPayload)
-        .select("*")
-        .single();
+      // Tenta inserir; se houver colunas ausentes (PGRST204), remove do payload e tenta novamente (compat com esquemas antigos)
+      let createdForm: Tables<"lead_forms"> | null = null;
+      let payload: Record<string, unknown> = { ...formPayload } as Record<string, unknown>;
+      const attemptInsert = async () => supabase.from("lead_forms").insert(payload).select("*").single();
 
-      if (error) {
+      for (let i = 0; i < 3; i++) {
+        const { data, error } = await attemptInsert();
+        if (!error) {
+          createdForm = data as Tables<"lead_forms">;
+          break;
+        }
+        const code = (error as any)?.code ?? "";
+        const message = String((error as any)?.message ?? "");
+        const match = message.match(/Could not find the '([^']+)' column/i);
+        if (code === "PGRST204" && match && match[1] && payload.hasOwnProperty(match[1])) {
+          delete (payload as any)[match[1]];
+          continue;
+        }
         throw error;
       }
+      if (!createdForm) throw new Error("Falha ao criar formulário");
 
       try {
         if (fields.length > 0) {
@@ -350,7 +403,7 @@ const LeadForms = () => {
           }
         }
 
-        return createdForm;
+        return createdForm as Tables<"lead_forms">;
       } catch (insertError) {
         await supabase.from("lead_form_fields").delete().eq("form_id", createdForm.id);
         await supabase.from("lead_form_variants").delete().eq("form_id", createdForm.id);
@@ -474,8 +527,18 @@ const LeadForms = () => {
   }, [forms]);
 
   const handleCreateForm = async (values: FormSchema) => {
+    if (!organization?.id) {
+      toast({
+        title: "Organização não encontrada",
+        description: "Não foi possível identificar a organização ativa para criar o formulário.",
+        variant: "destructive",
+      });
+      return;
+    }
     const slug = toSlug(values.name);
-    const id = slug || `form-${Date.now()}`;
+    const id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID()
+      : `form-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
 
     const selectedFieldKeys = defaultFieldKeys.filter((key) => values.defaultFields[key]);
 
@@ -533,16 +596,24 @@ const LeadForms = () => {
       linked_campaign: selectedCampaign?.external_id ?? null,
     };
 
+    if (!user?.id) {
+      toast({ title: "Sessão expirada", description: "Faça login novamente para criar o formulário.", variant: "destructive" });
+      return;
+    }
+
     await createFormMutation.mutateAsync({
       form: {
         id,
         name: values.name,
+        slug,
         description: values.description?.trim() ? values.description.trim() : null,
         success_message: values.successMessage?.trim() ? values.successMessage.trim() : null,
         webhook_url: values.webhookUrl?.trim() ? values.webhookUrl.trim() : null,
         redirect_url: values.redirectUrl?.trim() ? values.redirectUrl.trim() : null,
         is_active: true,
         submission_count: 0,
+        owner_profile_id: user.id,
+        organization_id: organization.id,
         settings: formSettings,
       },
       fields: fieldsPayload,
@@ -765,8 +836,14 @@ const LeadForms = () => {
                     </TableRow>
                   ) : (
                     forms.map((formItem) => {
-                      const publicUrl = `${appBaseUrl}/forms/${formItem.id}`;
-                      const embedCode = `<iframe src="${publicUrl}" width="100%" height="680" style="border:0" allow="fullscreen"></iframe>`;
+                      const profileSlug = ((formItem as any).owner?.slug as string | undefined) ?? (currentProfile?.profile?.slug ?? null);
+                      const formSlug = (formItem as any).slug as string | undefined;
+                      const vanityUrl = (profileSlug && formSlug)
+                        ? `${appBaseUrl}/${profileSlug}/${formSlug}`
+                        : (organization?.slug
+                            ? `${appBaseUrl}/${organization.slug}/${formItem.id}`
+                            : `${appBaseUrl}/forms/${formItem.id}`);
+                      const embedCode = `<iframe src="${vanityUrl}" width="100%" height="680" style="border:0" allow="fullscreen"></iframe>`;
                       const isUpdating = updatingId === formItem.id && updateFormStatusMutation.isPending;
                       const defaultVariant =
                         formItem.lead_form_variants?.find((variant) => variant.is_default) ??
@@ -844,7 +921,7 @@ const LeadForms = () => {
                                 variant="outline"
                                 size="sm"
                                 className="gap-1"
-                                onClick={() => handleCopy(publicUrl, "Link público copiado para a área de transferência.")}
+                                onClick={() => handleCopy(vanityUrl, "Link público copiado para a área de transferência.")}
                               >
                                 <Link2 className="w-3 h-3" /> Link
                               </Button>
