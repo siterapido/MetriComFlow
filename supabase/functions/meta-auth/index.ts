@@ -89,14 +89,19 @@ Deno.serve(async (req) => {
     ): string => {
       const DEFAULT_PATH = '/meta-ads-config';
 
+      // Read production URL from environment (with fallback for backward compatibility)
+      const PRODUCTION_BASE_URL = Deno.env.get('VITE_APP_URL') ||
+                                   Deno.env.get('APP_URL') ||
+                                   'https://www.insightfy.com.br';
+
       // Step 1: choose a candidate (prefer explicit input, then origin fallback)
       let candidate = input?.trim();
       if (!candidate || !/^https?:\/\//i.test(candidate)) {
         if (origin && /^https?:\/\//i.test(origin)) {
           candidate = `${origin}${DEFAULT_PATH}`;
         } else {
-          // Absolute fallback to production canonical host
-          candidate = `https://www.insightfy.com.br${DEFAULT_PATH}`;
+          // Use environment-based production URL instead of hardcoded
+          candidate = `${PRODUCTION_BASE_URL}${DEFAULT_PATH}`;
         }
       }
 
@@ -111,17 +116,20 @@ Deno.serve(async (req) => {
         url.search = '';
         url.hash = '';
 
-        // If the host is our production domain, enforce the www canonical host and https
-        if (url.hostname === 'insightfy.com.br') {
-          url.hostname = 'www.insightfy.com.br';
+        // If the host is our production domain (with or without www), normalize it
+        if (url.hostname === 'insightfy.com.br' || url.hostname === 'www.insightfy.com.br') {
+          // Preserve the www variant if PRODUCTION_BASE_URL uses it
+          const prodUrl = new URL(PRODUCTION_BASE_URL);
+          url.hostname = prodUrl.hostname;
           url.protocol = 'https:';
         }
 
         // Return the full string form
         return url.toString();
       } catch (e) {
-        // If parsing fails for any reason, return the canonical prod URL
-        return 'https://www.insightfy.com.br/meta-ads-config';
+        // If parsing fails for any reason, return the environment-based prod URL
+        console.error('⚠️  URL parsing failed, using fallback:', e);
+        return `${PRODUCTION_BASE_URL}${DEFAULT_PATH}`;
       }
     };
 
@@ -149,7 +157,7 @@ Deno.serve(async (req) => {
         console.error('Vault fallback error (META_APP_SECRET):', e);
       }
     }
-    
+
     if (!META_APP_ID || !META_APP_SECRET) {
       console.error('Meta app credentials not configured:', {
         hasAppId: !!META_APP_ID,
@@ -169,6 +177,9 @@ Deno.serve(async (req) => {
     console.log('Origin:', req.headers.get('origin'));
     console.log('Redirect URI (incoming):', redirect_uri);
     console.log('Redirect URI (resolved):', resolvedRedirectUri);
+    console.log('Environment Variables:');
+    console.log('  - VITE_APP_URL:', Deno.env.get('VITE_APP_URL') || 'not set');
+    console.log('  - APP_URL:', Deno.env.get('APP_URL') || 'not set');
     console.log('========================================================');
 
     if (!META_APP_ID || !/^\d+$/.test(META_APP_ID)) {

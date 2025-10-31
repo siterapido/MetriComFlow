@@ -130,7 +130,7 @@ export default function TeamManagement() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card className="bg-gradient-to-br from-card to-accent/20 border-border">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -154,40 +154,6 @@ export default function TeamManagement() {
               <div>
                 <p className="text-sm text-muted-foreground">Convites Pendentes</p>
                 <p className="text-2xl font-bold text-foreground">{stats.pendingInvitations}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-card to-accent/20 border-border">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-secondary/10 rounded-lg flex items-center justify-center">
-                <UserPlus className="h-5 w-5 text-secondary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Admins/Managers</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {stats.byRole.admin + stats.byRole.manager}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-card to-accent/20 border-border">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-success/10 rounded-lg flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-success" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Taxa de Crescimento</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {stats.totalMembers > 0
-                    ? `+${Math.round((stats.pendingInvitations / stats.totalMembers) * 100)}%`
-                    : "0%"}
-                </p>
               </div>
             </div>
           </CardContent>
@@ -225,7 +191,6 @@ export default function TeamManagement() {
                   <SelectItem value="all">Todas as funções</SelectItem>
                   <SelectItem value="owner">Owner</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="member">Membro</SelectItem>
                 </SelectContent>
               </Select>

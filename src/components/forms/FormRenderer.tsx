@@ -147,7 +147,8 @@ export const FormRenderer = ({
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: defaults,
-    mode: "onBlur",
+    mode: "onChange",
+    reValidateMode: "onChange",
   });
 
   useEffect(() => {

@@ -47,7 +47,25 @@ export function useMetaAuth() {
   const lastHandledCodeRef = useRef<string | null>(null);
 
   // Standardize redirect URI across environments
-  const REDIRECT_URI = (import.meta as any).env?.VITE_META_REDIRECT_URI || `${window.location.origin}/meta-ads-config`;
+  // Priority: 1. VITE_META_REDIRECT_URI, 2. production URL, 3. current origin
+  const REDIRECT_URI = (() => {
+    const envRedirectUri = (import.meta as any).env?.VITE_META_REDIRECT_URI;
+    if (envRedirectUri) {
+      return envRedirectUri;
+    }
+
+    // Check if we're in production mode
+    const isProd = (import.meta as any).env?.MODE === 'production';
+    const appUrl = (import.meta as any).env?.VITE_APP_URL;
+
+    if (isProd && appUrl) {
+      // Use configured production URL
+      return `${appUrl}/meta-ads-config`;
+    }
+
+    // Fallback to current window origin (for local dev)
+    return `${window.location.origin}/meta-ads-config`;
+  })();
 
   // Helper to parse Supabase FunctionsHttpError and extract JSON/text body
   const parseFunctionsError = async (error: any): Promise<{ message?: string; error?: string } | null> => {
@@ -151,6 +169,13 @@ export function useMetaAuth() {
       }
 
       console.log('🔐 Using session token for meta-auth');
+      console.log('🔗 Frontend REDIRECT_URI:', REDIRECT_URI);
+      console.log('🌍 Current window.location.origin:', window.location.origin);
+      console.log('⚙️  Environment variables:', {
+        VITE_META_REDIRECT_URI: (import.meta as any).env?.VITE_META_REDIRECT_URI || 'not set',
+        VITE_APP_URL: (import.meta as any).env?.VITE_APP_URL || 'not set',
+        MODE: (import.meta as any).env?.MODE || 'not set',
+      });
 
       const { data, error } = await supabase.functions.invoke('meta-auth', {
         headers: {

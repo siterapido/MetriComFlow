@@ -109,50 +109,36 @@ export function usePublicLeadForm(formId?: string | null, variantSlug?: string |
     enabled: Boolean(formId),
     queryFn: async () => {
       if (!formId) return null;
-
-      const { data, error } = await supabase
+      // 1) Carrega metadados do formulário (sem relacionamentos)
+      const { data: base, error: baseError } = await supabase
         .from("lead_forms")
         .select(
-          `
-            id,
-            name,
-            description,
-            success_message,
-            is_active,
-            theme,
-            lead_form_fields (
-              id,
-              key,
-              label,
-              type,
-              is_required,
-              order_index,
-              placeholder,
-              help_text,
-              options,
-              validations
-            ),
-            lead_form_variants (
-              id,
-              name,
-              slug,
-              is_default,
-              campaign_source
-            )
-          `,
+          `id, name, description, success_message, is_active, theme`
         )
         .eq("id", formId)
         .maybeSingle();
 
-      if (error) {
-        throw error;
-      }
+      if (baseError) throw baseError;
+      if (!base) return null;
 
-      if (!data) {
-        return null;
-      }
+      // 2) Carrega campos e variantes em consultas separadas
+      const [{ data: fieldsData, error: fieldsError }, { data: variantsData, error: variantsError }] = await Promise.all([
+        supabase
+          .from("lead_form_fields")
+          .select(
+            `id, form_id, key, label, type, is_required, order_index, placeholder, help_text, options, validations`
+          )
+          .eq("form_id", formId),
+        supabase
+          .from("lead_form_variants")
+          .select(`id, form_id, name, slug, is_default, campaign_source`)
+          .eq("form_id", formId),
+      ]);
 
-      const fields = (data.lead_form_fields ?? [])
+      if (fieldsError) throw fieldsError;
+      if (variantsError) throw variantsError;
+
+      const fields = (fieldsData ?? [])
         .map((field) => ({
           id: field.id,
           key: field.key,
@@ -167,7 +153,7 @@ export function usePublicLeadForm(formId?: string | null, variantSlug?: string |
         }))
         .sort((a, b) => a.order - b.order);
 
-      const variants = (data.lead_form_variants ?? []).map((variant) => ({
+      const variants = (variantsData ?? []).map((variant) => ({
         id: variant.id,
         name: variant.name,
         slug: variant.slug,
@@ -183,14 +169,14 @@ export function usePublicLeadForm(formId?: string | null, variantSlug?: string |
         null;
 
       const theme: PublicLeadFormTheme | null =
-        data.theme && typeof data.theme === "object" ? (data.theme as PublicLeadFormTheme) : null;
+        base.theme && typeof base.theme === "object" ? (base.theme as PublicLeadFormTheme) : null;
 
       return {
-        id: data.id,
-        name: data.name,
-        description: data.description,
-        successMessage: data.success_message,
-        isActive: data.is_active,
+        id: base.id,
+        name: base.name,
+        description: base.description,
+        successMessage: base.success_message,
+        isActive: base.is_active,
         theme,
         fields,
         variants,

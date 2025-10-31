@@ -50,6 +50,7 @@ import {
   Mail,
   Plug,
   Plus,
+  Download,
   Webhook,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -218,28 +219,38 @@ const LeadForms = () => {
   } = useQuery<LeadFormRecord[]>({
     queryKey: ["lead-forms"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // 1) Carrega formulários (sem relacionamentos)
+      const { data: forms, error: formsError } = await supabase
         .from("lead_forms")
-        .select(
-          `*,
-          lead_form_variants (
-            id,
-            name,
-            slug,
-            campaign_source,
-            campaign_id,
-            meta_campaign_id,
-            meta_ad_account_id,
-            is_default
-          )`
-        )
+        .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) {
-        throw error;
+      if (formsError) throw formsError;
+      const base = forms ?? [];
+
+      if (base.length === 0) return [] as LeadFormRecord[];
+
+      // 2) Carrega variantes de todos os formulários de uma vez
+      const formIds = base.map((f) => f.id);
+      const { data: variants, error: variantsError } = await supabase
+        .from("lead_form_variants")
+        .select("id, form_id, name, slug, campaign_source, campaign_id, meta_campaign_id, meta_ad_account_id, is_default")
+        .in("form_id", formIds);
+
+      if (variantsError) throw variantsError;
+      const byForm: Record<string, Tables<"lead_form_variants">[]> = {};
+      for (const v of variants ?? []) {
+        const arr = byForm[v.form_id] || (byForm[v.form_id] = []);
+        arr.push(v as unknown as Tables<"lead_form_variants">);
       }
 
-      return data ?? [];
+      // 3) Anexa variantes manualmente
+      const enriched: LeadFormRecord[] = base.map((f) => ({
+        ...(f as LeadFormRecord),
+        lead_form_variants: byForm[f.id] || [],
+      }));
+
+      return enriched;
     },
   });
 
@@ -270,10 +281,18 @@ const LeadForms = () => {
     { enabled: Boolean(selectedAccountId) }
   );
   const selectedCampaignId = form.watch("campaignId");
+  // Observa cada campo individual para garantir atualização reativa do contador
   const defaultFieldsValues = form.watch("defaultFields");
+  const defaultFieldFlags = form.watch([
+    "defaultFields.fullName",
+    "defaultFields.email",
+    "defaultFields.phone",
+    "defaultFields.company",
+    "defaultFields.message",
+  ]);
   const selectedDefaultFieldCount = useMemo(
-    () => (defaultFieldsValues ? Object.values(defaultFieldsValues).filter(Boolean).length : 0),
-    [defaultFieldsValues],
+    () => defaultFieldFlags.filter((v) => Boolean(v)).length,
+    [defaultFieldFlags],
   );
   const defaultFieldsError = (
     form.formState.errors.defaultFields as { root?: { message?: string } } | undefined
@@ -568,6 +587,47 @@ const LeadForms = () => {
     );
   };
 
+  const handleExportCsv = async (formId: string) => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        toast({ title: "Sessão expirada", description: "Faça login novamente para exportar.", variant: "destructive" });
+        return;
+      }
+
+      const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const res = await fetch(`${baseUrl}/functions/v1/export-lead-form`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ formId, format: "csv" }),
+      });
+
+      if (!res.ok) {
+        const problem = await res.text();
+        throw new Error(problem || `Falha na exportação (${res.status})`);
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const date = new Date().toISOString().slice(0, 10);
+      a.download = `lead-form-${formId}-${date}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: "Exportação iniciada", description: "Arquivo CSV gerado com sucesso." });
+    } catch (error) {
+      console.error("[LeadForms] export error", error);
+      toast({ title: "Erro ao exportar", description: "Tente novamente em instantes.", variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -795,6 +855,14 @@ const LeadForms = () => {
                                 onClick={() => handleCopy(embedCode, "Código de incorporação copiado.")}
                               >
                                 <Copy className="w-3 h-3" /> Embed
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1"
+                                onClick={() => handleExportCsv(formItem.id)}
+                              >
+                                <Download className="w-3 h-3" /> CSV
                               </Button>
                               {formItem.webhook_url && (
                                 <Button
@@ -1044,12 +1112,12 @@ const LeadForms = () => {
                     Esses campos serão criados automaticamente no formulário público e vinculados ao CRM.
                   </p>
                 </div>
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs whitespace-nowrap shrink-0">
                   {selectedDefaultFieldCount} selecionado(s)
                 </Badge>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2">
                 {defaultFieldKeys.map((key) => {
                   const template = DEFAULT_FIELD_TEMPLATES[key];
                   const isChecked = defaultFieldsValues?.[key] ?? false;

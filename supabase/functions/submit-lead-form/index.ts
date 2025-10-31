@@ -291,52 +291,56 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false },
   });
 
-  const { data: form, error: formError } = await supabase
+  // Carrega formulário base (sem relacionamentos) para evitar dependência de FKs no schema cache
+  const { data: baseForm, error: baseError } = await supabase
     .from("lead_forms")
-    .select(
-      `
-        id,
-        name,
-        success_message,
-        is_active,
-        default_owner_id,
-        submission_count,
-        lead_form_fields (
-          id,
-          key,
-          label,
-          type,
-          is_required,
-          order_index,
-          validations,
-          crm_field
-        ),
-        lead_form_variants (
-          id,
-          slug,
-          name,
-          is_default,
-          campaign_source,
-          campaign_id,
-          meta_ad_account_id,
-          meta_campaign_id,
-          meta_adset_id,
-          meta_ad_id,
-          automation_settings
-        )
-      `,
-    )
+    .select("id, name, success_message, is_active, default_owner_id, submission_count")
     .eq("id", body.formId)
-    .maybeSingle<LeadFormMetadata>();
+    .maybeSingle();
 
-  if (formError) {
-    console.error("[submit-lead-form] Error loading form", formError);
+  if (baseError) {
+    console.error("[submit-lead-form] Error loading form base", baseError);
     return response({ error: "Formulário indisponível no momento." }, 500);
   }
 
-  if (!form || !form.is_active) {
+  if (!baseForm || !baseForm.is_active) {
     return response({ error: "Formulário não está ativo." }, 404);
   }
+
+  // Carrega campos e variantes separadamente
+  const [{ data: fieldsRows, error: fieldsErr }, { data: variantsRows, error: variantsErr }] = await Promise.all([
+    supabase
+      .from("lead_form_fields")
+      .select("id, key, label, type, is_required, order_index, validations, crm_field")
+      .eq("form_id", baseForm.id),
+    supabase
+      .from("lead_form_variants")
+      .select(
+        "id, slug, name, is_default, campaign_source, campaign_id, meta_ad_account_id, meta_campaign_id, meta_adset_id, meta_ad_id, automation_settings"
+      )
+      .eq("form_id", baseForm.id),
+  ]);
+
+  if (fieldsErr) {
+    console.error("[submit-lead-form] Error loading fields", fieldsErr);
+    return response({ error: "Erro ao carregar configuração do formulário." }, 500);
+  }
+
+  if (variantsErr) {
+    console.error("[submit-lead-form] Error loading variants", variantsErr);
+    return response({ error: "Erro ao carregar configuração do formulário." }, 500);
+  }
+
+  const form: LeadFormMetadata = {
+    id: baseForm.id,
+    name: baseForm.name,
+    success_message: baseForm.success_message,
+    is_active: baseForm.is_active,
+    default_owner_id: baseForm.default_owner_id,
+    submission_count: baseForm.submission_count,
+    lead_form_fields: (fieldsRows ?? []) as unknown as LeadFormField[],
+    lead_form_variants: (variantsRows ?? []) as unknown as LeadFormVariant[],
+  };
 
   const payload = normalizePayload(body.payload ?? {});
   const tracking = body.tracking;
@@ -521,6 +525,38 @@ Deno.serve(async (req: Request) => {
 
   const successMessage =
     form.success_message ?? "Recebemos suas informações! Em breve nossa equipe entrará em contato.";
+
+  // Best-effort Meta Conversions API dispatch (non-blocking)
+  try {
+    const conversionsUrl = `${SUPABASE_URL}/functions/v1/meta-conversion-dispatch`;
+    const payloadForCapi = {
+      eventName: "Lead",
+      eventId: submissionId ?? undefined,
+      eventTime: Math.floor(Date.now() / 1000),
+      email: typeof payload.email === "string" ? payload.email : null,
+      phone: typeof payload.phone === "string" ? payload.phone : null,
+      fbp: submissionInsert.fbp ?? null,
+      fbc: submissionInsert.fbc ?? null,
+      clientIpAddress: submissionInsert.ip_address ?? null,
+      userAgent: submissionInsert.user_agent ?? null,
+      url: submissionInsert.landing_page ?? null,
+      formId: form.id,
+      campaign: {
+        meta_ad_account_id: variant?.meta_ad_account_id ?? null,
+        meta_campaign_id: variant?.meta_campaign_id ?? null,
+        meta_adset_id: variant?.meta_adset_id ?? null,
+        meta_ad_id: variant?.meta_ad_id ?? null,
+      },
+    };
+    // Fire-and-forget
+    fetch(conversionsUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payloadForCapi),
+    }).catch((e) => console.warn("[submit-lead-form] CAPI dispatch failed", e));
+  } catch (e) {
+    console.warn("[submit-lead-form] Failed to queue CAPI dispatch", e);
+  }
 
   return response({
     success: true,

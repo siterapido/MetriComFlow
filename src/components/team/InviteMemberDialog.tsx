@@ -26,7 +26,6 @@ import { useOrganizationPlanLimits } from "@/hooks/useSubscription";
 
 const inviteSchema = z.object({
   email: z.string().email("Informe um email válido"),
-  role: z.enum(["member", "manager", "admin", "owner"]),
   user_type: z.enum(["sales", "traffic_manager", "owner"]),
 });
 
@@ -50,7 +49,6 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
     resolver: zodResolver(inviteSchema),
     defaultValues: {
       email: "",
-      role: "member",
       user_type: "sales",
     },
   });
@@ -134,35 +132,7 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
               )}
             />
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="role"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Função na organização</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={isSending || subscriptionRestricted}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="member">Membro</SelectItem>
-                        <SelectItem value="manager">Manager</SelectItem>
-                        <SelectItem value="admin">Administrador</SelectItem>
-                        <SelectItem value="owner">Owner</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
+            <div className="grid gap-4 sm:grid-cols-1">
               <FormField
                 control={form.control}
                 name="user_type"
@@ -172,7 +142,7 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}
-                      disabled={isSending}
+                      disabled={isSending || subscriptionRestricted}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -190,6 +160,8 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
                 )}
               />
             </div>
+
+
 
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSending}>

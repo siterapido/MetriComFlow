@@ -21,7 +21,8 @@ export interface TeamInvitation {
 
 export interface InvitationPayload {
   email: string;
-  role: "owner" | "admin" | "manager" | "member";
+  // role is optional; defaults to 'member' server-side
+  role?: "owner" | "admin" | "manager" | "member";
   user_type: "owner" | "traffic_manager" | "sales";
 }
 
