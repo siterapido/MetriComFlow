@@ -24,6 +24,8 @@ type StripeMetadata = {
   price_id?: string;
   product_id?: string;
   latest_invoice_id?: string;
+  payment_intent_id?: string;
+  invoice_id?: string;
 };
 
 export default (globalThis as any).Deno?.serve(async (req: Request) => {
@@ -42,8 +44,8 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       (globalThis as any).Deno?.env.get("SUPABASE_URL") ??
       "";
     const SERVICE_ROLE_KEY =
-      (globalThis as any).Deno?.env.get("SERVICE_ROLE_KEY") ??
       (globalThis as any).Deno?.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+      (globalThis as any).Deno?.env.get("SERVICE_ROLE_KEY") ??
       "";
 
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -154,6 +156,19 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       (existingMetadata.stripe as StripeMetadata | undefined) ?? {};
 
     const price = stripeSubscription.items.data[0]?.price ?? null;
+    const paymentIntentId =
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : (session.payment_intent as Stripe.PaymentIntent | null | undefined)?.id ??
+          existingStripeMetadata.payment_intent_id;
+    const invoiceId =
+      typeof stripeSubscription.latest_invoice === "string"
+        ? stripeSubscription.latest_invoice
+        : stripeSubscription.latest_invoice?.id ??
+          (typeof session.invoice === "string"
+            ? session.invoice
+            : (session.invoice as Stripe.Invoice | null | undefined)?.id ??
+              existingStripeMetadata.invoice_id);
 
     const mergedStripeMetadata: StripeMetadata = {
       ...existingStripeMetadata,
@@ -167,10 +182,9 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       product_id:
         (typeof price?.product === "string" ? price.product : price?.product?.id) ??
         existingStripeMetadata.product_id,
-      latest_invoice_id:
-        typeof stripeSubscription.latest_invoice === "string"
-          ? stripeSubscription.latest_invoice
-          : stripeSubscription.latest_invoice?.id ?? existingStripeMetadata.latest_invoice_id,
+      latest_invoice_id: invoiceId ?? existingStripeMetadata.latest_invoice_id,
+      payment_intent_id: paymentIntentId ?? existingStripeMetadata.payment_intent_id,
+      invoice_id: invoiceId ?? existingStripeMetadata.invoice_id,
     };
 
     const mergedMetadata = {
@@ -204,6 +218,11 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       last_payment_date: new Date().toISOString(),
       last_payment_amount: paymentAmount,
       updated_at: new Date().toISOString(),
+      stripe_customer_id: mergedStripeMetadata.customer_id ?? null,
+      stripe_subscription_id: mergedStripeMetadata.subscription_id ?? null,
+      stripe_checkout_session_id: session.id,
+      stripe_payment_intent_id: mergedStripeMetadata.payment_intent_id ?? null,
+      stripe_invoice_id: mergedStripeMetadata.invoice_id ?? null,
     };
 
     if (planId) {

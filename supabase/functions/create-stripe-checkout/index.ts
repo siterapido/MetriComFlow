@@ -31,17 +31,6 @@ type StripeMetadata = {
   last_checkout_session_id?: string;
 };
 
-const STRIPE_PRODUCT_MAPPING: Record<
-  string,
-  {
-    productId: string;
-  }
-> = {
-  basico: { productId: "prod_TKcOWYyrPgp1Uq" },
-  intermediario: { productId: "prod_TKcTNtOv58UxuD" },
-  pro: { productId: "prod_TKcU4D22WUo505" },
-};
-
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -66,8 +55,8 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       (globalThis as any).Deno?.env.get("SUPABASE_URL") ??
       "";
     const SERVICE_ROLE_KEY =
-      (globalThis as any).Deno?.env.get("SERVICE_ROLE_KEY") ??
       (globalThis as any).Deno?.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+      (globalThis as any).Deno?.env.get("SERVICE_ROLE_KEY") ??
       "";
 
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -129,50 +118,37 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     }
 
     const planSlug = planData.slug as string;
-    const mapping = STRIPE_PRODUCT_MAPPING[planSlug];
+    const explicitPriceId = payload.priceId?.trim() || null;
+    const planPriceId =
+      typeof (planData as any).stripe_price_id === "string" && (planData as any).stripe_price_id.trim() !== ""
+        ? ((planData as any).stripe_price_id as string)
+        : null;
+    const priceId = explicitPriceId || planPriceId || null;
+
     console.log("create-stripe-checkout plan resolved:", {
       planId: planData.id,
       planSlug,
-      mapping,
+      stripePriceId: planPriceId,
+      explicitPriceProvided: !!explicitPriceId,
     });
-    const explicitPriceId = payload.priceId?.trim() || null;
-    let priceId = explicitPriceId;
-    let resolvedProductId: string | null = mapping?.productId ?? null;
 
     if (!priceId) {
-      if (!mapping) {
-        throw new Error(
-          `Plano "${planSlug}" não possui produto Stripe configurado. Atualize o mapeamento ou envie um priceId.`,
-        );
-      }
+      throw new Error(
+        `Plano "${planSlug}" não possui price Stripe configurado. Informe payload.priceId ou preencha subscription_plans.stripe_price_id.`,
+      );
+    }
 
-      const product = await stripe.products.retrieve(mapping.productId, {
-        expand: ["default_price"],
-      });
-      resolvedProductId = product.id;
+    const price = await stripe.prices.retrieve(priceId);
+    const productRef = price.product;
+    const resolvedProductId =
+      typeof productRef === "string"
+        ? productRef
+        : productRef && typeof productRef === "object"
+          ? productRef.id ?? null
+          : null;
 
-      if (typeof product.default_price === "string") {
-        priceId = product.default_price;
-      } else if (product.default_price && typeof product.default_price === "object") {
-        priceId = product.default_price.id ?? null;
-      }
-
-      if (!priceId) {
-        throw new Error(
-          `Produto Stripe (${mapping.productId}) sem preço padrão configurado. Informe priceId explicitamente.`,
-        );
-      }
-    } else {
-      const price = await stripe.prices.retrieve(priceId);
-      const productRef = price.product;
-      if (typeof productRef === "string") {
-        resolvedProductId = productRef;
-      } else if (productRef?.id) {
-        resolvedProductId = productRef.id;
-      }
-      if (!resolvedProductId) {
-        throw new Error("Não foi possível identificar o produto associado ao priceId informado.");
-      }
+    if (!resolvedProductId) {
+      throw new Error("Não foi possível identificar o produto associado ao price informado.");
     }
 
     let organizationId: string | null = payload.organizationId ?? null;
@@ -214,7 +190,6 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
           name: organizationName,
           slug: finalSlug,
           owner_id: user.id,
-          billing_email: user.email ?? null,
         })
         .select("id")
         .single();
@@ -356,7 +331,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       stripe: {
         ...stripeMetadata,
         customer_id: stripeCustomerId,
-        product_id: resolvedProductId ?? mapping?.productId ?? null,
+        product_id: resolvedProductId,
         price_id: priceId,
         last_checkout_session_id: session.id,
       },

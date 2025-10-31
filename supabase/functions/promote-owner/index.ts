@@ -113,7 +113,11 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
 
       const { data: newOrg, error: createOrgError } = await serviceClient
         .from("organizations")
-        .insert({ name: orgNameBase, slug: finalSlug, owner_id: user.id, billing_email: user.email })
+        .insert({
+          name: orgNameBase,
+          slug: finalSlug,
+          owner_id: user.id,
+        })
         .select("id")
         .single();
       if (createOrgError) {

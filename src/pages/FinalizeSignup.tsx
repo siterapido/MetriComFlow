@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,23 +8,135 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 
+type ClaimState = {
+  token: string | null;
+  organizationId: string | null;
+  subscriptionId: string | null;
+  status: string | null;
+  sessionId: string | null;
+  planSlug: string | null;
+};
+
 export default function FinalizeSignup() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [email, setEmail] = useState(searchParams.get("email") || "");
+
+  const queryValues = useMemo(() => {
+    const claimToken = searchParams.get("claim");
+    const organizationId = searchParams.get("org");
+    const subscriptionId = searchParams.get("sub");
+    const sessionId = searchParams.get("session_id");
+    const emailParam = searchParams.get("email");
+    const statusParam = searchParams.get("claim_status");
+
+    return {
+      claimToken,
+      organizationId,
+      subscriptionId,
+      sessionId,
+      emailParam,
+      statusParam,
+    };
+  }, [searchParams]);
+
+  const [email, setEmail] = useState(queryValues.emailParam ?? "");
   const [password, setPassword] = useState("");
+  const [claim, setClaim] = useState<ClaimState>({
+    token: queryValues.claimToken,
+    organizationId: queryValues.organizationId,
+    subscriptionId: queryValues.subscriptionId,
+    status: queryValues.statusParam ?? (queryValues.claimToken ? "pending" : null),
+    sessionId: queryValues.sessionId,
+    planSlug: null,
+  });
+  const [isFetchingClaim, setIsFetchingClaim] = useState<boolean>(
+    Boolean(queryValues.sessionId) && !queryValues.claimToken,
+  );
+  const [claimError, setClaimError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const claim = useMemo(
-    () => ({
-      claimToken: searchParams.get("claim") || "",
-      organizationId: searchParams.get("org") || "",
-      subscriptionId: searchParams.get("sub") || "",
-    }),
-    [searchParams]
-  );
+  useEffect(() => {
+    setClaim((prev) => ({
+      ...prev,
+      token: queryValues.claimToken,
+      organizationId: queryValues.organizationId,
+      subscriptionId: queryValues.subscriptionId,
+      sessionId: queryValues.sessionId,
+      status:
+        queryValues.statusParam ??
+        (queryValues.claimToken
+          ? prev.status ?? "pending"
+          : prev.status),
+    }));
+    if (queryValues.emailParam && queryValues.emailParam !== email) {
+      setEmail(queryValues.emailParam);
+    }
+  }, [
+    email,
+    queryValues.claimToken,
+    queryValues.organizationId,
+    queryValues.subscriptionId,
+    queryValues.sessionId,
+    queryValues.statusParam,
+    queryValues.emailParam,
+  ]);
 
-  const missingClaim = !claim.claimToken || !claim.organizationId || !claim.subscriptionId;
+  useEffect(() => {
+    if (!claim.sessionId) {
+      setIsFetchingClaim(false);
+      return;
+    }
+    if (claim.token) {
+      setIsFetchingClaim(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsFetchingClaim(true);
+    setClaimError(null);
+
+    supabase.functions
+      .invoke("checkout-session-claim", {
+        body: { sessionId: claim.sessionId },
+      })
+      .then(({ data, error }) => {
+        if (isCancelled) return;
+        if (error) {
+          throw new Error(error.message || "Falha ao localizar a sessão de checkout.");
+        }
+        if (!data?.success) {
+          throw new Error(data?.error || "Checkout não encontrado ou expirado.");
+        }
+
+        setClaim({
+          token: data.claimToken,
+          organizationId: data.organizationId,
+          subscriptionId: data.subscriptionId,
+          status: data.status ?? "pending",
+          sessionId: claim.sessionId,
+          planSlug: data.planSlug ?? null,
+        });
+        if (data.email) {
+          setEmail(data.email);
+        }
+      })
+      .catch((err) => {
+        console.error("checkout-session-claim failed:", err);
+        setClaimError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsFetchingClaim(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [claim.sessionId, claim.token]);
+
+  const missingClaim = !claim.token || !claim.organizationId || !claim.subscriptionId;
+  const claimCompleted = claim.status === "completed";
 
   const handleFinalize = async () => {
     if (!email || !password) {
@@ -31,73 +144,50 @@ export default function FinalizeSignup() {
       return;
     }
     if (missingClaim) {
-      toast.error("Dados de reivindicação inválidos.");
+      toast.error("Dados de compra não encontrados. Verifique o link recebido por email.");
       return;
     }
+    if (claimCompleted) {
+      toast.info("Este cadastro já foi finalizado. Faça login para continuar.");
+      navigate("/login");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      // Tenta criar nova conta.
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
+      const { data, error } = await supabase.functions.invoke("complete-stripe-signup", {
+        body: {
+          claimToken: claim.token,
+          password,
+        },
+      });
+      if (error) {
+        throw new Error(error.message || "Falha ao concluir cadastro.");
+      }
+      if (!data?.success) {
+        throw new Error(data?.error || "Não foi possível completar o cadastro.");
+      }
+
+      const finalEmail = (data.email as string | undefined) ?? email;
+      setEmail(finalEmail);
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: finalEmail,
         password,
       });
 
-      // Alguns projetos exigem confirmação por email e não retornam sessão aqui.
-      // Para garantir que temos JWT ativo antes de invocar a função, tenta login.
-      let loggedIn = false;
-      if (signUpError) {
-        const msg = String(signUpError?.message || signUpError).toLowerCase();
-        const isAlreadyRegistered = msg.includes("already") || msg.includes("registrado") || msg.includes("existing");
-        if (isAlreadyRegistered) {
-          // Conta já existe: faz login para prosseguir com a reivindicação.
-          const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
-          if (loginError) throw loginError;
-          loggedIn = true;
-        } else {
-          throw signUpError;
-        }
-      } else {
-        // Caso não haja sessão, tenta login para garantir JWT.
-        const { data: sessionData } = await supabase.auth.getSession();
-        if (!sessionData?.session) {
-          const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
-          if (loginError) {
-            // Se o projeto exigir confirmação por email, informa ao usuário.
-            console.warn("Falha ao obter sessão após signUp:", loginError);
-          } else {
-            loggedIn = true;
-          }
-        } else {
-          loggedIn = true;
-        }
+      if (signInError) {
+        toast.success("Senha definida! Faça login para acessar sua conta.");
+        navigate(`/login?email=${encodeURIComponent(finalEmail)}`);
+        return;
       }
 
-      // Invoca função para reivindicar organização
-      const { data: claimData, error: claimError } = await supabase.functions.invoke("claim-account", {
-        body: {
-          claimToken: claim.claimToken,
-          organizationId: claim.organizationId,
-          subscriptionId: claim.subscriptionId,
-        },
-      });
-
-      if (claimError) {
-        console.warn("Falha ao invocar claim-account:", claimError);
-      }
-
-      if (claimData?.success) {
-        toast.success("Conta criada e organização reivindicada com sucesso!");
-      } else {
-        toast.success(
-          "Cadastro criado! Enviamos um email de confirmação. Após confirmar, você poderá acessar o painel."
-        );
-      }
-
-      // Se já estiver logado, pode ir direto ao dashboard; caso contrário, direciona ao login
-      navigate(loggedIn ? "/dashboard" : "/login");
-    } catch (err: any) {
-      console.error(err);
-      toast.error(String(err?.message || err));
+      toast.success("Cadastro finalizado com sucesso! Bem-vindo ao Insightfy.");
+      setClaim((prev) => ({ ...prev, status: "completed" }));
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      console.error("complete-stripe-signup failed:", err);
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -110,15 +200,34 @@ export default function FinalizeSignup() {
           <CardHeader>
             <CardTitle>Finalizar cadastro</CardTitle>
             <CardDescription>
-              Use o email e a senha definidos no checkout para reivindicar sua organização. Se ainda não criou uma senha, você pode definir agora.
+              Pagamento confirmado! Defina uma senha para acessar o Insightfy e gerenciar sua nova organização.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {missingClaim && (
-              <div className="text-sm text-destructive mb-4">
-                Dados de reivindicação inválidos ou ausentes. Volte ao checkout e tente novamente.
+            {claimError && (
+              <div className="mb-4 text-sm text-destructive">
+                {claimError}
               </div>
             )}
+
+            {isFetchingClaim && (
+              <div className="mb-4 text-sm text-muted-foreground">
+                Validando sua compra... isso pode levar alguns segundos.
+              </div>
+            )}
+
+            {claimCompleted && (
+              <div className="mb-4 text-sm text-muted-foreground">
+                Este cadastro já foi finalizado. Faça login com sua senha para continuar.
+              </div>
+            )}
+
+            {missingClaim && !isFetchingClaim && !claimError && (
+              <div className="mb-4 text-sm text-destructive">
+                Não encontramos os dados do checkout. Use o link enviado por email ou conclua o pagamento novamente.
+              </div>
+            )}
+
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -128,20 +237,38 @@ export default function FinalizeSignup() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="seu@email.com"
+                  disabled={isFetchingClaim || claimCompleted}
+                  readOnly={Boolean(claim.token)}
                 />
+                {Boolean(claim.token) && (
+                  <p className="text-xs text-muted-foreground">
+                    Utilizaremos o mesmo email informado no Stripe para criar sua conta.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
+                <Label htmlFor="password">Defina uma senha</Label>
                 <Input
                   id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  disabled={isFetchingClaim || claimCompleted}
                 />
               </div>
-              <Button onClick={handleFinalize} disabled={isSubmitting || missingClaim}>
-                {isSubmitting ? "Finalizando..." : "Criar conta e finalizar"}
+              <Button
+                onClick={handleFinalize}
+                disabled={isSubmitting || isFetchingClaim || missingClaim || claimCompleted}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Finalizando...
+                  </>
+                ) : (
+                  "Ativar acesso"
+                )}
               </Button>
             </div>
           </CardContent>

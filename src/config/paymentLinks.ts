@@ -10,13 +10,19 @@ type PaymentLinkConfig = {
 
 export const PAYMENT_LINKS: Record<PlanSlug, PaymentLinkConfig> = {
   basico: {
-    url: "https://buy.stripe.com/test_aFacN73WR2pn8MB1rB3Nm00",
+    url: "https://buy.stripe.com/test_eVqcN66x75qIcpc1C94ow03",
+    priceId: "price_1SO7VUJa5tHS2rd0mccenEt7",
+    productId: "prod_TKn5KxljdPu8xg",
   },
   intermediario: {
-    url: "https://buy.stripe.com/test_4gM28t64Z1ljfaZ0nx3Nm01",
+    url: "https://buy.stripe.com/test_8x2cN6g7H1as0GueoV4ow04",
+    priceId: "price_1SO7VcJa5tHS2rd0GNuq7QCO",
+    productId: "prod_TKn5x6gdY9NKJT",
   },
   pro: {
-    url: "https://buy.stripe.com/test_4gM28t64Z1ljfaZ0nx3Nm01",
+    url: "https://buy.stripe.com/test_fZudRa3kVaL2dtgbcJ4ow05",
+    priceId: "price_1SO7VmJa5tHS2rd06pyBODW3",
+    productId: "prod_TKn5fkLPEfHdVT",
   },
 };
 
