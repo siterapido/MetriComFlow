@@ -1,4 +1,4 @@
-import { BarChart3, Users, Target, LayoutDashboard, TrendingUp, FileText, Settings, UsersRound, CreditCard, type LucideIcon } from "lucide-react";
+import { BarChart3, Users, LayoutDashboard, TrendingUp, FileText, Settings, UsersRound, CreditCard, type LucideIcon } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -39,12 +39,6 @@ const items: NavItem[] = [
     url: "/formularios",
     icon: FileText,
     requiresCRM: true,
-  },
-  {
-    title: "Metas",
-    url: "/metas",
-    icon: Target,
-    requiresMetrics: true,
   },
   {
     title: "Métricas Meta Ads",

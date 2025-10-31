@@ -424,6 +424,21 @@ async function createSubscriptionFromStripeSession({
     subRow.metadata = mergedMetadata;
   }
 
+  await supabase.from("subscription_event_logs").insert({
+    organization_id: organizationId,
+    subscription_id: subscriptionId,
+    event_type: "plan_change_confirmed",
+    actor_user_id: userId,
+    context: {
+      plan_id: planId,
+      plan_slug: planSlug,
+      stripe_subscription_id: stripeMeta.subscription_id ?? null,
+      stripe_invoice_id: stripeMeta.invoice_id ?? null,
+      amount_paid: (price?.unit_amount ?? 0) / 100,
+      source: "checkout-session-claim",
+    },
+  });
+
   if (isNewUser) {
     try {
       const APP_URL =

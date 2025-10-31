@@ -48,6 +48,8 @@ export function PlanCard({
           ? "border-primary bg-gradient-to-br from-primary/5 to-secondary/5"
           : "border-border bg-gradient-to-br from-card to-accent/20"
       } ${plan.is_popular ? "ring-2 ring-success/50" : ""}`}
+      data-plan-id={plan.id}
+      data-plan-slug={plan.slug}
     >
       {/* Popular Badge */}
       {plan.is_popular && !isCurrentPlan && (
@@ -149,6 +151,7 @@ export function PlanCard({
                 ? "bg-muted text-muted-foreground cursor-not-allowed"
                 : "bg-primary hover:bg-primary/90"
             }`}
+            data-testid={`plan-select-${plan.slug}`}
           >
             {buttonText}
           </Button>

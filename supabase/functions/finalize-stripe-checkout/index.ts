@@ -154,6 +154,8 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       (subscriptionRow.metadata as Record<string, unknown> | null) ?? {};
     const existingStripeMetadata =
       (existingMetadata.stripe as StripeMetadata | undefined) ?? {};
+    const pendingPlanMeta =
+      (existingMetadata.pending_plan as Record<string, unknown> | undefined) ?? undefined;
 
     const price = stripeSubscription.items.data[0]?.price ?? null;
     const paymentIntentId =
@@ -196,6 +198,17 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       },
     };
 
+    const cleanedMetadata = { ...mergedMetadata };
+    if ("pending_plan" in cleanedMetadata) {
+      delete (cleanedMetadata as Record<string, unknown>).pending_plan;
+    }
+
+    if ("pending_plan" in mergedMetadata) {
+      const { pending_plan, ...rest } = mergedMetadata as Record<string, unknown>;
+      Object.assign(mergedMetadata, rest);
+      delete (mergedMetadata as any).pending_plan;
+    }
+
     const currentPeriodStart = stripeSubscription.current_period_start
       ? new Date(stripeSubscription.current_period_start * 1000).toISOString()
       : new Date().toISOString();
@@ -211,7 +224,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
 
     const updatePayload: Record<string, unknown> = {
       status: "active",
-      metadata: mergedMetadata,
+      metadata: cleanedMetadata,
       current_period_start: currentPeriodStart,
       current_period_end: currentPeriodEnd,
       next_billing_date: nextBillingDate,
@@ -238,6 +251,42 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
     if (updateError) {
       throw updateError;
     }
+
+    const previousStripeSubscriptionId =
+      typeof pendingPlanMeta?.previous_stripe_subscription_id === "string"
+        ? (pendingPlanMeta.previous_stripe_subscription_id as string)
+        : existingStripeMetadata.subscription_id &&
+            existingStripeMetadata.subscription_id !== stripeSubscription.id
+          ? existingStripeMetadata.subscription_id
+          : null;
+
+    if (previousStripeSubscriptionId && previousStripeSubscriptionId !== stripeSubscription.id) {
+      try {
+        await stripe.subscriptions.update(previousStripeSubscriptionId, {
+          cancel_at_period_end: true,
+        });
+      } catch (cancelErr) {
+        console.warn(
+          "Não foi possível agendar cancelamento da assinatura anterior na Stripe:",
+          cancelErr,
+        );
+      }
+    }
+
+    await adminClient.from("subscription_event_logs").insert({
+      organization_id: organizationId,
+      subscription_id: subscriptionId,
+      event_type: "plan_change_confirmed",
+      actor_user_id: userData.user.id,
+      context: {
+        plan_id: planId,
+        plan_slug: sessionMetadata.plan_slug ?? subscriptionMetadata.plan_slug ?? null,
+        stripe_subscription_id: mergedStripeMetadata.subscription_id ?? null,
+        stripe_invoice_id: mergedStripeMetadata.invoice_id ?? null,
+        amount_paid: paymentAmount,
+        previous_plan_id: subscriptionRow.plan_id ?? null,
+      },
+    });
 
     return new Response(
       JSON.stringify({ success: true }),

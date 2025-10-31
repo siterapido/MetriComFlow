@@ -271,6 +271,60 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       subscriptionId = inserted.id;
     }
 
+    let currentPlanRecord: Record<string, unknown> | null = null;
+
+    if (subscriptionRecord?.plan_id) {
+      const { data: currentPlan, error: currentPlanError } = await adminClient
+        .from("subscription_plans")
+        .select("id, price, max_ad_accounts, max_users")
+        .eq("id", subscriptionRecord.plan_id)
+        .maybeSingle();
+
+      if (currentPlanError) {
+        throw currentPlanError;
+      }
+
+      currentPlanRecord = currentPlan ?? null;
+    }
+
+    const isDowngrade = Boolean(
+      subscriptionRecord?.plan_id &&
+        subscriptionRecord.plan_id !== planData.id &&
+        currentPlanRecord &&
+        typeof (currentPlanRecord as any)?.price === "number" &&
+        (currentPlanRecord as any).price > planData.price,
+    );
+
+    if (isDowngrade && organizationId) {
+      const { count: adAccountsCount, error: adAccountsError } = await adminClient
+        .from("ad_accounts")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", organizationId);
+
+      if (adAccountsError) {
+        throw adAccountsError;
+      }
+
+      const { count: activeUsersCount, error: membersError } = await adminClient
+        .from("organization_memberships")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
+        .eq("is_active", true);
+
+      if (membersError) {
+        throw membersError;
+      }
+
+      const exceedsAdAccounts = (adAccountsCount ?? 0) > planData.max_ad_accounts;
+      const exceedsUsers = (activeUsersCount ?? 0) > planData.max_users;
+
+      if (exceedsAdAccounts || exceedsUsers) {
+        throw new Error(
+          "Downgrade indisponível: o uso atual excede os limites do plano selecionado.",
+        );
+      }
+    }
+
     if (!subscriptionId) {
       throw new Error("Falha ao obter ou criar assinatura da organização.");
     }
@@ -279,6 +333,8 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       (subscriptionRecord.metadata as Record<string, unknown> | null) ?? {};
     const stripeMetadata =
       (existingMetadata.stripe as StripeMetadata | undefined) ?? {};
+
+    const previousStripeSubscriptionId = stripeMetadata.subscription_id ?? null;
 
     let stripeCustomerId = stripeMetadata.customer_id;
 
@@ -326,6 +382,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       },
     });
 
+    const requestTimestamp = new Date().toISOString();
     const updatedMetadata = {
       ...existingMetadata,
       stripe: {
@@ -335,20 +392,48 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
         price_id: priceId,
         last_checkout_session_id: session.id,
       },
+      pending_plan: {
+        plan_id: planData.id,
+        plan_slug: planSlug,
+        price_id: priceId,
+        requested_at: requestTimestamp,
+        previous_plan_id: subscriptionRecord?.plan_id ?? null,
+        previous_stripe_subscription_id: previousStripeSubscriptionId,
+      },
     };
+
+    const updatePayload: Record<string, unknown> = {
+      metadata: updatedMetadata,
+      updated_at: requestTimestamp,
+      stripe_checkout_session_id: session.id,
+    };
+
+    if (!subscriptionRecord?.plan_id) {
+      updatePayload.plan_id = planData.id;
+    }
 
     const { error: updateError } = await adminClient
       .from("organization_subscriptions")
-      .update({
-        plan_id: planData.id,
-        metadata: updatedMetadata,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", subscriptionId);
 
     if (updateError) {
       console.warn("Falha ao atualizar metadata da assinatura:", updateError);
     }
+
+    await adminClient.from("subscription_event_logs").insert({
+      organization_id: organizationId,
+      subscription_id: subscriptionId,
+      event_type: "plan_change_requested",
+      actor_user_id: user.id,
+      context: {
+        plan_id: planData.id,
+        plan_slug: planSlug,
+        price_id: priceId,
+        stripe_session_id: session.id,
+        previous_plan_id: subscriptionRecord?.plan_id ?? null,
+      },
+    });
 
     return new Response(
       JSON.stringify({ checkoutUrl: session.url }),

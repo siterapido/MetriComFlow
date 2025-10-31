@@ -3,12 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
-export type DashboardHome =
-  | "dashboard"
-  | "leads"
-  | "leads/kanban"
-  | "metas"
-  | "meta-ads-config";
+export type DashboardHome = "dashboard" | "leads" | "leads/kanban" | "meta-ads-config";
 
 export interface NotificationSettings {
   emailLeads: boolean;
@@ -53,6 +48,22 @@ export interface UserSettings {
   privacy: PrivacySettings;
 }
 
+const normalizeDefaultHome = (value: unknown): DashboardHome => {
+  switch (value) {
+    case "leads":
+      return "leads";
+    case "leads/kanban":
+      return "leads/kanban";
+    case "meta-ads-config":
+      return "meta-ads-config";
+    case "dashboard":
+      return "dashboard";
+    case "metas":
+    default:
+      return "dashboard";
+  }
+};
+
 export const defaultUserSettings: UserSettings = {
   defaultHome: "dashboard",
   notifications: {
@@ -92,7 +103,7 @@ const deepMergeSettings = (partial: Partial<UserSettings> | null | undefined): U
   if (!partial) return merged;
 
   return {
-    defaultHome: partial.defaultHome ?? merged.defaultHome,
+    defaultHome: normalizeDefaultHome(partial.defaultHome ?? merged.defaultHome),
     notifications: {
       ...merged.notifications,
       ...partial.notifications,
@@ -179,7 +190,6 @@ export const DASHBOARD_HOME_PATHS: Record<DashboardHome, string> = {
   dashboard: "/dashboard",
   leads: "/leads/linear",
   "leads/kanban": "/leads/kanban",
-  metas: "/metas",
   "meta-ads-config": "/meta-ads-config",
 };
 

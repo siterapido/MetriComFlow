@@ -21,6 +21,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Loader2, Plus, RefreshCw, Building2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { useCanAddAdAccount } from "@/hooks/useSubscription";
 
 interface InactiveAccount {
   id: string;
@@ -51,10 +52,16 @@ export default function AddAdAccountModal({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("new");
+  const canAddAdAccount = useCanAddAdAccount();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!canAddAdAccount) {
+      setError("Seu plano não permite adicionar novas contas no momento. Regularize o pagamento ou faça upgrade.");
+      return;
+    }
 
     // Validação
     if (!externalId.trim()) {
@@ -145,6 +152,15 @@ export default function AddAdAccountModal({
           <TabsContent value="new" className="mt-4">
             <form onSubmit={handleSubmit}>
               <div className="space-y-4">
+                {!canAddAdAccount && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Limite atingido ou pagamento pendente. Faça upgrade ou regularize o plano para adicionar novas contas.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 {error && (
                   <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
@@ -178,7 +194,7 @@ export default function AddAdAccountModal({
                     placeholder="123456789012345 ou act_123456789012345"
                     value={externalId}
                     onChange={(e) => setExternalId(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isLoading || !canAddAdAccount}
                     className="bg-input border-border"
                   />
                   <p className="text-xs text-muted-foreground">
@@ -195,7 +211,7 @@ export default function AddAdAccountModal({
                     placeholder="Ex: Minha Empresa - Anúncios"
                     value={businessName}
                     onChange={(e) => setBusinessName(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isLoading || !canAddAdAccount}
                     className="bg-input border-border"
                   />
                   <p className="text-xs text-muted-foreground">
@@ -223,7 +239,7 @@ export default function AddAdAccountModal({
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || !canAddAdAccount}
                   className="gap-2 bg-primary hover:bg-primary/90"
                 >
                   {isLoading ? (

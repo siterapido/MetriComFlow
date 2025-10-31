@@ -44,6 +44,7 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
 
   const canAddUser = permissions?.canAddUser ?? true;
   const usersLimitReached = limits?.users_limit_reached ?? false;
+  const subscriptionRestricted = !canAddUser && !usersLimitReached;
 
   const form = useForm<InviteFormValues>({
     resolver: zodResolver(inviteSchema),
@@ -99,6 +100,17 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
             </AlertDescription>
           </Alert>
         )}
+        {subscriptionRestricted && (
+          <Alert className="bg-warning/10 border-warning">
+            <AlertTriangle className="h-4 w-4 text-warning" />
+            <AlertDescription className="text-warning-foreground">
+              <p className="font-semibold">Plano com acesso limitado</p>
+              <p className="text-sm mt-1">
+                Regularize o pagamento ou faça upgrade para convidar novos membros para a equipe.
+              </p>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
@@ -114,7 +126,7 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
                       type="email"
                       placeholder="colaborador@empresa.com"
                       autoComplete="off"
-                      disabled={isSending}
+                      disabled={isSending || subscriptionRestricted}
                     />
                   </FormControl>
                   <FormMessage />
@@ -132,7 +144,7 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}
-                      disabled={isSending}
+                      disabled={isSending || subscriptionRestricted}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -183,9 +195,9 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSending}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSending || usersLimitReached}>
+              <Button type="submit" disabled={isSending || usersLimitReached || subscriptionRestricted}>
                 {isSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {usersLimitReached ? "Limite atingido" : "Enviar convite"}
+                {usersLimitReached ? "Limite atingido" : subscriptionRestricted ? "Acesso bloqueado" : "Enviar convite"}
               </Button>
             </div>
           </form>

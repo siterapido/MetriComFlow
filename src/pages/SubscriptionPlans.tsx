@@ -1,15 +1,14 @@
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CreditCard, Users, BarChart3, Loader2, AlertCircle, Clock, CheckCircle, XCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { CreditCard, Users, BarChart3, AlertCircle, Clock, CheckCircle, XCircle } from "lucide-react";
 import { PlanCard } from "@/components/subscription/PlanCard";
 import { UsageMeter } from "@/components/subscription/UsageMeter";
-import { UpgradePlanDialog } from "@/components/subscription/UpgradePlanDialog";
 import { InvoiceHistory } from "@/components/subscription/InvoiceHistory";
+import { SubscriptionTimeline } from "@/components/subscription/SubscriptionTimeline";
 import {
   useSubscriptionPlans,
   useCurrentSubscription,
@@ -18,26 +17,25 @@ import {
   useTrialDaysRemaining,
   type SubscriptionPlan,
   type OrganizationPlanLimits,
+  useCancelSubscription,
+  useReactivateSubscription,
+  useSubscriptionTimeline,
 } from "@/hooks/useSubscription";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
-import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
+import { getStripePortalUrl } from "@/lib/stripePortal";
 
 export default function SubscriptionPlans() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: org } = useActiveOrganization();
   const { data: plans, isLoading: plansLoading } = useSubscriptionPlans();
   const { data: currentSubscription, isLoading: subscriptionLoading } = useCurrentSubscription();
   const { data: limits, isLoading: limitsLoading } = useOrganizationPlanLimits();
+  const { mutate: cancelSubscription, isPending: cancelingSubscription } = useCancelSubscription();
+  const { mutate: reactivateSubscription, isPending: reactivatingSubscription } = useReactivateSubscription();
+  const { data: subscriptionEvents } = useSubscriptionTimeline(currentSubscription?.id ?? null);
   const isOnTrial = useIsOnTrial();
   const trialDaysRemaining = useTrialDaysRemaining();
-
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
-  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
-  const [isFinalizingCheckout, setIsFinalizingCheckout] = useState(false);
 
   const isLoading = plansLoading || subscriptionLoading || limitsLoading;
 
@@ -51,101 +49,69 @@ export default function SubscriptionPlans() {
       ? (limits as OrganizationPlanLimits)
       : null;
 
+  const pushDataLayer = useCallback((payload: Record<string, unknown>) => {
+    if (typeof window !== "undefined" && Array.isArray((window as any).dataLayer)) {
+      (window as any).dataLayer.push(payload);
+    }
+  }, []);
+
+  const portalUrl = getStripePortalUrl();
+
   const handleSelectPlan = (planId: string) => {
-    const plan = plans?.find((p) => p.id === planId);
-    // Allow selection if no current plan OR different from current plan
-    if (plan && (!currentPlan || plan.id !== currentPlan.id)) {
-      setSelectedPlan(plan);
-      setUpgradeDialogOpen(true);
-    }
-  };
-
-  // Se vier com ?plan=slug|id nos params, apenas abre o diálogo de upgrade (checkout desativado)
-  useEffect(() => {
-    if (!plans || plans.length === 0) return;
-    const params = new URLSearchParams(location.search);
-    const planParam = params.get("plan");
-    if (!planParam) return;
-    const plan = plans.find((p) => p.slug === planParam || p.id === planParam);
-    if (plan && plan.id !== currentPlan?.id) {
-      setSelectedPlan(plan);
-      setUpgradeDialogOpen(true);
-    }
-  }, [plans, location.search, currentPlan?.id]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const canceled = params.get("checkout_canceled");
-    const sessionId = params.get("session_id");
-
-    const removeParams = (...keys: string[]) => {
-      const nextParams = new URLSearchParams(location.search);
-      keys.forEach((key) => nextParams.delete(key));
-      navigate(
-        {
-          pathname: location.pathname,
-          search: nextParams.toString() ? `?${nextParams.toString()}` : "",
-        },
-        { replace: true },
-      );
-    };
-
-    if (canceled) {
+    if (!org?.isOwner) {
       toast({
-        title: "Pagamento cancelado",
-        description: "Você pode tentar novamente quando estiver pronto.",
+        title: "Acesso restrito",
+        description: "Somente proprietários podem atualizar o plano da organização.",
+        variant: "destructive",
       });
-      removeParams("checkout_canceled");
       return;
     }
 
-    if (!sessionId || isFinalizingCheckout) return;
+    const plan = plans?.find((p) => p.id === planId);
+    if (!plan || (currentPlan && plan.id === currentPlan.id)) {
+      return;
+    }
 
-    setIsFinalizingCheckout(true);
-
-    supabase.functions
-      .invoke("finalize-stripe-checkout", {
-        body: { sessionId },
-      })
-      .then(({ data, error }) => {
-        if (error) throw new Error(error.message || "Falha ao confirmar pagamento.");
-        if (!data?.success) {
-          throw new Error("Não foi possível validar o pagamento com a Stripe.");
-        }
-
-        toast({
-          title: "Plano ativado!",
-          description: "Sua assinatura foi atualizada com sucesso.",
-        });
-
-        queryClient.invalidateQueries({ queryKey: ["current-subscription"] });
-        queryClient.invalidateQueries({ queryKey: ["organization-plan-limits"] });
-        queryClient.invalidateQueries({ queryKey: ["subscription-payments"] });
-        setUpgradeDialogOpen(false);
-        setSelectedPlan(null);
-        removeParams("session_id");
-        navigate("/dashboard", { replace: true });
-      })
-      .catch((err) => {
-        console.error("Erro ao finalizar checkout Stripe:", err);
-        toast({
-          title: "Erro ao confirmar pagamento",
-          description: err instanceof Error ? err.message : "Tente novamente em instantes.",
-          variant: "destructive",
-        });
-        removeParams("session_id");
-      })
-      .finally(() => {
-        setIsFinalizingCheckout(false);
+    if (currentPlan && plan.price <= currentPlan.price) {
+      toast({
+        title: "Opção indisponível",
+        description: "Planos com valor menor não podem ser selecionados nesta tela.",
       });
-  }, [
-    isFinalizingCheckout,
-    location.pathname,
-    location.search,
-    navigate,
-    queryClient,
-    toast,
-  ]);
+      return;
+    }
+
+    pushDataLayer({
+      event: "subscription_upgrade_flow_opened",
+      planId: plan.id,
+      planSlug: plan.slug,
+    });
+
+    if (!portalUrl) {
+      toast({
+        title: "Atualização indisponível",
+        description: "Não foi possível iniciar o processo de upgrade agora.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    window.open(portalUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const handleCancelSubscription = () => {
+    if (!currentSubscription) return;
+    const confirmed = window.confirm(
+      "Tem certeza que deseja cancelar o plano? Seu acesso será encerrado ao final do ciclo atual.",
+    );
+    if (!confirmed) return;
+
+    const reason = window.prompt("Informe um motivo (opcional) para o cancelamento:");
+    cancelSubscription(reason ?? undefined);
+  };
+
+  const handleReactivateSubscription = () => {
+    reactivateSubscription();
+  };
 
   if (isLoading) {
     return (
@@ -168,18 +134,6 @@ export default function SubscriptionPlans() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Upgrade Dialog */}
-      <UpgradePlanDialog
-        open={upgradeDialogOpen}
-        onOpenChange={setUpgradeDialogOpen}
-        currentPlan={currentPlan || null}
-        newPlan={selectedPlan}
-        currentUsage={{
-          ad_accounts: limitsSafe?.current_ad_accounts || 0,
-          users: limitsSafe?.current_users || 0,
-        }}
-      />
-
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
@@ -199,7 +153,10 @@ export default function SubscriptionPlans() {
         {/* Current Plan Badge */}
         {currentPlan && (
           <div className="flex items-center gap-2">
-            <Badge className="bg-primary text-primary-foreground px-4 py-2 text-sm">
+            <Badge
+              className="bg-primary text-primary-foreground px-4 py-2 text-sm"
+              data-testid="current-plan-badge"
+            >
               Plano Atual: {currentPlan.name}
             </Badge>
             {isOnTrial && (
@@ -267,20 +224,13 @@ export default function SubscriptionPlans() {
           <AlertDescription className="text-success">
             <p className="font-semibold">Assinatura Ativa ✓</p>
             <p className="text-sm mt-1">
-              Seu plano está ativo e funcionando normalmente. Próxima cobrança:{" "}
+              Seu plano está ativo e a gestão de cobranças acontece diretamente no portal Stripe.
+              Próxima cobrança:
+              {" "}
               {currentSubscription.next_billing_date
                 ? new Date(currentSubscription.next_billing_date).toLocaleDateString("pt-BR")
                 : "A definir"}
             </p>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {isFinalizingCheckout && (
-        <Alert className="bg-primary/10 border-primary">
-          <Loader2 className="h-4 w-4 text-primary animate-spin" />
-          <AlertDescription className="text-foreground">
-            Confirmando pagamento com a Stripe...
           </AlertDescription>
         </Alert>
       )}
@@ -379,7 +329,18 @@ export default function SubscriptionPlans() {
                 plan={plan}
                 isCurrentPlan={plan.id === currentPlan?.id}
                 onSelect={handleSelectPlan}
-                disabled={!org?.isOwner}
+                disabled={
+                  !org?.isOwner || (currentPlan ? plan.price < currentPlan.price : false)
+                }
+                ctaLabel={
+                  currentPlan
+                    ? plan.id === currentPlan.id
+                      ? "Plano atual"
+                      : plan.price > currentPlan.price
+                        ? "Atualizar plano"
+                        : "Plano indisponível"
+                    : "Contratar plano"
+                }
               />
             ))}
           </div>
@@ -391,6 +352,49 @@ export default function SubscriptionPlans() {
         <div className="mt-8">
           <InvoiceHistory subscriptionId={currentSubscription.id} />
         </div>
+      )}
+
+      {/* Subscription Actions */}
+      {currentSubscription && (
+        <Card className="mt-6 border-border">
+          <CardContent className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground">Gerenciar Assinatura</h3>
+              <p className="text-sm text-muted-foreground">
+                Solicite cancelamento ou retome o plano quando estiver pronto.
+              </p>
+              {currentSubscription.cancel_at_period_end && currentSubscription.current_period_end && (
+                <p className="text-xs text-warning mt-2">
+                  Cancelamento programado para{" "}
+                  {new Date(currentSubscription.current_period_end).toLocaleDateString("pt-BR")}.
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col md:flex-row gap-2">
+              <Button
+                variant="outline"
+                onClick={handleCancelSubscription}
+                disabled={
+                  cancelingSubscription ||
+                  !!currentSubscription.cancel_at_period_end ||
+                  currentSubscription.status === "canceled"
+                }
+              >
+                {cancelingSubscription ? "Cancelando..." : "Cancelar assinatura"}
+              </Button>
+              <Button
+                variant="default"
+                onClick={handleReactivateSubscription}
+                disabled={
+                  reactivatingSubscription ||
+                  (!currentSubscription.cancel_at_period_end && currentSubscription.status === "active")
+                }
+              >
+                {reactivatingSubscription ? "Reativando..." : "Reativar agora"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Feature Comparison Table */}
@@ -479,6 +483,12 @@ export default function SubscriptionPlans() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {subscriptionEvents && (
+        <div className="mt-8">
+          <SubscriptionTimeline events={subscriptionEvents} />
         </div>
       )}
     </div>

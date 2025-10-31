@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "verify:meta": "node scripts/verify-meta-config.cjs",
-    "sync:envs": "bash scripts/sync-envs.sh --prod"
+    "sync:envs": "bash scripts/sync-envs.sh --prod",
+    "test:plan-upgrade": "node scripts/test-plan-upgrade.js"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
@@ -80,6 +81,7 @@
     "globals": "^15.15.0",
     "lovable-tagger": "^1.1.9",
     "postcss": "^8.5.6",
+    "puppeteer": "^24.27.0",
     "tailwindcss": "^3.4.17",
     "terser": "^5.44.0",
     "tsx": "^4.20.6",

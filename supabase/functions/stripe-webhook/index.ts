@@ -39,6 +39,36 @@ function slugify(value: string) {
     .slice(0, 60);
 }
 
+async function findSubscriptionByStripeId(
+  supabase: any,
+  stripeSubscriptionId: string,
+) {
+  const { data, error } = await supabase
+    .from("organization_subscriptions")
+    .select("id, organization_id, metadata, status, cancel_at_period_end, plan_id, stripe_subscription_id, current_period_start, current_period_end, next_billing_date, last_payment_amount, last_payment_date")
+    .eq("stripe_subscription_id", stripeSubscriptionId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+  if (data) {
+    return data;
+  }
+
+  const { data: fallback, error: fallbackError } = await supabase
+    .from("organization_subscriptions")
+    .select("id, organization_id, metadata, status, cancel_at_period_end, plan_id, stripe_subscription_id, current_period_start, current_period_end, next_billing_date, last_payment_amount, last_payment_date")
+    .contains("metadata", { stripe: { subscription_id: stripeSubscriptionId } } as any)
+    .maybeSingle();
+
+  if (fallbackError) {
+    throw fallbackError;
+  }
+
+  return fallback ?? null;
+}
+
 export default (globalThis as any).Deno?.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: { ...corsHeaders } });
@@ -131,24 +161,194 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
         throw new Error("Missing customer email in session");
       }
 
-      // Idempotency: if we already processed this session, exit quickly
-      const { data: existingProc } = await supabase
-        .from("organization_subscriptions")
-        .select("id")
-        .eq("stripe_checkout_session_id", fullSession.id)
-        .maybeSingle();
-      if (existingProc) {
-        return new Response(JSON.stringify({ received: true, duplicate: true }), {
+      const sessionMetadata = fullSession.metadata ?? {};
+      const subscriptionMetadata = stripeSubscription?.metadata ?? {};
+
+      const organizationIdFromMetadata =
+        (sessionMetadata.organization_id as string | undefined) ??
+        (subscriptionMetadata.organization_id as string | undefined) ??
+        null;
+      const subscriptionIdFromMetadata =
+        (sessionMetadata.subscription_id as string | undefined) ??
+        (subscriptionMetadata.subscription_id as string | undefined) ??
+        null;
+
+      let subscriptionRow: any = null;
+      if (subscriptionIdFromMetadata) {
+        const { data } = await supabase
+          .from("organization_subscriptions")
+          .select("*")
+          .eq("id", subscriptionIdFromMetadata)
+          .maybeSingle();
+        subscriptionRow = data ?? null;
+      }
+
+      if (!subscriptionRow) {
+        const { data } = await supabase
+          .from("organization_subscriptions")
+          .select("*")
+          .eq("stripe_checkout_session_id", fullSession.id)
+          .maybeSingle();
+        subscriptionRow = data ?? null;
+      }
+
+      if (subscriptionRow) {
+        const existingMetadata = (subscriptionRow.metadata as Record<string, unknown> | null) ?? {};
+        const existingStripeMeta =
+          (existingMetadata.stripe as StripeMetadata | undefined) ?? {};
+
+        const mergedStripeMetadata: StripeMetadata = {
+          ...existingStripeMeta,
+          customer_id:
+            typeof fullSession.customer === "string"
+              ? fullSession.customer
+              : fullSession.customer?.id ?? existingStripeMeta.customer_id,
+          subscription_id: stripeSubscription?.id ?? existingStripeMeta.subscription_id,
+          checkout_session_id: fullSession.id,
+          price_id: priceId ?? existingStripeMeta.price_id,
+          product_id: productId ?? existingStripeMeta.product_id,
+          latest_invoice_id:
+            (typeof stripeSubscription?.latest_invoice === "string"
+              ? stripeSubscription?.latest_invoice
+              : stripeSubscription?.latest_invoice?.id) ??
+            (typeof fullSession.invoice === "string"
+              ? fullSession.invoice
+              : (fullSession.invoice as Stripe.Invoice | null | undefined)?.id ??
+                existingStripeMeta.latest_invoice_id),
+          payment_intent_id:
+            (typeof fullSession.payment_intent === "string"
+              ? fullSession.payment_intent
+              : (fullSession.payment_intent as Stripe.PaymentIntent | null | undefined)?.id) ??
+            existingStripeMeta.payment_intent_id,
+          invoice_id:
+            (typeof stripeSubscription?.latest_invoice === "string"
+              ? stripeSubscription?.latest_invoice
+              : stripeSubscription?.latest_invoice?.id) ??
+            (typeof fullSession.invoice === "string"
+              ? fullSession.invoice
+              : (fullSession.invoice as Stripe.Invoice | null | undefined)?.id ??
+                existingStripeMeta.invoice_id),
+        };
+
+        const cleanedMetadata: Record<string, unknown> = {
+          ...existingMetadata,
+          stripe: mergedStripeMetadata,
+          billing: {
+            email: customerEmail,
+            name: customerName ?? null,
+          },
+        };
+
+        if ("pending_plan" in cleanedMetadata) {
+          delete cleanedMetadata.pending_plan;
+        }
+
+        const currentPeriodStart = stripeSubscription?.current_period_start
+          ? new Date(stripeSubscription.current_period_start * 1000).toISOString()
+          : subscriptionRow.current_period_start ?? new Date().toISOString();
+        const currentPeriodEnd = stripeSubscription?.current_period_end
+          ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+          : subscriptionRow.current_period_end ?? null;
+        const nextBillingDate = stripeSubscription?.current_period_end
+          ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+          : subscriptionRow.next_billing_date ?? null;
+
+        const unitAmount = price?.unit_amount ?? null;
+        const amountPaid = unitAmount !== null ? unitAmount / 100 : null;
+
+        const updatePayload: Record<string, unknown> = {
+          status: "active",
+          metadata: cleanedMetadata,
+          current_period_start: currentPeriodStart,
+          current_period_end: currentPeriodEnd,
+          next_billing_date: nextBillingDate,
+          last_payment_date: new Date().toISOString(),
+          last_payment_amount: amountPaid,
+          updated_at: new Date().toISOString(),
+          stripe_customer_id: mergedStripeMetadata.customer_id ?? null,
+          stripe_subscription_id: mergedStripeMetadata.subscription_id ?? null,
+          stripe_checkout_session_id: fullSession.id,
+          stripe_payment_intent_id: mergedStripeMetadata.payment_intent_id ?? null,
+          stripe_invoice_id: mergedStripeMetadata.invoice_id ?? null,
+        };
+
+        let resolvedPlanId: string | null =
+          (subscriptionMetadata.plan_id as string | undefined) ??
+          (sessionMetadata.plan_id as string | undefined) ??
+          (subscriptionRow.plan_id as string | undefined) ??
+          null;
+
+        let resolvedPlanSlug: string | null =
+          (sessionMetadata.plan_slug as string | undefined) ??
+          (subscriptionMetadata.plan_slug as string | undefined) ??
+          null;
+
+        if (!resolvedPlanId && priceId) {
+          const { data: planMatch } = await supabase
+            .from("subscription_plans")
+            .select("id, slug")
+            .eq("stripe_price_id", priceId)
+            .maybeSingle();
+          if (planMatch) {
+            resolvedPlanId = (planMatch as any).id ?? null;
+            resolvedPlanSlug = resolvedPlanSlug ?? ((planMatch as any).slug ?? null);
+          }
+        }
+
+        if (resolvedPlanId && !resolvedPlanSlug) {
+          const { data: planRecord } = await supabase
+            .from("subscription_plans")
+            .select("slug")
+            .eq("id", resolvedPlanId)
+            .maybeSingle();
+          resolvedPlanSlug = (planRecord as any)?.slug ?? null;
+        }
+
+        if (resolvedPlanId) {
+          updatePayload.plan_id = resolvedPlanId;
+        }
+
+        const { error: updateError } = await supabase
+          .from("organization_subscriptions")
+          .update(updatePayload)
+          .eq("id", subscriptionRow.id);
+
+        if (updateError) {
+          throw updateError;
+        }
+
+        const ownerUserId =
+          typeof (existingMetadata as any)?.owner_user_id === "string"
+            ? ((existingMetadata as any).owner_user_id as string)
+            : null;
+
+        await supabase.from("subscription_event_logs").insert({
+          organization_id: subscriptionRow.organization_id,
+          subscription_id: subscriptionRow.id,
+          event_type: "plan_change_confirmed",
+          actor_user_id: ownerUserId,
+          context: {
+            plan_id: updatePayload.plan_id ?? subscriptionRow.plan_id ?? null,
+            plan_slug: resolvedPlanSlug ?? null,
+            stripe_subscription_id: mergedStripeMetadata.subscription_id ?? null,
+            stripe_invoice_id: mergedStripeMetadata.invoice_id ?? null,
+            amount_paid: amountPaid,
+            source: "stripe-webhook",
+          },
+        });
+
+        return new Response(JSON.stringify({ received: true, updated: true }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Resolve plan
+      // Fallback: criação completa (checkout externo)
+
+      // Resolve plano
       let planId: string | null = null;
       let planSlug: string | null = null;
       if (priceId) {
-        // Try DB mapping first
         const { data: planByPrice } = await supabase
           .from("subscription_plans")
           .select("id, slug")
@@ -171,8 +371,14 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       if (!planId) {
         throw new Error(`Unable to resolve subscription plan for price ${priceId ?? "unknown"}`);
       }
+
       if (!planSlug) {
-        planSlug = (planData as any)?.slug ?? null;
+        const { data: planRecord } = await supabase
+          .from("subscription_plans")
+          .select("slug")
+          .eq("id", planId)
+          .maybeSingle();
+        planSlug = (planRecord as any)?.slug ?? null;
       }
 
       // Ensure user exists (create if needed)
@@ -199,9 +405,9 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
           try {
             const { data } = await adminAny.getUserByEmail(customerEmail);
             userId = data?.user?.id ?? null;
-      } catch (err) {
-        console.debug("stripe-webhook getUserByEmail fallback failed", err);
-      }
+          } catch (err) {
+            console.debug("stripe-webhook getUserByEmail fallback failed", err);
+          }
         }
       }
 
@@ -221,22 +427,23 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       }
 
       // Ensure organization
-      let organizationId: string | null = null;
-      const orgName = (customerName || customerEmail.split("@")[0]) + " - Organização";
-      const proposedSlug = slugify(orgName) || `org-${crypto.randomUUID().slice(0, 8)}`;
+      let organizationId: string | null = organizationIdFromMetadata;
+      if (!organizationId) {
+        const orgName = (customerName || customerEmail.split("@")[0]) + " - Organização";
+        const proposedSlug = slugify(orgName) || `org-${crypto.randomUUID().slice(0, 8)}`;
 
-      // Create a new org for this purchase
-      const { data: newOrg, error: orgErr } = await supabase
-        .from("organizations")
-        .insert({
-          name: orgName,
-          slug: proposedSlug,
-          owner_id: userId,
-        })
-        .select("id")
-        .single();
-      if (orgErr) throw orgErr;
-      organizationId = (newOrg as any).id;
+        const { data: newOrg, error: orgErr } = await supabase
+          .from("organizations")
+          .insert({
+            name: orgName,
+            slug: proposedSlug,
+            owner_id: userId,
+          })
+          .select("id")
+          .single();
+        if (orgErr) throw orgErr;
+        organizationId = (newOrg as any).id;
+      }
 
       const nowIso = new Date().toISOString();
       await supabase
@@ -253,13 +460,11 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
           { onConflict: "organization_id,profile_id" },
         );
 
-      // Upsert profile
       await supabase.from("profiles").upsert(
         { id: userId, email: customerEmail, full_name: customerName ?? null, user_type: "owner", updated_at: nowIso },
         { onConflict: "id" },
       );
 
-      // Create subscription row
       const currentPeriodStart = stripeSubscription?.current_period_start
         ? new Date(stripeSubscription.current_period_start * 1000).toISOString()
         : nowIso;
@@ -302,7 +507,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
         session_id: fullSession.id,
       };
 
-      const subscriptionMetadata = {
+      const subscriptionMetadataInsert = {
         created_via: "stripe_webhook",
         plan_slug: planSlug,
         stripe: stripeMeta,
@@ -321,7 +526,7 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
           next_billing_date: currentPeriodEnd,
           last_payment_date: nowIso,
           last_payment_amount: (price?.unit_amount ?? 0) / 100,
-          metadata: subscriptionMetadata,
+          metadata: subscriptionMetadataInsert,
           stripe_customer_id: stripeMeta.customer_id ?? null,
           stripe_subscription_id: stripeMeta.subscription_id ?? null,
           stripe_checkout_session_id: fullSession.id,
@@ -335,25 +540,24 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
         .select("id")
         .single();
       if (subErr) throw subErr;
-      const subscriptionId = (subRow as any)?.id ?? null;
+      const createdSubscriptionId = (subRow as any)?.id ?? null;
 
-      if (subscriptionId) {
+      if (createdSubscriptionId) {
         const claimMetadata = {
-          ...subscriptionMetadata,
-          claim: { ...claimPayload, subscription_id: subscriptionId },
+          ...subscriptionMetadataInsert,
+          claim: { ...claimPayload, subscription_id: createdSubscriptionId },
         };
         const { error: updateMetaErr } = await supabase
           .from("organization_subscriptions")
           .update({
             metadata: claimMetadata,
           })
-          .eq("id", subscriptionId);
+          .eq("id", createdSubscriptionId);
         if (updateMetaErr) {
           console.warn("Failed to persist claim metadata with subscription id:", updateMetaErr);
         }
       }
 
-      // Invite new user to set password (optional but improves UX)
       if (isNewUser) {
         try {
           const APP_URL =
@@ -362,8 +566,8 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
             undefined;
           const redirectTo = APP_URL
             ? `${APP_URL.replace(/\/$/, "")}/finalizar-cadastro?claim=${encodeURIComponent(claimToken)}&org=${encodeURIComponent(
-                organizationId,
-              )}&sub=${encodeURIComponent(subscriptionId ?? "")}&email=${encodeURIComponent(
+                organizationId ?? "",
+              )}&sub=${encodeURIComponent(createdSubscriptionId ?? "")}&email=${encodeURIComponent(
                 customerEmail,
               )}&session_id=${encodeURIComponent(fullSession.id)}`
             : undefined;
@@ -373,6 +577,145 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
           }
         } catch (err) {
           console.warn("Failed to send invite email:", err);
+        }
+      }
+
+      await supabase.from("subscription_event_logs").insert({
+        organization_id: organizationId,
+        subscription_id: createdSubscriptionId,
+        event_type: "plan_change_confirmed",
+        actor_user_id: userId,
+        context: {
+          plan_id: planId,
+          plan_slug: planSlug,
+          stripe_subscription_id: stripeMeta.subscription_id ?? null,
+          stripe_invoice_id: stripeMeta.invoice_id ?? null,
+          amount_paid: (price?.unit_amount ?? 0) / 100,
+          source: "stripe-webhook",
+        },
+      });
+
+      return new Response(JSON.stringify({ received: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } else if (event.type === "invoice.payment_failed" || event.type === "invoice.payment_succeeded") {
+      const invoice = event.data.object as Stripe.Invoice;
+      const stripeSubscriptionId =
+        typeof invoice.subscription === "string"
+          ? invoice.subscription
+          : invoice.subscription?.id ?? null;
+
+      if (!stripeSubscriptionId) {
+        console.warn("Invoice event without subscription id");
+      } else {
+        const subscriptionRow = await findSubscriptionByStripeId(supabase, stripeSubscriptionId);
+        if (!subscriptionRow) {
+          console.warn("Subscription not found for invoice event", stripeSubscriptionId);
+        } else {
+          const amount = typeof invoice.amount_paid === "number" ? invoice.amount_paid / 100 : null;
+          const dueAmount = typeof invoice.amount_due === "number" ? invoice.amount_due / 100 : null;
+          const nowIso = new Date().toISOString();
+          const billingState =
+            (subscriptionRow.metadata as Record<string, unknown> | null | undefined)?.billing_state ?? {};
+
+          if (event.type === "invoice.payment_failed") {
+            const failureReason =
+              invoice.last_payment_error?.message ??
+              invoice.last_payment_error?.code ??
+              invoice.dunning_campaign_id ??
+              "unknown";
+
+            const updatePayload = {
+              status: "past_due",
+              updated_at: nowIso,
+              metadata: {
+                ...(subscriptionRow.metadata as Record<string, unknown> | null | undefined),
+                billing_state: {
+                  ...billingState,
+                  last_failure_at: nowIso,
+                  last_failure_reason: failureReason,
+                  last_failed_invoice_id: invoice.id,
+                },
+              },
+            };
+
+            const { error: updateError } = await supabase
+              .from("organization_subscriptions")
+              .update(updatePayload)
+              .eq("id", subscriptionRow.id);
+
+            if (updateError) {
+              console.error("Failed to mark subscription past_due:", updateError);
+            }
+
+            await supabase.from("subscription_event_logs").insert({
+              organization_id: subscriptionRow.organization_id,
+              subscription_id: subscriptionRow.id,
+              event_type: "payment_failed",
+              context: {
+                stripe_subscription_id: stripeSubscriptionId,
+                stripe_invoice_id: invoice.id,
+                amount_due: dueAmount,
+                failure_reason: failureReason,
+              },
+            });
+          } else {
+            const currentPeriodStart = invoice.lines?.data?.[0]?.period?.start
+              ? new Date(invoice.lines.data[0].period.start * 1000).toISOString()
+              : subscriptionRow.current_period_start ?? nowIso;
+            const currentPeriodEnd = invoice.lines?.data?.[0]?.period?.end
+              ? new Date(invoice.lines.data[0].period.end * 1000).toISOString()
+              : subscriptionRow.current_period_end ?? null;
+            const nextBillingDate = invoice.next_payment_attempt
+              ? new Date(invoice.next_payment_attempt * 1000).toISOString()
+              : currentPeriodEnd;
+
+            const metadataForUpdate: Record<string, unknown> = {
+              ...(subscriptionRow.metadata as Record<string, unknown> | null | undefined),
+              billing_state: {
+                ...billingState,
+                last_payment_at: nowIso,
+                last_failure_at: null,
+                last_failure_reason: null,
+              },
+            };
+
+            if ("pending_plan" in metadataForUpdate) {
+              delete metadataForUpdate.pending_plan;
+            }
+
+            const updatePayload = {
+              status: "active",
+              last_payment_date: nowIso,
+              last_payment_amount: amount,
+              current_period_start: currentPeriodStart,
+              current_period_end: currentPeriodEnd,
+              next_billing_date: nextBillingDate,
+              updated_at: nowIso,
+              metadata: metadataForUpdate,
+            };
+
+            const { error: updateError } = await supabase
+              .from("organization_subscriptions")
+              .update(updatePayload)
+              .eq("id", subscriptionRow.id);
+
+            if (updateError) {
+              console.error("Failed to mark subscription active:", updateError);
+            }
+
+            await supabase.from("subscription_event_logs").insert({
+              organization_id: subscriptionRow.organization_id,
+              subscription_id: subscriptionRow.id,
+              event_type: "payment_recovered",
+              context: {
+                stripe_subscription_id: stripeSubscriptionId,
+                stripe_invoice_id: invoice.id,
+                amount_paid: amount,
+              },
+            });
+          }
         }
       }
 

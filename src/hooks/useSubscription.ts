@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, CancelledError } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useActiveOrganization } from "./useActiveOrganization";
 import { toast } from "@/hooks/use-toast";
@@ -43,9 +43,24 @@ export interface OrganizationSubscription {
   cancel_at_period_end: boolean;
   canceled_at: string | null;
   cancellation_reason: string | null;
-  metadata: Record<string, any>;
+  metadata: Record<string, any> | null;
   created_at: string;
   updated_at: string;
+  payment_gateway?: string | null;
+  billing_name?: string | null;
+  billing_email?: string | null;
+  billing_cpf_cnpj?: string | null;
+  billing_phone?: string | null;
+  billing_address?: string | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  stripe_checkout_session_id?: string | null;
+  stripe_payment_intent_id?: string | null;
+  stripe_invoice_id?: string | null;
+  claim_token?: string | null;
+  claim_email?: string | null;
+  claim_status?: string | null;
+  claim_completed_at?: string | null;
   // Joined data
   plan?: SubscriptionPlan;
 }
@@ -94,6 +109,25 @@ export interface SubscriptionUsage {
   active_users_count: number;
   last_checked_at: string;
   updated_at: string;
+}
+
+export type SubscriptionEventType =
+  | "plan_change_requested"
+  | "plan_change_confirmed"
+  | "plan_change_failed"
+  | "payment_failed"
+  | "payment_recovered"
+  | "subscription_canceled"
+  | "subscription_reactivated";
+
+export interface SubscriptionEventLog {
+  id: string;
+  organization_id: string;
+  subscription_id: string;
+  event_type: SubscriptionEventType;
+  actor_user_id: string | null;
+  context: Record<string, any> | null;
+  created_at: string;
 }
 
 export interface OrganizationPlanLimits {
@@ -226,27 +260,52 @@ export const useOrganizationPlanLimits = () => {
 
   return useQuery<OrganizationPlanLimits | null>({
     queryKey: ["organization-plan-limits", org?.id],
-    queryFn: async (): Promise<OrganizationPlanLimits | null> => {
+    queryFn: async ({ signal }): Promise<OrganizationPlanLimits | null> => {
       if (!org?.id) return null;
+
+      const checkForAbort = (error?: { message?: string } | null) => {
+        if (signal?.aborted) {
+          throw new CancelledError();
+        }
+        const message = error?.message?.toLowerCase();
+        if (message && message.includes("aborterror")) {
+          throw new CancelledError();
+        }
+        if (error) {
+          throw error;
+        }
+      };
 
       // Get current plan from subscription
       const plan = currentSub?.plan;
 
       // Count ad accounts
-      const adRes = await supabase
+      const adQuery = supabase
         .from("ad_accounts")
         .select("*", { count: "exact", head: true })
         .eq("organization_id", org.id);
-      if (adRes.error) throw adRes.error;
+
+      if (signal) {
+        adQuery.abortSignal(signal);
+      }
+
+      const adRes = await adQuery;
+      checkForAbort(adRes.error);
       const adAccountsCount = adRes.count ?? 0;
 
       // Count active users
-      const usersRes = await supabase
+      const usersQuery = supabase
         .from("organization_memberships")
         .select("*", { count: "exact", head: true })
         .eq("organization_id", org.id)
         .eq("is_active", true);
-      if (usersRes.error) throw usersRes.error;
+
+      if (signal) {
+        usersQuery.abortSignal(signal);
+      }
+
+      const usersRes = await usersQuery;
+      checkForAbort(usersRes.error);
       const usersCount = usersRes.count ?? 0;
 
       const currentAdAccounts = adAccountsCount || 0;
@@ -288,7 +347,11 @@ export const useOrganizationPlanLimits = () => {
  */
 export const useCanAddAdAccount = () => {
   const { data: limits } = useOrganizationPlanLimits();
-  return !limits?.ad_accounts_limit_reached;
+  if (!limits) return false;
+  if (limits.subscription_status && !["active", "trial"].includes(limits.subscription_status)) {
+    return false;
+  }
+  return !limits.ad_accounts_limit_reached;
 };
 
 /**
@@ -296,7 +359,11 @@ export const useCanAddAdAccount = () => {
  */
 export const useCanAddUser = () => {
   const { data: limits } = useOrganizationPlanLimits();
-  return !limits?.users_limit_reached;
+  if (!limits) return false;
+  if (limits.subscription_status && !["active", "trial"].includes(limits.subscription_status)) {
+    return false;
+  }
+  return !limits.users_limit_reached;
 };
 
 /**
@@ -304,7 +371,35 @@ export const useCanAddUser = () => {
  */
 export const useHasCRMAccess = () => {
   const { data: limits } = useOrganizationPlanLimits();
-  return limits?.has_crm_access ?? false;
+  if (!limits) return false;
+  if (limits.subscription_status && !["active", "trial"].includes(limits.subscription_status)) {
+    return false;
+  }
+  return limits.has_crm_access;
+};
+
+/**
+ * Fetch subscription event timeline
+ */
+export const useSubscriptionTimeline = (subscriptionId: string | null) => {
+  return useQuery<SubscriptionEventLog[]>({
+    queryKey: ["subscription-event-timeline", subscriptionId],
+    queryFn: async () => {
+      if (!subscriptionId) return [];
+
+      const { data, error } = await supabase
+        .from("subscription_event_logs")
+        .select("*")
+        .eq("subscription_id", subscriptionId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      return (data as SubscriptionEventLog[]) ?? [];
+    },
+    enabled: !!subscriptionId,
+    staleTime: 30 * 1000,
+  });
 };
 
 // =====================================================
@@ -400,18 +495,18 @@ export const useCancelSubscription = () => {
     mutationFn: async (reason?: string) => {
       if (!currentSubscription?.id) throw new Error("No active subscription found");
 
-      const { data, error } = await supabase
-        .from("organization_subscriptions")
-        .update({
-          cancel_at_period_end: true,
-          cancellation_reason: reason || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", currentSubscription.id)
-        .select()
-        .single();
+      const { data, error } = await supabase.functions.invoke("cancel-stripe-subscription", {
+        body: {
+          subscriptionId: currentSubscription.id,
+          reason: reason ?? null,
+        },
+      });
 
-      if (error) throw error;
+      if (error) throw new Error(error.message || "Falha ao cancelar assinatura.");
+      if (!data?.success) {
+        throw new Error(data?.error || "Não foi possível cancelar a assinatura.");
+      }
+
       return data;
     },
     onSuccess: () => {
@@ -421,6 +516,13 @@ export const useCancelSubscription = () => {
         title: "Assinatura cancelada",
         description: "Seu plano será cancelado no final do período atual.",
       });
+      if (typeof window !== "undefined" && Array.isArray((window as any).dataLayer)) {
+        (window as any).dataLayer.push({
+          event: "subscription_canceled",
+          subscriptionId: currentSubscription?.id,
+          organizationId: currentSubscription?.organization_id,
+        });
+      }
     },
     onError: (error: any) => {
       console.error("Error canceling subscription:", error);
@@ -444,18 +546,17 @@ export const useReactivateSubscription = () => {
     mutationFn: async () => {
       if (!currentSubscription?.id) throw new Error("No subscription found");
 
-      const { data, error } = await supabase
-        .from("organization_subscriptions")
-        .update({
-          cancel_at_period_end: false,
-          cancellation_reason: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", currentSubscription.id)
-        .select()
-        .single();
+      const { data, error } = await supabase.functions.invoke("reactivate-stripe-subscription", {
+        body: {
+          subscriptionId: currentSubscription.id,
+        },
+      });
 
-      if (error) throw error;
+      if (error) throw new Error(error.message || "Falha ao reativar assinatura.");
+      if (!data?.success) {
+        throw new Error(data?.error || "Não foi possível reativar a assinatura.");
+      }
+
       return data;
     },
     onSuccess: () => {
@@ -465,6 +566,13 @@ export const useReactivateSubscription = () => {
         title: "Assinatura reativada!",
         description: "Seu plano continuará ativo após o período atual.",
       });
+      if (typeof window !== "undefined" && Array.isArray((window as any).dataLayer)) {
+        (window as any).dataLayer.push({
+          event: "subscription_reactivated",
+          subscriptionId: currentSubscription?.id,
+          organizationId: currentSubscription?.organization_id,
+        });
+      }
     },
     onError: (error: any) => {
       console.error("Error reactivating subscription:", error);

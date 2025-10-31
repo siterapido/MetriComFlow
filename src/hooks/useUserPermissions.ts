@@ -72,7 +72,10 @@ export const useUserPermissions = () => {
 
       // Determine CRM access (user_type + plan)
       const userHasCRMAccess = isOwner || isSales;
-      const planHasCRMAccess = planLimits?.has_crm_access ?? true; // Default to true if no plan
+      const subscriptionStatus = planLimits?.subscription_status ?? "active";
+      const planAllowsCRM = planLimits?.has_crm_access ?? true;
+      const planHasCRMAccess =
+        planAllowsCRM && ["active", "trial"].includes(subscriptionStatus ?? "inactive");
       const hasCRMAccess = userHasCRMAccess && planHasCRMAccess;
 
       return {
@@ -85,8 +88,12 @@ export const useUserPermissions = () => {
         canDeleteLeads: isOwner,
         canManageTeamMembers: isOwner,
         // Subscription limits
-        canAddAdAccount: planLimits ? !planLimits.ad_accounts_limit_reached : true,
-        canAddUser: planLimits ? !planLimits.users_limit_reached : true,
+        canAddAdAccount: planLimits
+          ? !planLimits.ad_accounts_limit_reached && ["active", "trial"].includes(subscriptionStatus)
+          : true,
+        canAddUser: planLimits
+          ? !planLimits.users_limit_reached && ["active", "trial"].includes(subscriptionStatus)
+          : true,
         planHasCRMAccess,
       };
     },

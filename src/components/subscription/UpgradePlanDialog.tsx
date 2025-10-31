@@ -43,6 +43,12 @@ export function UpgradePlanDialog({
   const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
 
+  const pushDataLayer = (payload: Record<string, unknown>) => {
+    if (typeof window !== "undefined" && Array.isArray((window as any).dataLayer)) {
+      (window as any).dataLayer.push(payload);
+    }
+  };
+
   const isFirstSubscription = !currentPlan;
   const isDowngrade = currentPlan && newPlan && newPlan.price < currentPlan.price;
   const priceDiff = currentPlan && newPlan ? newPlan.price - currentPlan.price : 0;
@@ -76,6 +82,13 @@ export function UpgradePlanDialog({
       const cancelUrl = `${baseUrl}/planos?checkout_canceled=1`;
       const priceId = getStripePriceIdForPlanSlug(newPlan.slug);
 
+      pushDataLayer({
+        event: "subscription_checkout_started",
+        planId: newPlan.id,
+        planSlug: newPlan.slug,
+        currentPlanId: currentSubscription?.plan_id ?? currentPlan?.id ?? null,
+      });
+
       const { data, error } = await supabase.functions.invoke("create-stripe-checkout", {
         body: {
           planId: newPlan.id,
@@ -106,6 +119,12 @@ export function UpgradePlanDialog({
       window.location.href = checkoutUrl;
     } catch (err) {
       console.error("Erro ao criar checkout Stripe:", err);
+      pushDataLayer({
+        event: "subscription_checkout_failed",
+        planId: newPlan.id,
+        planSlug: newPlan.slug,
+        message: err instanceof Error ? err.message : String(err),
+      });
       toast({
         title: "Erro ao redirecionar",
         description: err instanceof Error ? err.message : "Não foi possível iniciar o pagamento.",
