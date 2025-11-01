@@ -53,6 +53,7 @@ export default function MetaAdsConfig() {
     activateAdAccount,
     renameAdAccount,
     listAvailableAccounts,
+    syncCampaigns,
     syncDailyInsights,
     refreshData,
     hasActiveConnection,
@@ -271,6 +272,45 @@ export default function MetaAdsConfig() {
     try {
       setIsSyncing(true);
 
+      // Step 1: Sync campaigns first (if no campaigns exist)
+      const accountsToSync = filters.accountId ? [filters.accountId] : activeAdAccounts.map(a => a.id);
+
+      toast({
+        title: "Sincronizando Campanhas",
+        description: `Buscando campanhas de ${accountsToSync.length} conta(s)...`,
+      });
+
+      let totalCampaigns = 0;
+      for (const accountId of accountsToSync) {
+        try {
+          const campaignResult = await syncCampaigns(accountId);
+          totalCampaigns += campaignResult.campaignsCount || 0;
+          console.log(`✅ Synced ${campaignResult.campaignsCount} campaigns for account ${accountId}`);
+        } catch (campaignError) {
+          console.warn(`⚠️ Error syncing campaigns for account ${accountId}:`, campaignError);
+          // Continue with other accounts even if one fails
+        }
+      }
+
+      if (totalCampaigns > 0) {
+        toast({
+          title: "Campanhas Sincronizadas",
+          description: `${totalCampaigns} campanha(s) encontrada(s). Agora sincronizando métricas...`,
+        });
+      } else {
+        toast({
+          title: "Atenção",
+          description: "Nenhuma campanha encontrada nas contas. Verifique se as contas têm campanhas ativas no Meta Ads.",
+          variant: "destructive",
+        });
+      }
+
+      // Step 2: Sync insights for the date range
+      toast({
+        title: "Sincronizando Métricas",
+        description: "Baixando dados de performance...",
+      });
+
       const result = await syncDailyInsights({
         since: filters.dateRange.start,
         until: filters.dateRange.end,
@@ -279,14 +319,14 @@ export default function MetaAdsConfig() {
 
       toast({
         title: "Sincronização Concluída",
-        description: result.message || "Dados atualizados com sucesso!",
+        description: `${totalCampaigns} campanhas e métricas atualizadas!`,
       });
 
       // Refresh data after sync
       await refreshData();
 
     } catch (error) {
-      console.error('Error syncing insights:', error);
+      console.error('Error syncing data:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
 
       toast({

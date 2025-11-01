@@ -655,6 +655,83 @@ export function useMetaAuth() {
     }
   };
 
+  // Sync campaigns for an ad account
+  const syncCampaigns = async (accountId: string): Promise<{
+    success: boolean;
+    message: string;
+    campaignsCount?: number;
+  }> => {
+    try {
+      // Get the access token for authorization
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error('No active session');
+      }
+
+      // Get Meta access token from connections
+      const { data: connection } = await supabase
+        .from('meta_business_connections')
+        .select('access_token')
+        .eq('user_id', user?.id)
+        .eq('is_active', true)
+        .single();
+
+      if (!connection?.access_token) {
+        throw new Error('No active Meta connection found');
+      }
+
+      // Get account external_id
+      const { data: account } = await supabase
+        .from('ad_accounts')
+        .select('external_id')
+        .eq('id', accountId)
+        .single();
+
+      if (!account?.external_id) {
+        throw new Error('Ad account not found');
+      }
+
+      const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/connect-ad-account`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          ad_account_id: account.external_id,
+          access_token: connection.access_token,
+        })
+      });
+
+      const responseText = await response.text();
+      console.log('📥 Sync campaigns response status:', response.status);
+      console.log('📥 Sync campaigns response body:', responseText);
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        throw new Error(`Invalid response from server: ${responseText}`);
+      }
+
+      if (!response.ok) {
+        const errorMessage = data?.error || data?.message || `HTTP ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      return {
+        success: true,
+        message: data?.message || 'Campanhas sincronizadas com sucesso',
+        campaignsCount: data?.campaigns_synced || 0,
+      };
+    } catch (error) {
+      console.error('❌ Error syncing campaigns:', error);
+      throw error;
+    }
+  };
+
   // Sync daily insights from Meta API
   const syncDailyInsights = async (params?: {
     since?: string;
@@ -810,6 +887,7 @@ export function useMetaAuth() {
     findDuplicateAccount,
     checkAccountConnected,
     listAvailableAccounts,
+    syncCampaigns,
     syncDailyInsights,
     refreshData: fetchData,
     hasActiveConnection: connections.length > 0,

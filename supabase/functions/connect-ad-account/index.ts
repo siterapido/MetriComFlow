@@ -28,11 +28,22 @@ interface MetaCampaign {
 }
 
 Deno.serve(async (req: Request) => {
+  // CORS headers
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   try {
     if (req.method !== 'POST') {
       return new Response(
         JSON.stringify({ error: 'Method not allowed' }),
-        { status: 405, headers: { 'Content-Type': 'application/json' } }
+        { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -42,7 +53,7 @@ Deno.serve(async (req: Request) => {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return new Response(
         JSON.stringify({ error: 'Missing required environment variables' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -53,7 +64,7 @@ Deno.serve(async (req: Request) => {
     if (!ad_account_id || !access_token) {
       return new Response(
         JSON.stringify({ error: 'Missing ad_account_id or access_token' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -66,11 +77,11 @@ Deno.serve(async (req: Request) => {
 
     if (!accountResponse.ok) {
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           error: 'Failed to fetch ad account data',
-          details: accountData 
+          details: accountData
         }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -79,7 +90,7 @@ Deno.serve(async (req: Request) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -90,7 +101,7 @@ Deno.serve(async (req: Request) => {
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: 'Invalid authorization token' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -105,7 +116,7 @@ Deno.serve(async (req: Request) => {
     if (orgError || !orgMembership) {
       return new Response(
         JSON.stringify({ error: 'No active organization found for user' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -181,12 +192,12 @@ Deno.serve(async (req: Request) => {
     if (!campaignsResponse.ok) {
       console.error('Error fetching campaigns:', campaignsData);
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           message: 'Ad account connected but failed to fetch campaigns',
           account_id: accountId,
-          error: campaignsData 
+          error: campaignsData
         }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -251,7 +262,7 @@ Deno.serve(async (req: Request) => {
         campaigns_processed: campaignResults.length,
         campaigns: campaignResults
       }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
@@ -259,7 +270,7 @@ Deno.serve(async (req: Request) => {
     const message = (error as any)?.message ?? String(error);
     return new Response(
       JSON.stringify({ error: message }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
