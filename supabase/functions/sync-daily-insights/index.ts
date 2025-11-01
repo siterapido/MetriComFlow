@@ -85,11 +85,22 @@ function sanitizeUrl(url: string): string {
 }
 
 Deno.serve(async (req: Request) => {
+  // CORS headers
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   try {
     if (req.method !== 'POST') {
       return new Response(
         JSON.stringify({ error: 'Method not allowed' }),
-        { status: 405, headers: { 'Content-Type': 'application/json' } }
+        { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -101,7 +112,7 @@ Deno.serve(async (req: Request) => {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return new Response(
         JSON.stringify({ error: 'Missing required environment variables' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -140,7 +151,7 @@ Deno.serve(async (req: Request) => {
     if (!adAccounts || adAccounts.length === 0) {
       return new Response(
         JSON.stringify({ message: 'No ad accounts found' }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -285,7 +296,7 @@ Deno.serve(async (req: Request) => {
                 if (code === 4 || code === 17 || code === 613 || res.status === 429) {
                   return new Response(
                     JSON.stringify({ error: 'Rate limit reached when calling Meta API', details: { code, rateLimitHeaders } }),
-                    { status: 429, headers: { 'Content-Type': 'application/json' } }
+                    { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
                   );
                 }
               } catch (parseErr) {
@@ -357,14 +368,14 @@ Deno.serve(async (req: Request) => {
         params: { since, until, dryRun, maxDaysPerChunk },
         summary,
       }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
     console.error('Error in sync-daily-insights:', error);
     return new Response(
       JSON.stringify({ error: (error as Error).message }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
