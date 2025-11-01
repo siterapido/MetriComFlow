@@ -76,10 +76,10 @@ export default function MetaAdsConfig() {
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [showAvailableAccountsDialog, setShowAvailableAccountsDialog] = useState(false);
 
-  // Metrics filters
+  // Metrics filters - Default to "All Time"
   const [filters, setFilters] = useState<FilterValues>(() => ({
-    period: preferredPeriod,
-    dateRange: getLastNDaysDateRange(Number(preferredPeriod)),
+    period: 'all_time',
+    dateRange: { start: '2020-01-01', end: new Date().toISOString().split('T')[0] },
   }));
 
   // Fetch metrics data

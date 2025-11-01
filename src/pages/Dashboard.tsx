@@ -18,9 +18,9 @@ export default function Dashboard() {
   const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
   const { data: revenueRecords, isLoading: revenueLoading } = useRevenueRecords(undefined, new Date().getFullYear());
 
-  // Meta Ads filters state
+  // Meta Ads filters state - Default to "All Time" (desde 2020)
   const [metaFilters, setMetaFilters] = useState<FilterValues>({
-    dateRange: getLastNDaysDateRange(90),
+    dateRange: { start: '2020-01-01', end: new Date().toISOString().split('T')[0] },
   });
 
   const {

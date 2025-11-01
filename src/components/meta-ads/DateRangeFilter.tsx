@@ -11,6 +11,9 @@ import { cn } from '@/lib/utils'
 import { DateRange } from 'react-day-picker'
 
 type PresetOption =
+  | 'all_time'
+  | 'last_365_days'
+  | 'last_180_days'
   | 'last_90_days'
   | 'last_60_days'
   | 'last_30_days'
@@ -32,6 +35,9 @@ type DateRangeFilterProps = {
 }
 
 const PRESET_OPTIONS: { value: PresetOption; label: string }[] = [
+  { value: 'all_time', label: 'Todo o período' },
+  { value: 'last_365_days', label: 'Último ano (365 dias)' },
+  { value: 'last_180_days', label: 'Últimos 6 meses (180 dias)' },
   { value: 'last_90_days', label: 'Últimos 90 dias' },
   { value: 'last_60_days', label: 'Últimos 60 dias' },
   { value: 'last_30_days', label: 'Últimos 30 dias' },
@@ -53,6 +59,16 @@ function getDateRangeFromPreset(preset: PresetOption): { start: Date; end: Date 
   const yesterday = subDays(today, 1)
 
   switch (preset) {
+    case 'all_time':
+      // Data inicial: 1º de janeiro de 2020 (ou 5 anos atrás, o que for mais recente)
+      return { start: new Date('2020-01-01'), end: today }
+
+    case 'last_365_days':
+      return { start: subDays(today, 365), end: today }
+
+    case 'last_180_days':
+      return { start: subDays(today, 180), end: today }
+
     case 'last_90_days':
       return { start: subDays(today, 90), end: today }
 
@@ -111,7 +127,7 @@ function getDateRangeFromPreset(preset: PresetOption): { start: Date; end: Date 
 
 export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
   const [open, setOpen] = useState(false)
-  const [selectedPreset, setSelectedPreset] = useState<PresetOption>('last_90_days')
+  const [selectedPreset, setSelectedPreset] = useState<PresetOption>('all_time')
   const [customRange, setCustomRange] = useState<DateRange | undefined>()
 
   const handlePresetChange = (preset: PresetOption) => {
@@ -148,7 +164,7 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
   }
 
   const getDisplayText = () => {
-    if (!value) return 'Últimos 90 dias'
+    if (!value) return 'Todo o período'
 
     const preset = PRESET_OPTIONS.find(opt => {
       if (opt.value === 'custom') return false
