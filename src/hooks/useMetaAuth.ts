@@ -655,6 +655,72 @@ export function useMetaAuth() {
     }
   };
 
+  // Sync daily insights from Meta API
+  const syncDailyInsights = async (params?: {
+    since?: string;
+    until?: string;
+    accountIds?: string[];
+    campaignIds?: string[];
+  }): Promise<{
+    success: boolean;
+    message: string;
+    recordsProcessed?: number;
+  }> => {
+    try {
+      // Get the access token for authorization
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error('No active session');
+      }
+
+      // Default to last 30 days if no range provided
+      const today = new Date().toISOString().split('T')[0];
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/sync-daily-insights`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          since: params?.since || thirtyDaysAgo,
+          until: params?.until || today,
+          ad_account_ids: params?.accountIds,
+          campaign_external_ids: params?.campaignIds,
+          maxDaysPerChunk: 30,
+        })
+      });
+
+      const responseText = await response.text();
+      console.log('📥 Sync response status:', response.status);
+      console.log('📥 Sync response body:', responseText);
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        throw new Error(`Invalid response from server: ${responseText}`);
+      }
+
+      if (!response.ok) {
+        const errorMessage = data?.error || data?.message || `HTTP ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      return {
+        success: true,
+        message: data?.message || 'Sincronização concluída com sucesso',
+        recordsProcessed: data?.recordsProcessed,
+      };
+    } catch (error) {
+      console.error('❌ Error syncing insights:', error);
+      throw error;
+    }
+  };
+
   // Handle OAuth callback
   const handleOAuthCallback = async () => {
     const url = new URL(window.location.href);
@@ -744,6 +810,7 @@ export function useMetaAuth() {
     findDuplicateAccount,
     checkAccountConnected,
     listAvailableAccounts,
+    syncDailyInsights,
     refreshData: fetchData,
     hasActiveConnection: connections.length > 0,
     totalAdAccounts: adAccounts.filter(a => a.is_active).length,

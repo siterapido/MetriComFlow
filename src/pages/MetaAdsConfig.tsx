@@ -16,7 +16,8 @@ import {
   BarChart3,
   Target,
   Bug,
-  PieChart
+  PieChart,
+  RefreshCw
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { BarChart, Bar, PieChart as RePieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -52,6 +53,7 @@ export default function MetaAdsConfig() {
     activateAdAccount,
     renameAdAccount,
     listAvailableAccounts,
+    syncDailyInsights,
     refreshData,
     hasActiveConnection,
     totalAdAccounts,
@@ -75,6 +77,7 @@ export default function MetaAdsConfig() {
   const [showDebug, setShowDebug] = useState(false);
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [showAvailableAccountsDialog, setShowAvailableAccountsDialog] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Metrics filters - Default to "All Time"
   const [filters, setFilters] = useState<FilterValues>(() => ({
@@ -255,6 +258,47 @@ export default function MetaAdsConfig() {
     await handleAddAccount(accountData);
   };
 
+  const handleSyncInsights = async () => {
+    if (!filters.dateRange) {
+      toast({
+        title: "Período não selecionado",
+        description: "Por favor, selecione um período para sincronizar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsSyncing(true);
+
+      const result = await syncDailyInsights({
+        since: filters.dateRange.start,
+        until: filters.dateRange.end,
+        accountIds: filters.accountId ? [filters.accountId] : undefined,
+      });
+
+      toast({
+        title: "Sincronização Concluída",
+        description: result.message || "Dados atualizados com sucesso!",
+      });
+
+      // Refresh data after sync
+      await refreshData();
+
+    } catch (error) {
+      console.error('Error syncing insights:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+
+      toast({
+        title: "Erro na Sincronização",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   // Prepare chart data
   const filteredCampaignFinancials = useMemo(() => {
     return campaignFinancials || [];
@@ -304,7 +348,7 @@ export default function MetaAdsConfig() {
           <p className="text-muted-foreground">Performance e ROI das campanhas</p>
         </div>
 
-        {/* Filtros minimalistas inline + botão de configurações */}
+        {/* Filtros minimalistas inline + botões */}
         <div className="flex flex-wrap gap-2 items-center">
           {hasActiveConnection && (
             <>
@@ -355,6 +399,17 @@ export default function MetaAdsConfig() {
                   </SelectContent>
                 </Select>
               )}
+
+              <Button
+                variant="outline"
+                size="default"
+                onClick={handleSyncInsights}
+                disabled={isSyncing || !filters.dateRange}
+                className="gap-2 bg-gradient-to-r from-primary/10 to-secondary/10 border-primary/30 hover:from-primary/20 hover:to-secondary/20"
+              >
+                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                {isSyncing ? 'Sincronizando...' : 'Atualizar Dados'}
+              </Button>
             </>
           )}
 
