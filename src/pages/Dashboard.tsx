@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, DollarSign, Target, Loader2, Users, BarChart3, GitBranch, Award, TrendingDown } from "lucide-react";
+import { TrendingUp, DollarSign, Target, Loader2, Users, BarChart3, GitBranch, Award, TrendingDown, RefreshCw } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, FunnelChart, Funnel, LabelList } from "recharts";
 import { useDashboardSummary, useRevenueRecords, useMetaKPIs, usePipelineMetrics, usePipelineEvolution, useCombinedFunnelData } from "@/hooks/useDashboard";
 import { formatCurrency } from "@/lib/formatters";
@@ -13,21 +13,28 @@ import { MetaAdsChart } from "@/components/meta-ads/MetaAdsChart";
 import { useFilteredInsights, getLastNDaysDateRange, useAdAccounts, useAdCampaigns } from "@/hooks/useMetaMetrics";
 import { ConversionFunnel } from "@/components/dashboard/ConversionFunnel";
 import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
+import { useMetaAuth } from "@/hooks/useMetaAuth";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
   const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
   const { data: revenueRecords, isLoading: revenueLoading } = useRevenueRecords(undefined, new Date().getFullYear());
+  const { toast } = useToast();
 
   // Meta Ads filters state - Default to "All Time" (desde 2020)
   const [metaFilters, setMetaFilters] = useState<FilterValues>({
     dateRange: { start: '2020-01-01', end: new Date().toISOString().split('T')[0] },
   });
 
+  const [isSyncing, setIsSyncing] = useState(false);
+
   const {
     hasActiveConnection: hasMetaConnection,
     isLoading: metaStatusLoading,
     isFetching: metaStatusFetching,
   } = useMetaConnectionStatus();
+
+  const { activeAdAccounts, syncCampaigns, syncDailyInsights, refreshData } = useMetaAuth();
   const metaStatusPending = metaStatusLoading || metaStatusFetching;
   const metaQueriesEnabled = hasMetaConnection;
 
@@ -88,6 +95,77 @@ export default function Dashboard() {
   }, [revenueRecords]);
 
   const isLoading = summaryLoading || revenueLoading || (metaQueriesEnabled && metaLoading);
+
+  // Handler para sincronizar dados Meta Ads
+  const handleSyncInsights = async () => {
+    if (!metaFilters.dateRange) {
+      toast({
+        title: "Período não selecionado",
+        description: "Selecione um período para sincronizar os dados.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSyncing(true);
+
+    try {
+      const accountsToSync = metaFilters.accountId
+        ? [metaFilters.accountId]
+        : activeAdAccounts.map(acc => acc.id);
+
+      if (accountsToSync.length === 0) {
+        toast({
+          title: "Nenhuma conta ativa",
+          description: "Você precisa ter pelo menos uma conta Meta Ads ativa para sincronizar.",
+          variant: "destructive",
+        });
+        setIsSyncing(false);
+        return;
+      }
+
+      // Etapa 1: Sincronizar campanhas primeiro
+      console.log('🔄 Syncing campaigns for accounts:', accountsToSync);
+      let totalCampaigns = 0;
+
+      for (const accountId of accountsToSync) {
+        try {
+          const campaignResult = await syncCampaigns(accountId);
+          console.log(`✅ Campaigns synced for account ${accountId}:`, campaignResult);
+          totalCampaigns += campaignResult.campaignsCount || 0;
+        } catch (error) {
+          console.warn(`⚠️ Error syncing campaigns for account ${accountId}:`, error);
+        }
+      }
+
+      // Etapa 2: Sincronizar insights
+      console.log('🔄 Syncing daily insights...');
+      const result = await syncDailyInsights({
+        since: metaFilters.dateRange.start,
+        until: metaFilters.dateRange.end,
+        ad_account_ids: accountsToSync,
+      });
+
+      console.log('✅ Sync result:', result);
+
+      // Refresh data
+      await refreshData();
+
+      toast({
+        title: "Dados sincronizados!",
+        description: `${totalCampaigns} campanhas e ${result.summary.totalDbUpserts} registros de métricas atualizados.`,
+      });
+    } catch (error) {
+      console.error('❌ Error syncing insights:', error);
+      toast({
+        title: "Erro ao sincronizar",
+        description: error instanceof Error ? error.message : "Não foi possível sincronizar os dados.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -156,6 +234,17 @@ export default function Dashboard() {
                 </SelectContent>
               </Select>
             )}
+
+            <Button
+              variant="outline"
+              size="default"
+              onClick={handleSyncInsights}
+              disabled={isSyncing || !metaFilters.dateRange}
+              className="gap-2 bg-gradient-to-r from-primary/10 to-secondary/10 border-primary/30 hover:from-primary/20 hover:to-secondary/20"
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+              {isSyncing ? 'Sincronizando...' : 'Atualizar Dados'}
+            </Button>
           </div>
         )}
       </div>
