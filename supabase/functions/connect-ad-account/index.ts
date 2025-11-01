@@ -144,7 +144,6 @@ Deno.serve(async (req: Request) => {
           connected_by: user.id,
           organization_id: organizationId,
           provider: 'meta',
-          platform: 'meta_ads',
           is_active: true,
           updated_at: new Date().toISOString()
         })
@@ -167,7 +166,6 @@ Deno.serve(async (req: Request) => {
           connected_by: user.id,
           organization_id: organizationId,
           provider: 'meta',
-          platform: 'meta_ads',
           is_active: true,
           connected_at: new Date().toISOString()
         })

@@ -230,11 +230,17 @@ const LeadForms = () => {
       // 1) Carrega formulários da organização (sem relacionamentos)
       let base: Tables<"lead_forms">[] = [];
       {
-      const { data, error } = await supabase
+        const baseQuery = supabase
           .from("lead_forms")
           .select("*, owner:profiles!lead_forms_owner_profile_id_fkey(slug)")
-          .eq("organization_id", organization.id)
           .order("created_at", { ascending: false });
+
+        // Busca por organização atual OU (registros antigos sem organização e do usuário atual)
+        const orFilter = user?.id
+          ? `organization_id.eq.${organization.id},and(organization_id.is.null,owner_profile_id.eq.${user.id})`
+          : `organization_id.eq.${organization.id}`;
+
+        const { data, error } = await baseQuery.or(orFilter);
 
         if (error) {
           const code = (error as any)?.code ?? "";
@@ -243,7 +249,7 @@ const LeadForms = () => {
           if (code === "PGRST204" && /'organization_id'/.test(message)) {
             const { data: fallbackData, error: fbErr } = await supabase
               .from("lead_forms")
-              .select("*")
+              .select("*, owner:profiles!lead_forms_owner_profile_id_fkey(slug)")
               .order("created_at", { ascending: false });
             if (fbErr) throw fbErr;
             base = (fallbackData ?? []) as Tables<"lead_forms">[];
