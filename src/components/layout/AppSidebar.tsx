@@ -41,8 +41,8 @@ const items: NavItem[] = [
     requiresCRM: true,
   },
   {
-    title: "Métricas Meta Ads",
-    url: "/meta-ads-config",
+    title: "Métricas",
+    url: "/metricas",
     icon: TrendingUp,
     requiresMetrics: true,
   },

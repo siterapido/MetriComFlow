@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { DollarSign, Users, Target, TrendingUp, TrendingDown, MousePointerClick, Eye } from 'lucide-react'
+import { DollarSign, Users, Target, TrendingUp, TrendingDown, MousePointerClick, Eye, BarChart3 } from 'lucide-react'
 import { formatCurrency, formatNumber, type CurrencyFormatOptions } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 
@@ -126,42 +126,30 @@ export function MetaAdsKPICards({ summary, isLoading, currencyOptions, highlight
   )
   const currencyPrefs: CurrencyFormatOptions = currencyOptions ?? { currency: 'BRL' }
   const locale = currencyPrefs.locale ?? 'pt-BR'
+
+  // Calculate CPM (Cost per 1000 impressions)
+  const cpm = hasData && summary!.current.impressions > 0
+    ? (summary!.current.spend / summary!.current.impressions) * 1000
+    : 0
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      {/* Mensagem (Leads) */}
       <KPICard
-        title="Investimento Total"
-        value={hasData ? formatCurrency(summary!.current.spend, currencyPrefs) : 'Sem dados'}
-        change={summary?.changes.spend}
-        icon={DollarSign}
+        title="Mensagem"
+        value={hasData ? formatNumber(summary!.current.leads) : '0'}
+        change={summary?.changes.leads}
+        icon={Users}
         iconColor="bg-gradient-to-br from-blue-500 to-blue-600"
         isLoading={isLoading}
         hideChange={!hasData}
       />
 
+      {/* Custo lead (CPL) */}
       <KPICard
-        title="Leads Gerados"
-        value={hasData ? formatNumber(summary!.current.leads) : 'Sem contatos'}
-        change={summary?.changes.leads}
-        subtitle={hasData ? `${summary!.current.impressions.toLocaleString(locale)} impressões` : undefined}
-        icon={Users}
-        iconColor="bg-gradient-to-br from-green-500 to-green-600"
-        isLoading={isLoading}
-        hideChange={!hasData}
-      />
-
-      <KPICard
-        title="CPL (Custo por Lead)"
-        value={hasData ? formatCurrency(summary!.current.cpl, currencyPrefs) : 'Sem dados'}
+        title="Custo lead"
+        value={hasData ? formatCurrency(summary!.current.cpl, currencyPrefs) : formatCurrency(0, currencyPrefs)}
         change={summary?.changes.cpl}
-        subtitle={
-          hasData
-            ? summary!.current.cpl < 50
-              ? 'Excelente custo'
-              : summary!.current.cpl < 100
-              ? 'Dentro da meta'
-              : 'Acima do ideal'
-            : undefined
-        }
         icon={Target}
         iconColor="bg-gradient-to-br from-purple-500 to-purple-600"
         isLoading={isLoading}
@@ -169,13 +157,45 @@ export function MetaAdsKPICards({ summary, isLoading, currencyOptions, highlight
         highlight={highlightCAC && hasData}
       />
 
+      {/* Cliques */}
       <KPICard
-        title="Taxa de Cliques (CTR)"
-        value={hasData ? `${summary!.current.ctr.toFixed(2)}%` : 'Sem dados'}
-        subtitle={hasData ? `${summary!.current.clicks.toLocaleString(locale)} cliques` : undefined}
+        title="Cliques"
+        value={hasData ? formatNumber(summary!.current.clicks) : '0'}
         icon={MousePointerClick}
+        iconColor="bg-gradient-to-br from-green-500 to-green-600"
+        isLoading={isLoading}
+        hideChange={true}
+      />
+
+      {/* Unique CTR */}
+      <KPICard
+        title="Unique CTR (Link Click-Through Rate)"
+        value={hasData ? `${summary!.current.ctr.toFixed(2)}` : '0'}
+        icon={Eye}
+        iconColor="bg-gradient-to-br from-cyan-500 to-cyan-600"
+        isLoading={isLoading}
+        hideChange={true}
+      />
+
+      {/* CPC */}
+      <KPICard
+        title="CPC"
+        value={hasData ? formatCurrency(summary!.current.cpc, currencyPrefs) : formatCurrency(0, currencyPrefs)}
+        icon={DollarSign}
         iconColor="bg-gradient-to-br from-orange-500 to-orange-600"
         isLoading={isLoading}
+        hideChange={true}
+      />
+
+      {/* Custo Mil Imp. (CPM) */}
+      <KPICard
+        title="Custo Mil Imp. (CPM)"
+        value={hasData ? cpm.toFixed(2) : '0'}
+        subtitle={hasData ? `${summary!.current.impressions.toLocaleString(locale)} impressões` : undefined}
+        icon={BarChart3}
+        iconColor="bg-gradient-to-br from-indigo-500 to-indigo-600"
+        isLoading={isLoading}
+        hideChange={true}
       />
     </div>
   )

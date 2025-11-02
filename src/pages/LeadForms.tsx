@@ -53,6 +53,7 @@ import {
   Download,
   Webhook,
 } from "lucide-react";
+import { Trash2, RotateCcw } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { Tables, TablesInsert } from "@/lib/database.types";
@@ -224,8 +225,8 @@ const copyToClipboard = async (value: string, onSuccess: () => void, onError: ()
 
 const LeadForms = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [editing, setEditing] = useState<LeadFormRecord | null>(null);
+  const [isCreatingQuick, setIsCreatingQuick] = useState(false);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [builderForm, setBuilderForm] = useState<LeadFormRecord | null>(null);
   const { toast } = useToast();
@@ -254,17 +255,42 @@ const LeadForms = () => {
           .order("created_at", { ascending: false });
 
         // Busca por organização atual OU (registros antigos sem organização e do usuário atual)
-        const orFilter = user?.id
+        const withDeleted = user?.id
+          ? `and(organization_id.eq.${organization.id},deleted_at.is.null),and(organization_id.is.null,owner_profile_id.eq.${user.id},deleted_at.is.null)`
+          : `and(organization_id.eq.${organization.id},deleted_at.is.null)`;
+        const withoutDeleted = user?.id
           ? `organization_id.eq.${organization.id},and(organization_id.is.null,owner_profile_id.eq.${user.id})`
           : `organization_id.eq.${organization.id}`;
 
-        const { data, error } = await baseQuery.or(orFilter);
+        // 1ª tentativa: filtro com deleted_at
+        let { data, error } = await baseQuery.or(withDeleted);
 
         if (error) {
           const code = (error as any)?.code ?? "";
           const message = String((error as any)?.message ?? "");
-          // Fallback para esquemas antigos sem organization_id
-          if (code === "PGRST204" && /'organization_id'/.test(message)) {
+
+          // Fallback: se deleted_at não existir, reexecuta sem esse filtro
+          if (code === "PGRST204" && /'deleted_at'/.test(message)) {
+            const res2 = await baseQuery.or(withoutDeleted);
+            if (res2.error) {
+              // Fallback adicional: se organization_id for ausente em schemas antigos
+              const code2 = (res2.error as any)?.code ?? "";
+              const msg2 = String((res2.error as any)?.message ?? "");
+              if (code2 === "PGRST204" && /'organization_id'/.test(msg2)) {
+                const { data: fallbackData, error: fbErr } = await supabase
+                  .from("lead_forms")
+                  .select("*, owner:profiles!lead_forms_owner_profile_id_fkey(slug)")
+                  .order("created_at", { ascending: false });
+                if (fbErr) throw fbErr;
+                base = (fallbackData ?? []) as Tables<"lead_forms">[];
+              } else {
+                throw res2.error;
+              }
+            } else {
+              base = (res2.data ?? []) as Tables<"lead_forms">[];
+            }
+          } else if (code === "PGRST204" && /'organization_id'/.test(message)) {
+            // Fallback legado: sem organization_id
             const { data: fallbackData, error: fbErr } = await supabase
               .from("lead_forms")
               .select("*, owner:profiles!lead_forms_owner_profile_id_fkey(slug)")
@@ -363,19 +389,23 @@ const LeadForms = () => {
     form.formState.errors.defaultFields as { root?: { message?: string } } | undefined
   )?.root?.message;
 
+  // Evita loop de render: só atualiza campaignId quando necessário e usa deps estáveis
+  const adCampaignIds = useMemo(() => (adCampaigns ?? []).map((c) => c.id).join(","), [adCampaigns]);
   useEffect(() => {
+    const current = form.getValues("campaignId");
     if (!selectedAccountId) {
-      form.setValue("campaignId", null);
-    } else {
-      const currentCampaignId = form.getValues("campaignId");
-      if (currentCampaignId) {
-        const exists = adCampaigns.some((campaign) => campaign.id === currentCampaignId);
-        if (!exists) {
-          form.setValue("campaignId", null);
-        }
+      if (current !== null) {
+        form.setValue("campaignId", null, { shouldDirty: false, shouldTouch: false });
+      }
+      return;
+    }
+    if (current) {
+      const exists = (adCampaigns ?? []).some((c) => c.id === current);
+      if (!exists) {
+        form.setValue("campaignId", null, { shouldDirty: false, shouldTouch: false });
       }
     }
-  }, [selectedAccountId, adCampaigns, form]);
+  }, [selectedAccountId, adCampaignIds]);
 
   const createFormMutation = useMutation<Tables<"lead_forms">, unknown, CreateLeadFormPayload>({
     mutationFn: async ({ form: formPayload, fields, variant }: CreateLeadFormPayload) => {
@@ -466,81 +496,6 @@ const LeadForms = () => {
     },
   });
 
-  // Edição de formulário existente
-  const editForm = useForm<EditFormSchema>({
-    resolver: zodResolver(editFormSchema),
-    defaultValues: {
-      name: "",
-      description: "",
-      successMessage: "",
-      webhookUrl: "",
-      redirectUrl: "",
-      slug: "",
-    },
-  });
-
-  const openEdit = (formItem: LeadFormRecord) => {
-    setEditing(formItem);
-    editForm.reset({
-      name: formItem.name ?? "",
-      description: formItem.description ?? "",
-      successMessage: formItem.success_message ?? "",
-      webhookUrl: formItem.webhook_url ?? "",
-      redirectUrl: formItem.redirect_url ?? "",
-      slug: (formItem as any).slug ?? toSlug(formItem.name ?? ""),
-    });
-    setIsEditOpen(true);
-  };
-
-  const closeEdit = () => {
-    setIsEditOpen(false);
-    setEditing(null);
-  };
-
-  const updateFormMutation = useMutation({
-    mutationFn: async (payload: { id: string; values: EditFormSchema }) => {
-      const { id, values } = payload;
-      // Monta atualização com sanitização, e fallback removendo colunas desconhecidas (ex.: slug) se necessário
-      const upd: Record<string, unknown> = {
-        name: values.name,
-        description: values.description?.trim() ? values.description.trim() : null,
-        success_message: values.successMessage?.trim() ? values.successMessage.trim() : null,
-        webhook_url: values.webhookUrl?.toString().trim() || null,
-        redirect_url: values.redirectUrl?.toString().trim() || null,
-      };
-      if (values.slug && values.slug.trim()) {
-        upd.slug = values.slug.trim();
-      }
-
-      let attemptPayload = { ...upd } as Record<string, unknown>;
-      for (let i = 0; i < 3; i++) {
-        const { error } = await supabase.from("lead_forms").update(attemptPayload).eq("id", id);
-        if (!error) return;
-        const code = (error as any)?.code ?? "";
-        const message = String((error as any)?.message ?? "");
-        const match = message.match(/Could not find the '([^']+)' column/i);
-        if (code === "PGRST204" && match && match[1] && attemptPayload.hasOwnProperty(match[1])) {
-          delete (attemptPayload as any)[match[1]];
-          continue;
-        }
-        throw error;
-      }
-      throw new Error("Falha ao atualizar formulário");
-    },
-    onSuccess: () => {
-      toast({ title: "Formulário atualizado", description: "As alterações foram salvas." });
-      closeEdit();
-      queryClient.invalidateQueries({ queryKey: ["lead-forms"] });
-    },
-    onError: (err: any) => {
-      let message = String(err?.message ?? err);
-      const code = String(err?.code ?? "");
-      if (code === "23505") {
-        message = "Já existe um formulário seu com esse slug. Escolha outro.";
-      }
-      toast({ title: "Erro ao atualizar", description: message, variant: "destructive" });
-    },
-  });
 
   const updateFormStatusMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
@@ -625,6 +580,130 @@ const LeadForms = () => {
       averageSubmissions,
     };
   }, [forms]);
+
+  // Lixeira: contagem e ações
+  const { data: trashCount = 0 } = useQuery<number>({
+    queryKey: ["lead-forms-trash-count", organization?.id],
+    enabled: !!organization?.id,
+    queryFn: async () => {
+      if (!organization?.id) return 0;
+      const { count, error } = await supabase
+        .from("lead_forms")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", organization.id)
+        .not("deleted_at", "is", null);
+      if (error) {
+        const code = (error as any)?.code ?? "";
+        const message = String((error as any)?.message ?? "");
+        if (code === "PGRST204" && /'deleted_at'/.test(message)) return 0;
+        throw error;
+      }
+      return count ?? 0;
+    },
+  });
+
+  const emptyTrashMutation = useMutation({
+    mutationFn: async () => {
+      if (!organization?.id) return;
+      const { error } = await supabase
+        .from("lead_forms")
+        .delete()
+        .eq("organization_id", organization.id)
+        .not("deleted_at", "is", null);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Lixeira esvaziada", description: "Formulários removidos permanentemente." });
+      queryClient.invalidateQueries({ queryKey: ["lead-forms"] });
+      queryClient.invalidateQueries({ queryKey: ["lead-forms-trash"] });
+      queryClient.invalidateQueries({ queryKey: ["lead-forms-trash-count"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro ao esvaziar lixeira", description: String(err?.message ?? err), variant: "destructive" });
+    },
+  });
+
+  const softDeleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      // tenta soft-delete; se coluna inexistente, faz hard delete
+      let payload: Record<string, unknown> = { deleted_at: new Date().toISOString(), is_active: false };
+      for (let i = 0; i < 3; i++) {
+        const { error } = await supabase.from("lead_forms").update(payload).eq("id", id);
+        if (!error) return;
+        const code = (error as any)?.code ?? "";
+        const message = String((error as any)?.message ?? "");
+        const match = message.match(/Could not find the '([^']+)' column/i);
+        if (code === "PGRST204" && match && match[1] && payload.hasOwnProperty(match[1])) {
+          delete (payload as any)[match[1]];
+          continue;
+        }
+        const { error: delErr } = await supabase.from("lead_forms").delete().eq("id", id);
+        if (delErr) throw delErr;
+        return;
+      }
+    },
+    onSuccess: () => {
+      toast({ title: "Formulário movido para a lixeira" });
+      queryClient.invalidateQueries({ queryKey: ["lead-forms"] });
+      queryClient.invalidateQueries({ queryKey: ["lead-forms-trash"] });
+      queryClient.invalidateQueries({ queryKey: ["lead-forms-trash-count"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro ao excluir", description: String(err?.message ?? err), variant: "destructive" });
+    },
+  });
+
+  const { data: trashList = [], isLoading: loadingTrash } = useQuery<LeadFormRecord[]>({
+    queryKey: ["lead-forms-trash", organization?.id],
+    enabled: !!organization?.id,
+    queryFn: async () => {
+      if (!organization?.id) return [] as LeadFormRecord[];
+      const { data, error } = await supabase
+        .from("lead_forms")
+        .select("*, owner:profiles!lead_forms_owner_profile_id_fkey(slug)")
+        .eq("organization_id", organization.id)
+        .not("deleted_at", "is", null)
+        .order("deleted_at", { ascending: false });
+      if (error) {
+        const code = (error as any)?.code ?? "";
+        const message = String((error as any)?.message ?? "");
+        if (code === "PGRST204" && /'deleted_at'/.test(message)) return [] as LeadFormRecord[];
+        throw error;
+      }
+      return (data ?? []) as LeadFormRecord[];
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("lead_forms").update({ deleted_at: null, is_active: true }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Formulário restaurado" });
+      queryClient.invalidateQueries({ queryKey: ["lead-forms"] });
+      queryClient.invalidateQueries({ queryKey: ["lead-forms-trash"] });
+      queryClient.invalidateQueries({ queryKey: ["lead-forms-trash-count"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro ao restaurar", description: String(err?.message ?? err), variant: "destructive" });
+    },
+  });
+
+  const hardDeleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("lead_forms").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Formulário removido" });
+      queryClient.invalidateQueries({ queryKey: ["lead-forms-trash"] });
+      queryClient.invalidateQueries({ queryKey: ["lead-forms-trash-count"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro ao remover", description: String(err?.message ?? err), variant: "destructive" });
+    },
+  });
 
   const handleCreateForm = async (values: FormSchema) => {
     if (!organization?.id) {
@@ -896,9 +975,117 @@ const LeadForms = () => {
                   Configure a URL pública, mensagem de sucesso e o destino do lead para cada formulário.
                 </CardDescription>
               </div>
-              <Button variant="outline" onClick={() => setIsDialogOpen(true)} className="gap-2">
-                <Plus className="w-4 h-4" /> Novo formulário
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsTrashOpen(true)}
+                  className="gap-2"
+                >
+                  <Trash2 className="w-4 h-4" /> Lixeira
+                  {trashCount > 0 ? <span className="ml-1 text-xs text-muted-foreground">({trashCount})</span> : null}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                  if (!organization?.id || !user?.id) {
+                    toast({
+                      title: "Sessão/Organização ausente",
+                      description: "Faça login e selecione uma organização para criar o formulário.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  setIsCreatingQuick(true);
+                  try {
+                    const baseName = "Formulário sem título";
+                    const baseSlug = toSlug(baseName);
+                    const slug = `${baseSlug}-${Math.random().toString(36).slice(2,6)}`;
+                    const id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+                      ? crypto.randomUUID()
+                      : `form-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+
+                    let payload: Record<string, unknown> = {
+                      id,
+                      name: baseName,
+                      slug,
+                      is_active: true,
+                      submission_count: 0,
+                      organization_id: organization.id,
+                      owner_profile_id: user.id,
+                      settings: {},
+                    };
+
+                    let created: LeadFormRecord | null = null;
+                    for (let i = 0; i < 3; i++) {
+                      const { data, error } = await supabase.from("lead_forms").insert(payload).select("*").single();
+                      if (!error) {
+                        created = data as unknown as LeadFormRecord;
+                        break;
+                      }
+                      const code = (error as any)?.code ?? "";
+                      const message = String((error as any)?.message ?? "");
+                      const match = message.match(/Could not find the '([^']+)' column/i);
+                      if (code === "PGRST204" && match && match[1] && payload.hasOwnProperty(match[1])) {
+                        delete (payload as any)[match[1]];
+                        continue;
+                      }
+                      throw error;
+                    }
+
+                    if (created) {
+                      // Inserir campos padrão: nome, email, telefone
+                      try {
+                        const baseKeys: DefaultFieldKey[] = ["fullName", "email", "phone"];
+                        const formattedFields = baseKeys.map((key, index) => {
+                          const t = DEFAULT_FIELD_TEMPLATES[key];
+                          return {
+                            form_id: created!.id,
+                            key: t.key,
+                            label: t.label,
+                            type: t.type,
+                            is_required: t.isRequired,
+                            order_index: (index + 1) * 10,
+                            placeholder: t.placeholder ?? null,
+                            help_text: t.helpText ?? null,
+                            options: [],
+                            validations: t.validations ?? {},
+                            crm_field: t.crmField ?? null,
+                            meta_field: t.metaField ?? null,
+                          } as TablesInsert<"lead_form_fields">;
+                        });
+                        const { error: fieldsErr } = await supabase.from("lead_form_fields").insert(formattedFields);
+                        if (fieldsErr) {
+                          // Não bloqueia o fluxo; exibe aviso leve
+                          console.warn("[LeadForms] falha ao inserir campos padrão", fieldsErr);
+                        }
+                      } catch (e) {
+                        console.warn("[LeadForms] erro inesperado ao criar campos padrão", e);
+                      }
+
+                      // Abrir o popup unificado já no formulário criado
+                      setBuilderForm(created);
+                      queryClient.invalidateQueries({ queryKey: ["lead-forms"] });
+                    }
+                  } catch (err: any) {
+                    toast({ title: "Erro ao criar formulário", description: String(err?.message ?? err), variant: "destructive" });
+                  } finally {
+                    setIsCreatingQuick(false);
+                  }
+                }}
+                disabled={isCreatingQuick}
+                  className="gap-2"
+                >
+                  {isCreatingQuick ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Criando...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" /> Novo formulário
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <Table>
@@ -1013,17 +1200,9 @@ const LeadForms = () => {
                                 variant="secondary"
                                 size="sm"
                                 className="gap-1"
-                                onClick={() => openEdit(formItem)}
-                              >
-                                Editar
-                              </Button>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                className="gap-1"
                                 onClick={() => handleOpenBuilder(formItem)}
                               >
-                                <FileText className="w-3 h-3" /> Campos
+                                <FileText className="w-3 h-3" /> Editar & Campos
                               </Button>
                               <Button
                                 variant="outline"
@@ -1059,6 +1238,18 @@ const LeadForms = () => {
                                   <Webhook className="w-3 h-3" /> Webhook
                                 </Button>
                               )}
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="gap-1"
+                                onClick={() => {
+                                  if (confirm(`Enviar "${formItem.name}" para a lixeira?`)) {
+                                    softDeleteMutation.mutate(formItem.id);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="w-3 h-3" /> Excluir
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -1069,6 +1260,101 @@ const LeadForms = () => {
               </Table>
             </CardContent>
           </Card>
+          {false && (
+          <Card className="border-border bg-card">
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-lg font-semibold text-foreground">Lixeira</CardTitle>
+                <CardDescription>
+                  Formulários excluídos recentemente. Você pode restaurar ou remover permanentemente.
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (trashCount <= 0) return;
+                  if (confirm(`Esvaziar lixeira e remover ${trashCount} formulário(s) permanentemente?`)) {
+                    emptyTrashMutation.mutate();
+                  }
+                }}
+                disabled={trashCount <= 0 || emptyTrashMutation.isPending}
+                className="gap-2"
+              >
+                <Trash2 className="w-4 h-4" /> Esvaziar lixeira {trashCount > 0 ? `(${trashCount})` : ""}
+              </Button>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Formulário</TableHead>
+                    <TableHead className="hidden md:table-cell">Excluído em</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingTrash ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="py-10">
+                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="w-4 h-4 animate-spin" /> Carregando lixeira...
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (trashList ?? []).length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="py-10 text-center text-sm text-muted-foreground">
+                        Lixeira vazia.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    (trashList ?? []).map((formItem) => (
+                      <TableRow key={formItem.id} className="hover:bg-muted/40">
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="font-medium text-foreground">{formItem.name}</p>
+                            {formItem.description && (
+                              <p className="text-xs text-muted-foreground max-w-lg">{formItem.description}</p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                          {(formItem as any).deleted_at ? formatDate((formItem as any).deleted_at) : "--"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="gap-1"
+                              onClick={() => restoreMutation.mutate(formItem.id)}
+                              disabled={restoreMutation.isPending}
+                            >
+                              <RotateCcw className="w-3 h-3" /> Restaurar
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="gap-1"
+                              onClick={() => {
+                                if (confirm(`Remover permanentemente "${formItem.name}"?`)) {
+                                  hardDeleteMutation.mutate(formItem.id);
+                                }
+                              }}
+                              disabled={hardDeleteMutation.isPending}
+                            >
+                              <Trash2 className="w-3 h-3" /> Excluir definitivamente
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+          )}
 
           <Card className="border-dashed border-border bg-muted/30">
             <CardHeader>
@@ -1102,6 +1388,7 @@ const LeadForms = () => {
             </CardContent>
           </Card>
         </TabsContent>
+
 
         <TabsContent value="integrations" className="space-y-4">
           <div className="grid gap-4 lg:grid-cols-2">
@@ -1430,6 +1717,108 @@ const LeadForms = () => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Lixeira Dialog */}
+      <Dialog open={isTrashOpen} onOpenChange={setIsTrashOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Lixeira</DialogTitle>
+            <DialogDescription>
+              Formulários excluídos recentemente. Você pode restaurar ou remover permanentemente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Formulário</TableHead>
+                  <TableHead className="hidden md:table-cell">Excluído em</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingTrash ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="py-10">
+                      <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Carregando lixeira...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (trashList ?? []).length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="py-10 text-center text-sm text-muted-foreground">
+                      Lixeira vazia.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  (trashList ?? []).map((formItem) => (
+                    <TableRow key={formItem.id} className="hover:bg-muted/40">
+                      <TableCell>
+                        <div className="space-y-1">
+                          <p className="font-medium text-foreground">{formItem.name}</p>
+                          {formItem.description && (
+                            <p className="text-xs text-muted-foreground max-w-lg">{formItem.description}</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                        {(formItem as any).deleted_at ? formatDate((formItem as any).deleted_at) : "--"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="gap-1"
+                            onClick={() => restoreMutation.mutate(formItem.id)}
+                            disabled={restoreMutation.isPending}
+                          >
+                            <RotateCcw className="w-3 h-3" /> Restaurar
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="gap-1"
+                            onClick={() => {
+                              if (confirm(`Remover permanentemente \"${formItem.name}\"?`)) {
+                                hardDeleteMutation.mutate(formItem.id);
+                              }
+                            }}
+                            disabled={hardDeleteMutation.isPending}
+                          >
+                            <Trash2 className="w-3 h-3" /> Excluir definitivamente
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsTrashOpen(false)}>
+              Fechar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (trashCount <= 0) return;
+                if (confirm(`Esvaziar lixeira e remover ${trashCount} formulário(s) permanentemente?`)) {
+                  emptyTrashMutation.mutate();
+                }
+              }}
+              disabled={trashCount <= 0 || emptyTrashMutation.isPending}
+              className="gap-2"
+            >
+              <Trash2 className="w-4 h-4" /> Esvaziar lixeira
+              {trashCount > 0 ? <span className="ml-1 text-xs text-muted-foreground">({trashCount})</span> : null}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
       {builderForm && (
         <LeadFormBuilderDrawer form={builderForm} open={Boolean(builderForm)} onClose={handleCloseBuilder} />

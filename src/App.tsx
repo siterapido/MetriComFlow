@@ -66,9 +66,10 @@ const App = () => (
                 {/* Rota /metas desabilitada temporariamente */}
                 <Route path="/metas" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/metas-legacy" element={<Navigate to="/dashboard" replace />} />
-                {/* Redireciona /metrics para /meta-ads-config (páginas unificadas) */}
-                <Route path="/metrics" element={<Navigate to="/meta-ads-config" replace />} />
-                <Route path="/meta-ads-config" element={<MetaAdsConfig />} />
+                {/* Rota de métricas (antiga /meta-ads-config redirecionada) */}
+                <Route path="/metricas" element={<MetaAdsConfig />} />
+                <Route path="/meta-ads-config" element={<Navigate to="/metricas" replace />} />
+                <Route path="/metrics" element={<Navigate to="/metricas" replace />} />
                 {/* Nova página unificada de gestão de equipe */}
                 <Route path="/equipe" element={<TeamManagement />} />
                 {/* Redirects de rotas antigas para nova rota unificada */}

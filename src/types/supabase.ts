@@ -179,6 +179,7 @@ export type Database = {
           submission_count: number
           created_at: string
           updated_at: string
+          deleted_at: string | null
           organization_id: string | null
           owner_profile_id: string | null
           schema_version: number
@@ -199,6 +200,7 @@ export type Database = {
           submission_count?: number
           created_at?: string
           updated_at?: string
+          deleted_at?: string | null
           organization_id?: string | null
           owner_profile_id?: string | null
           schema_version?: number
@@ -219,6 +221,7 @@ export type Database = {
           submission_count?: number
           created_at?: string
           updated_at?: string
+          deleted_at?: string | null
           organization_id?: string | null
           owner_profile_id?: string | null
           schema_version?: number

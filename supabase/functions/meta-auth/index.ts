@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
       input: string | undefined,
       origin: string | null
     ): string => {
-      const DEFAULT_PATH = '/meta-ads-config';
+      const DEFAULT_PATH = '/metricas';
 
       // Read production URL from environment (with fallback for backward compatibility)
       const PRODUCTION_BASE_URL = Deno.env.get('VITE_APP_URL') ||

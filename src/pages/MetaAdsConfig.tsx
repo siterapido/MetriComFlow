@@ -32,7 +32,16 @@ import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MetaAdsChart } from "@/components/meta-ads/MetaAdsChart";
 import { MetaAdsKPICards } from "@/components/meta-ads/MetaAdsKPICards";
-import { useFilteredInsights, useMetricsSummary, useCampaignFinancialsFiltered, useAdAccounts, useAdCampaigns, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
+import { FunnelsSection } from "@/components/meta-ads/FunnelsSection";
+import { CreativePerformanceChart } from "@/components/meta-ads/CreativePerformanceChart";
+import { DailyInvestmentChart } from "@/components/meta-ads/DailyInvestmentChart";
+import { MetricsEvolutionChart } from "@/components/meta-ads/MetricsEvolutionChart";
+import { ROIAnalysisChart } from "@/components/meta-ads/ROIAnalysisChart";
+import { ConversionTimeFunnel } from "@/components/meta-ads/ConversionTimeFunnel";
+import { AudienceDistribution } from "@/components/meta-ads/AudienceDistribution";
+import { CostQualityChart } from "@/components/meta-ads/CostQualityChart";
+import { CampaignScorecard } from "@/components/meta-ads/CampaignScorecard";
+import { useFilteredInsights, useMetricsSummary, useCampaignFinancialsFiltered, useAdAccounts, useAdCampaigns, getLastNDaysDateRange, useConversionFunnel, useConversionTimeFunnel } from "@/hooks/useMetaMetrics";
 import { formatCurrency } from "@/lib/formatters";
 import { useUserSettings } from "@/hooks/useUserSettings";
 
@@ -90,6 +99,16 @@ export default function MetaAdsConfig() {
   const { data: metaInsights, isLoading: insightsLoading } = useFilteredInsights(filters);
   const { data: metaSummary, isLoading: summaryLoading } = useMetricsSummary(filters);
   const { data: campaignFinancials, isLoading: financialsLoading } = useCampaignFinancialsFiltered({
+    accountId: filters.accountId,
+    campaignId: filters.campaignId,
+    dateRange: filters.dateRange,
+  });
+  const { data: conversionFunnel, isLoading: funnelLoading } = useConversionFunnel({
+    accountId: filters.accountId,
+    campaignId: filters.campaignId,
+    dateRange: filters.dateRange,
+  });
+  const { data: conversionTimeFunnel, isLoading: timeLoading } = useConversionTimeFunnel({
     accountId: filters.accountId,
     campaignId: filters.campaignId,
     dateRange: filters.dateRange,
@@ -369,6 +388,106 @@ export default function MetaAdsConfig() {
       }));
   }, [filteredCampaignFinancials]);
 
+  // Conversion funnel data from CRM
+  const conversionFunnelData = useMemo(() => {
+    return conversionFunnel || {
+      novo: 0,
+      contato_inicial: 0,
+      qualificado: 0,
+      proposta: 0,
+      negociacao: 0,
+      fechado_ganho: 0,
+    };
+  }, [conversionFunnel]);
+
+  // Engagement funnel data from Meta Ads metrics
+  const engagementFunnelData = useMemo(() => {
+    return {
+      impressions: metaSummary?.current.impressions || 0,
+      clicks: metaSummary?.current.clicks || 0,
+      leads: metaSummary?.current.leads || 0,
+    };
+  }, [metaSummary]);
+
+  // Prepare creative performance data (top campaigns by CTR and impressions)
+  const creativePerformanceData = useMemo(() => {
+    if (!filteredCampaignFinancials) return [];
+    return filteredCampaignFinancials
+      .filter(c => c.impressions > 0)
+      .slice(0, 8)
+      .map(c => ({
+        name: c.campaign_name.length > 20 ? c.campaign_name.substring(0, 20) + '...' : c.campaign_name,
+        ctr: c.ctr,
+        impressions: c.impressions,
+      }));
+  }, [filteredCampaignFinancials]);
+
+  // Prepare daily investment breakdown
+  const dailyInvestmentData = useMemo(() => {
+    if (!metaInsights || metaInsights.length === 0) return [];
+
+    const total = metaInsights.reduce((sum, day) => sum + (day.spend || 0), 0);
+    const sortedDays = [...metaInsights]
+      .sort((a, b) => (b.spend || 0) - (a.spend || 0))
+      .slice(0, 10);
+
+    return sortedDays.map(day => ({
+      date: day.date,
+      value: day.spend || 0,
+      percentage: total > 0 ? (((day.spend || 0) / total) * 100).toFixed(1) : '0.0',
+    }));
+  }, [metaInsights]);
+
+  // Prepare metrics evolution data
+  const metricsEvolutionData = useMemo(() => {
+    if (!metaInsights || metaInsights.length === 0) return [];
+
+    return metaInsights.map(day => ({
+      date: day.date,
+      cpl: day.cpl || 0,
+      ctr: day.ctr || 0,
+      conversion_rate: day.leads_count > 0 && day.clicks > 0 ? (day.leads_count / day.clicks) * 100 : 0,
+      roas: 0, // TODO: Calculate from CRM data
+    }));
+  }, [metaInsights]);
+
+  // Prepare ROI analysis data
+  const roiAnalysisData = useMemo(() => {
+    if (!filteredCampaignFinancials) return [];
+    return filteredCampaignFinancials
+      .filter(c => c.investimento > 0)
+      .slice(0, 15)
+      .map(c => ({
+        campaign_name: c.campaign_name,
+        investimento: c.investimento,
+        faturamento: c.faturamento,
+        leads: c.leads_gerados,
+        roas: c.roas || 0,
+      }));
+  }, [filteredCampaignFinancials]);
+
+  // Prepare cost vs quality data
+  const costQualityData = useMemo(() => {
+    if (!filteredCampaignFinancials) return [];
+    return filteredCampaignFinancials
+      .filter(c => c.leads_gerados > 0)
+      .map(c => ({
+        campaign_name: c.campaign_name,
+        cpl: c.cpl || 0,
+        conversion_rate: c.taxa_conversao,
+        leads: c.leads_gerados,
+      }));
+  }, [filteredCampaignFinancials]);
+
+  // Prepare audience distribution (real data from Meta API would be displayed here)
+  // Currently empty as demographic data is not yet available from Meta Insights API
+  const audienceData = useMemo(() => ({
+    byAge: [],
+    byGender: [],
+    byDevice: [],
+    byLocation: [],
+  }), []);
+
   const COLORS = ['#2DA7FF', '#0D9DFF', '#0B7FCC', '#096199', '#074366'];
 
   if (authLoading) {
@@ -383,9 +502,14 @@ export default function MetaAdsConfig() {
     <div className="space-y-6 animate-fade-in">
       {/* Header com filtros integrados */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Métricas Meta Ads</h1>
-          <p className="text-muted-foreground">Performance e ROI das campanhas</p>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-md">
+            <Facebook className="w-7 h-7 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Métricas</h1>
+            <p className="text-muted-foreground">Performance e análise de campanhas</p>
+          </div>
         </div>
 
         {/* Filtros minimalistas inline + botões */}
@@ -708,17 +832,27 @@ export default function MetaAdsConfig() {
             highlightCAC={highlightCAC}
           />
 
+          {/* Funnels Section */}
+          <FunnelsSection
+            engagementData={engagementFunnelData}
+            conversionData={conversionFunnelData}
+            isLoadingEngagement={summaryLoading}
+            isLoadingConversion={funnelLoading}
+          />
+
           {/* Charts Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Histórico de Métricas */}
-            <div className="lg:col-span-2">
-              <MetaAdsChart
-                data={metaInsights || []}
-                isLoading={insightsLoading}
-                currencyOptions={currencyOptions}
-                highlightCAC={highlightCAC}
-              />
-            </div>
+            {/* Creative Performance Chart */}
+            <CreativePerformanceChart
+              data={creativePerformanceData}
+              isLoading={financialsLoading}
+            />
+
+            {/* Daily Investment Breakdown */}
+            <DailyInvestmentChart
+              data={dailyInvestmentData}
+              isLoading={insightsLoading}
+            />
 
             {/* Campaign Performance */}
             {campaignInvestmentData.length > 0 && (
@@ -752,63 +886,61 @@ export default function MetaAdsConfig() {
                 </CardContent>
               </Card>
             )}
-
-            {/* Investment Distribution */}
-            {campaignDistributionData.length > 0 && (
-              <Card className="border-border bg-card">
-                <CardHeader>
-                  <CardTitle className="text-foreground flex items-center gap-2">
-                    <PieChart className="w-5 h-5" />
-                    Distribuição do Investimento
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Top 5 campanhas por % do orçamento
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={350}>
-                    <RePieChart>
-                      <Pie
-                        data={campaignDistributionData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percentage }) => `${percentage}%`}
-                        outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {campaignDistributionData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#1F2937",
-                          border: "1px solid #374151",
-                          borderRadius: "8px",
-                          color: "#F9FAFB"
-                        }}
-                        formatter={(value: any) => [formatCurrency(value), 'Investimento']}
-                      />
-                    </RePieChart>
-                  </ResponsiveContainer>
-                  <div className="mt-4 space-y-2">
-                    {campaignDistributionData.map((entry, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                        />
-                        <span className="text-foreground truncate flex-1">{entry.name}</span>
-                        <span className="text-muted-foreground">{entry.percentage}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </div>
+
+          {/* Historical Metrics Chart - Full Width */}
+          <MetaAdsChart
+            data={metaInsights || []}
+            isLoading={insightsLoading}
+            currencyOptions={currencyOptions}
+            highlightCAC={highlightCAC}
+          />
+
+          {/* New Charts Section */}
+          {/* Metrics Evolution */}
+          <MetricsEvolutionChart
+            data={metricsEvolutionData}
+            isLoading={insightsLoading}
+          />
+
+          {/* ROI Analysis & Cost Quality */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ROIAnalysisChart
+              data={roiAnalysisData}
+              isLoading={financialsLoading}
+            />
+
+            <CostQualityChart
+              data={costQualityData}
+              isLoading={financialsLoading}
+            />
+          </div>
+
+          {/* Conversion Time & Audience */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ConversionTimeFunnel
+              data={conversionTimeFunnel || {
+                lead_to_contact: 0,
+                contact_to_qualified: 0,
+                qualified_to_proposal: 0,
+                proposal_to_negotiation: 0,
+                negotiation_to_closed: 0,
+              }}
+              isLoading={timeLoading}
+            />
+
+            <AudienceDistribution
+              data={audienceData}
+              isLoading={false}
+            />
+          </div>
+
+          {/* Campaign Scorecard */}
+          <CampaignScorecard
+            data={filteredCampaignFinancials || []}
+            cplTarget={50}
+            isLoading={financialsLoading}
+          />
 
           {/* Campaign Table */}
           <Card className="border-border bg-card">

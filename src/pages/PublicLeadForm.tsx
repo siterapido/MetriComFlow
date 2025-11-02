@@ -53,6 +53,13 @@ const PublicLeadForm = () => {
   const [submissionError, setSubmissionError] = useState<string | null>(null);
 
   const themeStyle = useMemo(() => buildThemeStyle(data?.theme), [data?.theme]);
+  const branding = useMemo(() => {
+    const b = (data?.theme && typeof data.theme === "object" ? (data.theme as any).branding : null) || {};
+    return {
+      bannerUrl: typeof b.bannerUrl === "string" && b.bannerUrl.length > 0 ? (b.bannerUrl as string) : null,
+      logoUrl: typeof b.logoUrl === "string" && b.logoUrl.length > 0 ? (b.logoUrl as string) : null,
+    };
+  }, [data?.theme]);
 
   const handleSubmit = useCallback(
     async (values: Record<string, unknown>) => {
@@ -151,6 +158,28 @@ const PublicLeadForm = () => {
       style={themeStyle}
     >
       <div className="flex w-full max-w-5xl flex-col items-center gap-8">
+        {(branding.bannerUrl || branding.logoUrl) && (
+          <div className="w-full max-w-3xl">
+            <div className="relative">
+              {branding.bannerUrl ? (
+                <img src={branding.bannerUrl} alt="Capa do formulário" className="h-40 w-full rounded-xl object-cover md:h-56" />
+              ) : (
+                <div className="h-40 w-full rounded-xl bg-gradient-to-r from-primary/20 to-secondary/20 md:h-56" />
+              )}
+              {branding.logoUrl && (
+                <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 transform">
+                  <img
+                    src={branding.logoUrl}
+                    alt="Logo da empresa"
+                    className="h-16 w-16 rounded-full border-2 border-white/70 shadow-md ring-2 ring-white/50 object-cover bg-white"
+                  />
+                </div>
+              )}
+            </div>
+            {/* Espaço para a logo sobreposta */}
+            {branding.logoUrl && <div className="h-10" />}
+          </div>
+        )}
         {data.description && (
           <div className="max-w-2xl text-center">
             <p className="text-sm text-muted-foreground">{data.description}</p>

@@ -401,7 +401,15 @@ export const useSubscriptionTimeline = (subscriptionId: string | null) => {
         .order("created_at", { ascending: false })
         .limit(50);
 
-      if (error) throw error;
+      if (error) {
+        const status = (error as any)?.status ?? 0;
+        const message = String((error as any)?.message ?? "");
+        // Se a tabela ainda não existir no projeto, ignora e retorna lista vazia
+        if (status === 404 || /not found|does not exist|relation/i.test(message)) {
+          return [] as SubscriptionEventLog[];
+        }
+        throw error;
+      }
       return (data as SubscriptionEventLog[]) ?? [];
     },
     enabled: !!subscriptionId,

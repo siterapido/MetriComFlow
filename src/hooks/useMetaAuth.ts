@@ -60,11 +60,11 @@ export function useMetaAuth() {
 
     if (isProd && appUrl) {
       // Use configured production URL
-      return `${appUrl}/meta-ads-config`;
+      return `${appUrl}/metricas`;
     }
 
     // Fallback to current window origin (for local dev)
-    return `${window.location.origin}/meta-ads-config`;
+    return `${window.location.origin}/metricas`;
   })();
 
   // Helper to parse Supabase FunctionsHttpError and extract JSON/text body

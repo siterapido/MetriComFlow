@@ -115,4 +115,10 @@ export default defineConfig(({ mode }) => ({
     __APP_ENV__: JSON.stringify(process.env.VITE_VERCEL_ENV || mode),
     __LATEST_COMMIT__: JSON.stringify(gitInfo),
   },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./vitest.setup.ts'],
+    css: true,
+  },
 }));

@@ -287,7 +287,7 @@ export default function Leads() {
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span>Leads vinculados a campanhas do Meta Ads estão ocultos até que a integração seja reativada. Eles permanecem salvos para uso futuro.</span>
             <Button variant="outline" size="sm" asChild>
-              <a href="/meta-ads-config">Reativar Meta Ads</a>
+              <a href="/metricas">Reativar Meta Ads</a>
             </Button>
           </AlertDescription>
         </Alert>

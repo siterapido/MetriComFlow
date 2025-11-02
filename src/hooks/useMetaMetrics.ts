@@ -514,6 +514,237 @@ export function useMetricsSummary(filters?: {
 }
 
 // NEW: Fetch campaign financials aligned to filters and date range (filtered by organization)
+/**
+ * Fetch conversion funnel data from CRM (filtered by organization and date range)
+ * Returns funnel stages: novo -> contato_inicial -> qualificado -> proposta -> negociacao -> fechado_ganho
+ */
+/**
+ * Fetch conversion time funnel data (time between stages in days)
+ */
+export function useConversionTimeFunnel(filters?: {
+  accountId?: string
+  campaignId?: string
+  dateRange?: { start: string; end: string }
+}, options?: { enabled?: boolean }) {
+  const { accountId, campaignId, dateRange } = filters || {}
+  const range = dateRange || getLastNDaysDateRange(90)
+  const { data: activeOrg } = useActiveOrganization()
+
+  return useQuery({
+    queryKey: ['conversion-time-funnel', accountId, campaignId, range, activeOrg?.id],
+    queryFn: async () => {
+      if (!activeOrg?.id) {
+        return {
+          lead_to_contact: 0,
+          contact_to_qualified: 0,
+          qualified_to_proposal: 0,
+          proposal_to_negotiation: 0,
+          negotiation_to_closed: 0,
+        }
+      }
+
+      // Query leads with status transitions
+      let query = supabase
+        .from('leads')
+        .select('id, status, created_at, updated_at, campaign_id, source, organization_id')
+        .eq('organization_id', activeOrg.id)
+        .gte('created_at', range.start)
+        .lte('created_at', range.end)
+        .eq('source', 'meta_ads')
+
+      if (campaignId) {
+        query = query.eq('campaign_id', campaignId)
+      } else if (accountId) {
+        const { data: campaigns } = await supabase
+          .from('ad_campaigns')
+          .select('id')
+          .eq('ad_account_id', accountId)
+        if (campaigns && campaigns.length > 0) {
+          query = query.in('campaign_id', campaigns.map(c => c.id))
+        }
+      }
+
+      const { data: leads, error } = await query
+
+      if (error) throw error
+
+      // Calculate real conversion times from lead_activity table
+      if (!leads || leads.length === 0) {
+        return {
+          lead_to_contact: 0,
+          contact_to_qualified: 0,
+          qualified_to_proposal: 0,
+          proposal_to_negotiation: 0,
+          negotiation_to_closed: 0,
+        }
+      }
+
+      const leadIds = leads.map(l => l.id)
+
+      // Fetch all status transition activities for these leads
+      const { data: activities, error: activityError } = await supabase
+        .from('lead_activity')
+        .select('lead_id, from_status, to_status, created_at')
+        .eq('action_type', 'moved')
+        .in('lead_id', leadIds)
+        .order('created_at', { ascending: true })
+
+      if (activityError) {
+        console.error('[useConversionTimeFunnel] Error fetching activities:', activityError)
+        return {
+          lead_to_contact: 0,
+          contact_to_qualified: 0,
+          qualified_to_proposal: 0,
+          proposal_to_negotiation: 0,
+          negotiation_to_closed: 0,
+        }
+      }
+
+      // Calculate average time between stages (in days)
+      const timeBetweenStages: Record<string, number[]> = {
+        lead_to_contact: [],
+        contact_to_qualified: [],
+        qualified_to_proposal: [],
+        proposal_to_negotiation: [],
+        negotiation_to_closed: [],
+      }
+
+      // Group activities by lead
+      const activitiesByLead: Record<string, typeof activities> = {}
+      activities?.forEach(activity => {
+        if (!activitiesByLead[activity.lead_id]) {
+          activitiesByLead[activity.lead_id] = []
+        }
+        activitiesByLead[activity.lead_id].push(activity)
+      })
+
+      // Calculate time between consecutive stages
+      Object.entries(activitiesByLead).forEach(([leadId, leadActivities]) => {
+        for (let i = 0; i < leadActivities.length - 1; i++) {
+          const currentActivity = leadActivities[i]
+          const nextActivity = leadActivities[i + 1]
+
+          const currentTime = new Date(currentActivity.created_at).getTime()
+          const nextTime = new Date(nextActivity.created_at).getTime()
+          const daysDiff = (nextTime - currentTime) / (1000 * 60 * 60 * 24)
+
+          // Map transitions to categories
+          const transition = `${currentActivity.to_status}_to_${nextActivity.to_status}`
+
+          if (currentActivity.to_status === 'novo_lead' && nextActivity.to_status === 'contato_inicial') {
+            timeBetweenStages.lead_to_contact.push(daysDiff)
+          } else if (currentActivity.to_status === 'contato_inicial' && nextActivity.to_status === 'qualificado') {
+            timeBetweenStages.contact_to_qualified.push(daysDiff)
+          } else if (currentActivity.to_status === 'qualificado' && nextActivity.to_status === 'proposta') {
+            timeBetweenStages.qualified_to_proposal.push(daysDiff)
+          } else if (currentActivity.to_status === 'proposta' && nextActivity.to_status === 'negociacao') {
+            timeBetweenStages.proposal_to_negotiation.push(daysDiff)
+          } else if (currentActivity.to_status === 'negociacao' && nextActivity.to_status === 'fechado_ganho') {
+            timeBetweenStages.negotiation_to_closed.push(daysDiff)
+          }
+        }
+      })
+
+      // Calculate averages
+      const calculateAverage = (values: number[]) => {
+        if (values.length === 0) return 0
+        const sum = values.reduce((acc, val) => acc + val, 0)
+        return sum / values.length
+      }
+
+      return {
+        lead_to_contact: calculateAverage(timeBetweenStages.lead_to_contact),
+        contact_to_qualified: calculateAverage(timeBetweenStages.contact_to_qualified),
+        qualified_to_proposal: calculateAverage(timeBetweenStages.qualified_to_proposal),
+        proposal_to_negotiation: calculateAverage(timeBetweenStages.proposal_to_negotiation),
+        negotiation_to_closed: calculateAverage(timeBetweenStages.negotiation_to_closed),
+      }
+    },
+    staleTime: 60000,
+    enabled: (options?.enabled ?? true) && !!activeOrg?.id,
+  })
+}
+
+export function useConversionFunnel(filters?: {
+  accountId?: string
+  campaignId?: string
+  dateRange?: { start: string; end: string }
+}, options?: { enabled?: boolean }) {
+  const { accountId, campaignId, dateRange } = filters || {}
+  const range = dateRange || getLastNDaysDateRange(90)
+  const { data: activeOrg } = useActiveOrganization()
+
+  return useQuery({
+    queryKey: ['conversion-funnel', accountId, campaignId, range, activeOrg?.id],
+    queryFn: async () => {
+      if (!activeOrg?.id) {
+        return {
+          novo: 0,
+          contato_inicial: 0,
+          qualificado: 0,
+          proposta: 0,
+          negociacao: 0,
+          fechado_ganho: 0,
+        }
+      }
+
+      // Build query for leads with filters
+      let query = supabase
+        .from('leads')
+        .select('id, status, campaign_id, created_at, source')
+        .eq('organization_id', activeOrg.id)
+        .gte('created_at', range.start)
+        .lte('created_at', range.end)
+
+      // Filter by Meta Ads campaigns only
+      if (campaignId) {
+        query = query.eq('campaign_id', campaignId)
+      } else if (accountId) {
+        // Get campaigns for this account
+        const { data: campaigns } = await supabase
+          .from('ad_campaigns')
+          .select('id')
+          .eq('ad_account_id', accountId)
+
+        if (campaigns && campaigns.length > 0) {
+          const campaignIds = campaigns.map(c => c.id)
+          query = query.in('campaign_id', campaignIds)
+        }
+      } else {
+        // All Meta Ads leads
+        query = query.eq('source', 'meta_ads')
+      }
+
+      const { data: leads, error } = await query
+
+      if (error) throw error
+
+      // Count leads by status
+      const funnel = {
+        novo: 0,
+        contato_inicial: 0,
+        qualificado: 0,
+        proposta: 0,
+        negociacao: 0,
+        fechado_ganho: 0,
+      }
+
+      for (const lead of leads || []) {
+        if (lead.status === 'novo') funnel.novo++
+        else if (lead.status === 'contato_inicial') funnel.contato_inicial++
+        else if (lead.status === 'qualificado') funnel.qualificado++
+        else if (lead.status === 'proposta') funnel.proposta++
+        else if (lead.status === 'negociacao') funnel.negociacao++
+        else if (lead.status === 'fechado_ganho') funnel.fechado_ganho++
+      }
+
+      return funnel
+    },
+    staleTime: 30000,
+    enabled: (options?.enabled ?? true) && !!activeOrg?.id,
+  })
+}
+
 export function useCampaignFinancialsFiltered(filters?: {
   accountId?: string
   campaignId?: string

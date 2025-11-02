@@ -254,7 +254,7 @@ export default function Dashboard() {
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span>Conecte-se ao Meta Business Manager para visualizar métricas e funis de campanhas.</span>
             <Button variant="outline" size="sm" asChild>
-              <a href="/meta-ads-config">Configurar Meta Ads</a>
+              <a href="/metricas">Configurar Meta Ads</a>
             </Button>
           </AlertDescription>
         </Alert>
