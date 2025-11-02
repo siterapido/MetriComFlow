@@ -177,6 +177,22 @@ const DEFAULT_FIELD_TEMPLATES: Record<DefaultFieldKey, DefaultFieldTemplate> = {
   },
 };
 
+// Schema para edição básica do formulário (sem campos/variantes)
+const editFormSchema = z.object({
+  name: z.string().min(3, "Informe um nome com pelo menos 3 caracteres"),
+  description: z.string().max(280, "Máximo de 280 caracteres").nullable().optional(),
+  successMessage: z.string().max(160, "Máximo de 160 caracteres").nullable().optional(),
+  webhookUrl: z.string().url("Informe uma URL válida").nullable().optional().or(z.literal("")),
+  redirectUrl: z.string().url("Informe uma URL válida").nullable().optional().or(z.literal("")),
+  slug: z
+    .string()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use apenas letras minúsculas, números e hífens")
+    .min(3, "Mínimo de 3 caracteres")
+    .max(120, "Máximo de 120 caracteres")
+    .optional(),
+});
+type EditFormSchema = z.infer<typeof editFormSchema>;
+
 interface CreateLeadFormPayload {
   form: TablesInsert<"lead_forms">;
   fields: Array<Omit<TablesInsert<"lead_form_fields">, "form_id">>;
@@ -208,6 +224,8 @@ const copyToClipboard = async (value: string, onSuccess: () => void, onError: ()
 
 const LeadForms = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editing, setEditing] = useState<LeadFormRecord | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [builderForm, setBuilderForm] = useState<LeadFormRecord | null>(null);
   const { toast } = useToast();
@@ -445,6 +463,82 @@ const LeadForms = () => {
         description: message,
         variant: "destructive",
       });
+    },
+  });
+
+  // Edição de formulário existente
+  const editForm = useForm<EditFormSchema>({
+    resolver: zodResolver(editFormSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      successMessage: "",
+      webhookUrl: "",
+      redirectUrl: "",
+      slug: "",
+    },
+  });
+
+  const openEdit = (formItem: LeadFormRecord) => {
+    setEditing(formItem);
+    editForm.reset({
+      name: formItem.name ?? "",
+      description: formItem.description ?? "",
+      successMessage: formItem.success_message ?? "",
+      webhookUrl: formItem.webhook_url ?? "",
+      redirectUrl: formItem.redirect_url ?? "",
+      slug: (formItem as any).slug ?? toSlug(formItem.name ?? ""),
+    });
+    setIsEditOpen(true);
+  };
+
+  const closeEdit = () => {
+    setIsEditOpen(false);
+    setEditing(null);
+  };
+
+  const updateFormMutation = useMutation({
+    mutationFn: async (payload: { id: string; values: EditFormSchema }) => {
+      const { id, values } = payload;
+      // Monta atualização com sanitização, e fallback removendo colunas desconhecidas (ex.: slug) se necessário
+      const upd: Record<string, unknown> = {
+        name: values.name,
+        description: values.description?.trim() ? values.description.trim() : null,
+        success_message: values.successMessage?.trim() ? values.successMessage.trim() : null,
+        webhook_url: values.webhookUrl?.toString().trim() || null,
+        redirect_url: values.redirectUrl?.toString().trim() || null,
+      };
+      if (values.slug && values.slug.trim()) {
+        upd.slug = values.slug.trim();
+      }
+
+      let attemptPayload = { ...upd } as Record<string, unknown>;
+      for (let i = 0; i < 3; i++) {
+        const { error } = await supabase.from("lead_forms").update(attemptPayload).eq("id", id);
+        if (!error) return;
+        const code = (error as any)?.code ?? "";
+        const message = String((error as any)?.message ?? "");
+        const match = message.match(/Could not find the '([^']+)' column/i);
+        if (code === "PGRST204" && match && match[1] && attemptPayload.hasOwnProperty(match[1])) {
+          delete (attemptPayload as any)[match[1]];
+          continue;
+        }
+        throw error;
+      }
+      throw new Error("Falha ao atualizar formulário");
+    },
+    onSuccess: () => {
+      toast({ title: "Formulário atualizado", description: "As alterações foram salvas." });
+      closeEdit();
+      queryClient.invalidateQueries({ queryKey: ["lead-forms"] });
+    },
+    onError: (err: any) => {
+      let message = String(err?.message ?? err);
+      const code = String(err?.code ?? "");
+      if (code === "23505") {
+        message = "Já existe um formulário seu com esse slug. Escolha outro.";
+      }
+      toast({ title: "Erro ao atualizar", description: message, variant: "destructive" });
     },
   });
 
@@ -915,6 +1009,14 @@ const LeadForms = () => {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                className="gap-1"
+                                onClick={() => openEdit(formItem)}
+                              >
+                                Editar
+                              </Button>
                               <Button
                                 variant="secondary"
                                 size="sm"
