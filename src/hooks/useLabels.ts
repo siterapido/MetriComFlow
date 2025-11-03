@@ -1,22 +1,31 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/lib/database.types'
+import { useActiveOrganization } from '@/hooks/useActiveOrganization'
 
 type Label = Database['public']['Tables']['labels']['Row']
 type LabelInsert = Database['public']['Tables']['labels']['Insert']
 
 export function useLabels() {
+  const { data: org } = useActiveOrganization()
+
   return useQuery({
-    queryKey: ['labels'],
+    queryKey: ['labels', org?.id], // ✅ INCLUIR ORG.ID
     queryFn: async () => {
+      if (!org?.id) {
+        throw new Error('Organização não encontrada')
+      }
+
       const { data, error } = await supabase
         .from('labels')
         .select('*')
+        .eq('organization_id', org.id) // ✅ FILTRO POR ORGANIZAÇÃO
         .order('name')
 
       if (error) throw error
       return data as Label[]
     },
+    enabled: !!org?.id, // ✅ SÓ EXECUTAR SE ORGANIZAÇÃO ESTIVER CARREGADA
     staleTime: 60000, // 1 minute
   })
 }
