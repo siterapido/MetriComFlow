@@ -29,6 +29,7 @@ interface InvitationRequest {
   email: string;
   role?: RoleType;
   user_type?: UserType;
+  organization_id?: string;
 }
 
 async function sendEmailInvitation(params: {
@@ -123,6 +124,7 @@ Deno.serve(async (req) => {
     const role: RoleType = body.role ?? "member";
     const userType: UserType = body.user_type ?? "sales";
     const email = body.email?.trim().toLowerCase();
+    const requestedOrganizationId = body.organization_id?.trim();
 
     if (!email || !email.includes("@")) {
       throw new Error("Email inválido.");
@@ -145,12 +147,32 @@ Deno.serve(async (req) => {
 
     console.log("📧 Tentando enviar convite", { email, role, userType, requestedBy: user.id });
 
-    const { data: organization, error: organizationError } = await supabase
-      .from("organizations")
-      .select("id, name, owner_id")
-      .eq("owner_id", user.id)
-      .eq("is_active", true)
-      .maybeSingle();
+    // Resolve organization context: if frontend provided an explicit organization_id,
+    // validate that the current user is the owner of that organization. Otherwise,
+    // fallback to the first active org owned by the user.
+    let organization: { id: string; name: string; owner_id: string } | null = null;
+    let organizationError: any = null;
+
+    if (requestedOrganizationId) {
+      const orgRes = await supabase
+        .from("organizations")
+        .select("id, name, owner_id")
+        .eq("id", requestedOrganizationId)
+        .eq("owner_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+      organization = orgRes.data as any;
+      organizationError = orgRes.error;
+    } else {
+      const orgRes = await supabase
+        .from("organizations")
+        .select("id, name, owner_id")
+        .eq("owner_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+      organization = orgRes.data as any;
+      organizationError = orgRes.error;
+    }
 
     if (organizationError || !organization) {
       throw new Error("Somente owners podem enviar convites.");

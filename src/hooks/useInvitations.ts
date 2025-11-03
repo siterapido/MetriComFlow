@@ -24,6 +24,7 @@ export interface InvitationPayload {
   // role is optional; defaults to 'member' server-side
   role?: "owner" | "admin" | "manager" | "member";
   user_type: "owner" | "traffic_manager" | "sales";
+  organization_id?: string;
 }
 
 export function useInvitations() {
@@ -55,16 +56,47 @@ export function useInvitations() {
 
   const sendInvitation = useMutation({
     mutationFn: async (payload: InvitationPayload) => {
+      // Ensure we pass the user JWT to the Edge Function (some environments don't attach it automatically)
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error("Você precisa estar autenticado para enviar convites.");
+      }
+
       const { data, error } = await supabase.functions.invoke<{
         success: boolean;
         invite_link?: string;
         message?: string;
         error?: string;
       }>("send-team-invitation", {
-        body: payload,
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: {
+          ...payload,
+          organization_id: organization?.id,
+        },
       });
 
       if (error) {
+        // Try to extract error details from Edge Function response
+        const fnDetails = (error as unknown as { context?: any })?.context;
+        try {
+          if (typeof fnDetails === "string") {
+            const parsed = JSON.parse(fnDetails);
+            if (parsed?.error) throw new Error(parsed.error);
+          } else if (fnDetails && typeof fnDetails === "object") {
+            const maybeBody = (fnDetails as any).body ?? (fnDetails as any).error ?? fnDetails;
+            if (typeof maybeBody === "string") {
+              const parsed = JSON.parse(maybeBody);
+              if (parsed?.error) throw new Error(parsed.error);
+            }
+          }
+        } catch (_) {
+          // fall through to generic error
+        }
         throw error;
       }
 
@@ -127,20 +159,48 @@ export function useInvitations() {
 
       if (revokeError) throw revokeError;
 
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Você precisa estar autenticado para reenviar convites.");
+      }
+
       const { data, error } = await supabase.functions.invoke<{
         success: boolean;
         invite_link?: string;
         message?: string;
         error?: string;
       }>("send-team-invitation", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: {
           email: invitation.email,
           role: invitation.role,
           user_type: invitation.user_type,
+          organization_id: invitation.organization_id,
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        const fnDetails = (error as unknown as { context?: any })?.context;
+        try {
+          if (typeof fnDetails === "string") {
+            const parsed = JSON.parse(fnDetails);
+            if (parsed?.error) throw new Error(parsed.error);
+          } else if (fnDetails && typeof fnDetails === "object") {
+            const maybeBody = (fnDetails as any).body ?? (fnDetails as any).error ?? fnDetails;
+            if (typeof maybeBody === "string") {
+              const parsed = JSON.parse(maybeBody);
+              if (parsed?.error) throw new Error(parsed.error);
+            }
+          }
+        } catch (_) {
+          // ignore and use generic error
+        }
+        throw error;
+      }
       if (!data?.success) {
         throw new Error(data?.error ?? "Não foi possível reenviar o convite.");
       }

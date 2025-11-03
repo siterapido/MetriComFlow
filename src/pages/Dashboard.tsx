@@ -15,6 +15,10 @@ import { ConversionFunnel } from "@/components/dashboard/ConversionFunnel";
 import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
 import { useMetaAuth } from "@/hooks/useMetaAuth";
 import { useToast } from "@/hooks/use-toast";
+import { UnifiedROICards } from "@/components/dashboard/UnifiedROICards";
+import { MetaToRevenueFunnel } from "@/components/dashboard/MetaToRevenueFunnel";
+import { UnifiedMetricsChart } from "@/components/dashboard/UnifiedMetricsChart";
+import { useUnifiedMetrics, useUnifiedDailyBreakdown } from "@/hooks/useUnifiedMetrics";
 
 export default function Dashboard() {
   const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
@@ -38,27 +42,29 @@ export default function Dashboard() {
   const metaStatusPending = metaStatusLoading || metaStatusFetching;
   const metaQueriesEnabled = hasMetaConnection;
 
-  // Meta KPIs com período filtrado
-  const { data: metaKPIs, isLoading: metaLoading } = useMetaKPIs(metaFilters, { enabled: metaQueriesEnabled });
-  const hasMetaData = metaQueriesEnabled && !!metaKPIs?.has_data;
-
   // Fetch accounts and campaigns for filters
   const { data: accounts } = useAdAccounts({ enabled: metaQueriesEnabled });
   const { data: campaigns } = useAdCampaigns(metaFilters.accountId, { enabled: metaQueriesEnabled });
 
-  // Fetch filtered Meta Ads data
-  const { data: metaInsights, isLoading: insightsLoading } = useFilteredInsights(metaFilters, { enabled: metaQueriesEnabled });
+  // Sprint 2: Unified metrics (Meta Ads + CRM Revenue)
+  const { data: unifiedMetrics, isLoading: unifiedLoading } = useUnifiedMetrics(
+    {
+      dateRange: metaFilters.dateRange,
+      accountId: metaFilters.accountId,
+      campaignId: metaFilters.campaignId,
+    },
+    { enabled: metaQueriesEnabled }
+  );
 
-  // Pipeline metrics (CRM em tempo real)
-  const { data: pipelineMetrics, isLoading: pipelineLoading } = usePipelineMetrics({ dateRange: metaFilters.dateRange });
-  const { data: pipelineEvolution, isLoading: evolutionLoading } = usePipelineEvolution(metaFilters.dateRange);
-
-  // Combined funnel data (Meta Ads + CRM)
-  const { data: funnelData } = useCombinedFunnelData({
-    dateRange: metaFilters.dateRange,
-    accountId: metaFilters.accountId,
-    campaignId: metaFilters.campaignId,
-  }, { enabled: metaQueriesEnabled });
+  // Sprint 2: Daily breakdown for temporal chart
+  const { data: dailyBreakdown, isLoading: dailyLoading } = useUnifiedDailyBreakdown(
+    {
+      dateRange: metaFilters.dateRange,
+      accountId: metaFilters.accountId,
+      campaignId: metaFilters.campaignId,
+    },
+    { enabled: metaQueriesEnabled }
+  );
 
   // Transform revenue records into chart data
   const chartData = useMemo(() => {
@@ -94,7 +100,7 @@ export default function Dashboard() {
       .map(month => grouped[month]);
   }, [revenueRecords]);
 
-  const isLoading = summaryLoading || revenueLoading || (metaQueriesEnabled && metaLoading);
+  const isLoading = summaryLoading || revenueLoading;
 
   // Handler para sincronizar dados Meta Ads
   const handleSyncInsights = async () => {
@@ -315,186 +321,19 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* Sprint 2: ROI Real - Métricas Unificadas (Meta Ads + CRM) */}
       {hasMetaConnection && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Investimento Meta Ads */}
-          <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-border hover-lift">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Investimento Meta
-              </CardTitle>
-              <DollarSign className="h-4 w-4 text-blue-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">
-                {hasMetaData ? formatCurrency(metaKPIs?.investimento_total || 0) : 'Sem dados'}
-              </div>
-              <p className="text-xs text-blue-500">Período selecionado</p>
-            </CardContent>
-          </Card>
-
-          {/* Leads Gerados */}
-          <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-border hover-lift">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Leads Gerados
-              </CardTitle>
-              <Users className="h-4 w-4 text-green-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">
-                {hasMetaData ? metaKPIs?.leads_gerados || 0 : 'Sem contatos'}
-              </div>
-              <p className="text-xs text-green-500">Via Meta Ads</p>
-            </CardContent>
-          </Card>
-
-          {/* CPL */}
-          <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-border hover-lift">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                CPL Médio
-              </CardTitle>
-              <Target className="h-4 w-4 text-purple-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">
-                {hasMetaData ? formatCurrency(metaKPIs?.cpl || 0) : 'Sem dados'}
-              </div>
-              {hasMetaData && (
-                <p className={`text-xs ${metaKPIs?.cpl && metaKPIs.cpl < 50 ? 'text-success' : 'text-warning'}`}>
-                  {metaKPIs?.cpl && metaKPIs.cpl < 50 ? 'Excelente' : 'Monitorar'}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* ROAS */}
-          <Card className="bg-gradient-to-br from-orange-500/10 to-orange-600/5 border-border hover-lift">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                ROAS
-              </CardTitle>
-              <BarChart3 className="h-4 w-4 text-orange-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">
-                {hasMetaData ? `${(metaKPIs?.roas ?? 0).toFixed(2)}x` : 'Sem dados'}
-              </div>
-              {hasMetaData && (
-                <p className={`text-xs ${metaKPIs?.roas && metaKPIs.roas >= 3 ? 'text-success' : 'text-warning'}`}>
-                  {metaKPIs?.roas && metaKPIs.roas >= 3 ? 'Saudável (≥3)' : 'Melhorar'}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <UnifiedROICards metrics={unifiedMetrics} isLoading={unifiedLoading} />
       )}
 
-      {/* Pipeline CRM - Métricas em Tempo Real */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <GitBranch className="w-5 h-5 text-primary" />
-          <h2 className="text-xl font-bold text-foreground">Pipeline CRM - Tempo Real</h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total Pipeline Value */}
-          <Card className="bg-gradient-to-br from-card to-primary/10 border-border hover-lift">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Valor Total Pipeline
-              </CardTitle>
-              <DollarSign className="h-4 w-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">
-                {summary ? formatCurrency(summary.pipeline_value || 0) : 'R$ 0'}
-              </div>
-              <p className="text-xs text-primary">
-                {summary?.oportunidades_ativas || 0} leads ativos
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Conversion Rate */}
-          <Card className="bg-gradient-to-br from-card to-success/10 border-border hover-lift">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Taxa de Conversão
-              </CardTitle>
-              <Award className="h-4 w-4 text-success" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">
-                {pipelineMetrics ? `${pipelineMetrics.conversion_rate.toFixed(1)}%` : '0%'}
-              </div>
-              <p className="text-xs text-success">
-                {pipelineMetrics?.stages.fechado_ganho.count || 0} fechamentos
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Average Deal Size */}
-          <Card className="bg-gradient-to-br from-card to-secondary/10 border-border hover-lift">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Ticket Médio
-              </CardTitle>
-              <Target className="h-4 w-4 text-secondary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">
-                {pipelineMetrics ? formatCurrency(pipelineMetrics.average_deal_size) : 'R$ 0'}
-              </div>
-              <p className="text-xs text-secondary">Por negócio fechado</p>
-            </CardContent>
-          </Card>
-
-          {/* Won vs Lost */}
-          <Card className="bg-gradient-to-br from-card to-accent/10 border-border hover-lift">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Ganhos vs Perdidos
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-accent" />
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-baseline gap-2">
-                <div className="text-xl font-bold text-success">
-                  {pipelineMetrics?.stages.fechado_ganho.count || 0}
-                </div>
-                <span className="text-muted-foreground">/</span>
-                <div className="text-xl font-bold text-destructive">
-                  {pipelineMetrics?.stages.fechado_perdido.count || 0}
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Fechado ganho / Fechado perdido
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Gráficos - 2 linhas */}
+      {/* Sprint 2: Gráfico Unificado de Evolução Temporal */}
       {hasMetaConnection && (
-        <div className="space-y-6">
-          {/* Linha 1: Gráfico de Meta Ads */}
-          <div>
-            <h2 className="text-xl font-bold text-foreground mb-4">Evolução Temporal - Meta Ads</h2>
-            <MetaAdsChart data={metaInsights || []} isLoading={insightsLoading} />
-          </div>
-
-          {/* Linha 2 removida: Gráficos de Faturamento (New Up e Oportunidades) conforme solicitação */}
-        </div>
+        <UnifiedMetricsChart data={dailyBreakdown} isLoading={dailyLoading} />
       )}
 
-      {/* Funil de Conversão Completo (Meta Ads + CRM) */}
+      {/* Sprint 2: Funil Completo Meta → Receita */}
       {hasMetaConnection && (
-        <div className="space-y-6">
-          <ConversionFunnel data={funnelData ?? null} />
-        </div>
+        <MetaToRevenueFunnel metrics={unifiedMetrics} isLoading={unifiedLoading} />
       )}
 
       {/* Evolução do Pipeline */}
