@@ -473,6 +473,13 @@ Deno.serve(async (req: Request) => {
     closed_won_at: null,
     closed_lost_at: null,
     lost_reason: null,
+    // UTM tracking for attribution
+    utm_source: tracking?.utmSource ?? null,
+    utm_campaign: tracking?.utmCampaign ?? null,
+    utm_medium: tracking?.utmMedium ?? null,
+    utm_term: tracking?.utmTerm ?? null,
+    utm_content: tracking?.utmContent ?? null,
+    fbclid: tracking?.fbc ?? null, // Facebook Click ID for CAPI
   };
 
   // Remove keys with undefined to avoid Supabase errors

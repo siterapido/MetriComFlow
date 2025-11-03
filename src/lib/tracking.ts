@@ -77,8 +77,10 @@ export function collectFormTrackingData(): FormTrackingData {
   const metaFormId = params["meta_form_id"] ?? params["fb_form_id"] ?? null;
   const metaLeadId = params["meta_lead_id"] ?? params["lead_id"] ?? null;
 
+  // Facebook Click ID from URL parameter or cookie
+  const fbclidParam = params["fbclid"] ?? null;
   const fbp = getCookie("_fbp");
-  const fbc = getCookie("_fbc");
+  const fbc = fbclidParam || getCookie("_fbc");
 
   const landingPage =
     typeof window !== "undefined"

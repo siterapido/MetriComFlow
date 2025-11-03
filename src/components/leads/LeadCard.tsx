@@ -18,6 +18,10 @@ type Lead = Tables<"leads"> & {
     labels: Tables<"labels">;
   }>;
   comments?: Tables<"comments">[];
+  ad_campaigns?: {
+    name: string;
+    external_id: string;
+  } | null;
 };
 
 interface LeadCardProps {
@@ -83,15 +87,26 @@ export function LeadCard({ lead, onDelete, onUpdate, className }: LeadCardProps)
             </p>
           )}
 
-          {/* Meta Ads Badge */}
+          {/* Meta Ads Badge with Campaign */}
           {lead.source === "meta_ads" && (
-            <Badge
-              variant="outline"
-              className="text-[10px] bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 flex items-center gap-0.5 w-fit px-1.5 py-0.5"
-            >
-              <Facebook className="w-2.5 h-2.5" />
-              Meta
-            </Badge>
+            <div className="flex flex-wrap gap-1">
+              <Badge
+                variant="outline"
+                className="text-[10px] bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 flex items-center gap-0.5 w-fit px-1.5 py-0.5"
+              >
+                <Facebook className="w-2.5 h-2.5" />
+                Meta Ads
+              </Badge>
+              {lead.ad_campaigns?.name && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] bg-primary/10 text-primary border-primary/30 px-1.5 py-0.5 max-w-[120px] truncate"
+                  title={lead.ad_campaigns.name}
+                >
+                  {lead.ad_campaigns.name}
+                </Badge>
+              )}
+            </div>
           )}
 
           {/* Labels */}
@@ -137,13 +152,10 @@ export function LeadCard({ lead, onDelete, onUpdate, className }: LeadCardProps)
                   {format(new Date(lead.due_date), "dd/MM", { locale: ptBR })}
                 </div>
               )}
-              <button
-                onClick={() => setIsCommentsOpen(true)}
-                className="flex items-center gap-0.5 hover:text-foreground transition-colors"
-              >
+              <div className="flex items-center gap-0.5">
                 <MessageSquare className="w-2.5 h-2.5" />
                 {lead.comments_count || 0}
-              </button>
+              </div>
             </div>
 
             {lead.assignee_name && (

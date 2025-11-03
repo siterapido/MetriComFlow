@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { FormRenderer } from "@/components/forms/FormRenderer";
@@ -6,6 +6,13 @@ import { collectFormTrackingData } from "@/lib/tracking";
 import { usePublicLeadForm, PublicLeadFormTheme } from "@/hooks/usePublicLeadForm";
 import { supabase } from "@/lib/supabase";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+// Meta Pixel helper
+declare global {
+  interface Window {
+    fbq?: (action: string, event: string, params?: Record<string, any>) => void;
+  }
+}
 
 interface SubmitSuccessState {
   success: boolean;
@@ -61,6 +68,17 @@ const PublicLeadForm = () => {
     };
   }, [data?.theme]);
 
+  // Track page view with Meta Pixel (if available)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.fbq && data?.id) {
+      window.fbq('track', 'ViewContent', {
+        content_name: data.name,
+        content_category: 'lead_form',
+        content_ids: [data.id],
+      });
+    }
+  }, [data?.id, data?.name]);
+
   const handleSubmit = useCallback(
     async (values: Record<string, unknown>) => {
       const resolvedFormId = data?.id ?? formId;
@@ -102,6 +120,16 @@ const PublicLeadForm = () => {
           message: response?.message ?? data?.successMessage ?? null,
         });
         setSubmissionError(null);
+
+        // Track Lead event with Meta Pixel
+        if (typeof window !== 'undefined' && window.fbq) {
+          window.fbq('track', 'Lead', {
+            content_name: data?.name,
+            content_category: 'lead_form',
+            value: 0,
+            currency: 'BRL',
+          });
+        }
       } catch (submitError) {
         console.error("[PublicLeadForm] unexpected error", submitError);
         setSubmissionState(null);

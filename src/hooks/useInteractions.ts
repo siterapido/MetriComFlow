@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Tables, TablesInsert, TablesUpdate } from '@/lib/database.types';
+import { useEffect } from 'react';
 
 type Interaction = Tables<'interactions'>;
 type InteractionInsert = TablesInsert<'interactions'>;
@@ -9,7 +10,7 @@ type InteractionUpdate = TablesUpdate<'interactions'>;
 
 // Hook para buscar interações
 export function useInteractions(leadId?: string) {
-  return useQuery({
+  const query = useQuery({
     queryKey: ['interactions', leadId],
     queryFn: async () => {
       let query = supabase
@@ -45,6 +46,26 @@ export function useInteractions(leadId?: string) {
     refetchOnMount: true,
     refetchOnWindowFocus: true,
   });
+
+  // Realtime: invalidate on any change to interactions
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime-interactions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'interactions' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['interactions'] });
+        if (leadId) {
+          queryClient.invalidateQueries({ queryKey: ['interactions', leadId] });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient, leadId]);
+
+  return query;
 }
 
 // Hook para criar interação

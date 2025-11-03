@@ -20,6 +20,7 @@ import { useLeads, useUpdateLead, type LeadWithLabels } from "@/hooks/useLeads";
 import { useLeadActivity } from "@/hooks/useLeads";
 import type { Database } from "@/lib/database.types";
 import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
+import { useAdCampaigns } from "@/hooks/useMetaMetrics";
 
 const getLabelColor = (label: string) => {
   const colors: { [key: string]: string } = {
@@ -59,6 +60,7 @@ export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
   const [sourceFilter, setSourceFilter] = useState<'all' | 'meta_ads' | 'manual'>('all');
+  const [campaignFilter, setCampaignFilter] = useState<string>('all');
   const { toast } = useToast();
 
   const {
@@ -77,6 +79,7 @@ export default function Leads() {
 
   // Fetch data
   const { data: leads, isLoading, error } = useLeads();
+  const { data: campaigns } = useAdCampaigns(undefined, { enabled: hasMetaConnection });
   type LeadActivity = Database['public']['Tables']['lead_activity']['Row']
   const { data: activitiesData } = useLeadActivity();
   const updateLead = useUpdateLead();
@@ -100,18 +103,23 @@ export default function Leads() {
         ? true
         : lead.source === sourceFilter;
 
+      // Campaign filter
+      const matchesCampaign = campaignFilter === 'all'
+        ? true
+        : lead.campaign_id === campaignFilter;
+
       const matchesVisibility = hideMetaLeads
         ? (lead.source !== 'meta_ads' && !lead.campaign_id)
         : true;
 
-      return matchesSearch && matchesSource && matchesVisibility;
+      return matchesSearch && matchesSource && matchesCampaign && matchesVisibility;
     });
 
     return BOARD_CONFIG.map(config => ({
       ...config,
       cards: filteredLeads.filter(lead => lead.status === config.id)
     }));
-  }, [leads, searchTerm, sourceFilter, hideMetaLeads]);
+  }, [leads, searchTerm, sourceFilter, campaignFilter, hideMetaLeads]);
 
   const handleNewLead = () => {
     setIsNewLeadModalOpen(false);
@@ -280,6 +288,28 @@ export default function Leads() {
             <SelectItem value="manual">Manual</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Campaign Filter (only show if Meta Ads filter is active or All) */}
+        {hasMetaConnection && campaigns && campaigns.length > 0 && (
+          <Select
+            value={campaignFilter}
+            onValueChange={setCampaignFilter}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Filtrar por campanha" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as Campanhas</SelectItem>
+              {campaigns.map((campaign) => (
+                <SelectItem key={campaign.id} value={campaign.id}>
+                  <span className="truncate max-w-[160px]" title={campaign.name}>
+                    {campaign.name}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {hideMetaLeads && (

@@ -13,6 +13,10 @@ export type Lead = Tables<'leads'> & {
   comments?: Tables<'comments'>[]
   interactions?: Tables<'interactions'>[]
   tasks?: Tables<'tasks'>[]
+  ad_campaigns?: {
+    name: string
+    external_id: string
+  } | null
 }
 
 export type LeadWithLabels = Lead
@@ -35,6 +39,7 @@ export interface LeadFilters {
   assignee_id?: string
   product_interest?: string
   lead_source_detail?: string
+  campaign_id?: string
   date_range?: {
     start: string
     end: string
@@ -125,6 +130,10 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
             profiles!tasks_assigned_to_fkey (
               full_name
             )
+          ),
+          ad_campaigns (
+            name,
+            external_id
           )
         `)
         .order('position')
@@ -152,6 +161,10 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
 
       if (filters?.lead_source_detail) {
         query = query.eq('lead_source_detail', filters.lead_source_detail)
+      }
+
+      if (filters?.campaign_id) {
+        query = query.eq('campaign_id', filters.campaign_id)
       }
 
       if (filters?.date_range) {

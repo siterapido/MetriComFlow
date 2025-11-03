@@ -113,6 +113,14 @@ const toSlug = (value: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)+/g, "");
 
+function computeInboundEmail(slug: string | null | undefined): string | null {
+  const domain = import.meta.env.VITE_MAILGUN_INBOUND_DOMAIN as string | undefined;
+  if (!domain) return null;
+  const local = slug && slug.length > 0 ? slug : "";
+  if (!local) return null;
+  return `${local}@${domain}`;
+}
+
 interface DefaultFieldTemplate {
   key: string;
   label: string;
@@ -1392,6 +1400,76 @@ const LeadForms = () => {
 
         <TabsContent value="integrations" className="space-y-4">
           <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+                  <Mail className="w-5 h-5 text-primary" /> E-mail para coleta (Mailgun)
+                </CardTitle>
+                <CardDescription>
+                  Gere um e-mail único para sua conta. Mensagens recebidas criam leads e interações no CRM automaticamente.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {(() => {
+                  const inbound = computeInboundEmail(organization?.slug);
+                  if (!organization?.slug) {
+                    return (
+                      <div className="rounded-md border bg-muted/40 p-3 text-muted-foreground">
+                        Defina um slug para a organização em Meu Perfil → Organização para habilitar o e-mail de coleta.
+                      </div>
+                    );
+                  }
+                  if (!inbound) {
+                    return (
+                      <div className="rounded-md border bg-muted/40 p-3 text-muted-foreground">
+                        Configure a variável de ambiente <code>VITE_MAILGUN_INBOUND_DOMAIN</code> para exibir o endereço.
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs text-muted-foreground">E-mail de coleta</div>
+                          <div className="font-mono text-sm text-foreground">{inbound}</div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={() => copyToClipboard(inbound, () => toast({ title: "E-mail copiado" }), () => toast({ title: "Falha ao copiar", variant: "destructive" }))}
+                          >
+                            <Copy className="w-3 h-3" /> Copiar
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="gap-1"
+                            onClick={async () => {
+                              try {
+                                const { data, error } = await supabase.functions.invoke("provision-mailgun-inbound", { body: {} });
+                                if (error) throw error;
+                                toast({ title: "Rota configurada", description: data?.inboundEmail ?? inbound });
+                              } catch (e: any) {
+                                console.error("[LeadForms] provision mailgun error", e);
+                                toast({ title: "Erro ao configurar", description: String(e?.message ?? e), variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <Plug className="w-3 h-3" /> Configurar
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-dashed border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                        A Mailgun enviará um POST assinado para nosso endpoint seguro. Verificação de assinatura e logs estão habilitados.
+                      </div>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+
             <Card className="border-border bg-card">
               <CardHeader>
                 <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
