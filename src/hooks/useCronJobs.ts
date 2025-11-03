@@ -114,7 +114,7 @@ export function useInvokeCronJob() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (functionName: 'sync-daily-insights' | 'meta-conversion-dispatch') => {
+    mutationFn: async (functionName: 'sync-daily-insights' | 'meta-conversion-dispatch' | 'fetch-meta-leads') => {
       let payload: Record<string, any> = {}
 
       if (functionName === 'sync-daily-insights') {
@@ -132,6 +132,17 @@ export function useInvokeCronJob() {
         payload = {
           process_all: true,
           max_batch_size: 100,
+        }
+      } else if (functionName === 'fetch-meta-leads') {
+        // Buscar leads dos últimos 3 dias
+        const since = new Date()
+        since.setDate(since.getDate() - 3)
+        const until = new Date()
+
+        payload = {
+          since: since.toISOString().split('T')[0],
+          until: until.toISOString().split('T')[0],
+          limit: 100,
         }
       }
 
@@ -297,6 +308,7 @@ export function getJobDisplayName(jobName: string): string {
   const names: Record<string, string> = {
     'sync-daily-insights': 'Sincronização de Métricas',
     'meta-conversion-dispatch': 'Dispatch de Conversões',
+    'fetch-meta-leads': 'Sincronização de Leads',
     'cleanup-old-cron-logs-daily': 'Limpeza de Logs',
   }
 
@@ -310,6 +322,7 @@ export function getJobDescription(jobName: string): string {
   const descriptions: Record<string, string> = {
     'sync-daily-insights': 'Sincroniza métricas diárias do Meta Ads (últimos 7 dias) a cada 3 horas',
     'meta-conversion-dispatch': 'Processa eventos de conversão pendentes e envia para Meta CAPI a cada 5 minutos',
+    'fetch-meta-leads': 'Busca leads do Meta Ads API e sincroniza com CRM (últimos 3 dias) a cada 6 horas',
     'cleanup-old-cron-logs-daily': 'Remove logs de cron jobs com mais de 30 dias (executa às 02:00)',
   }
 
@@ -323,7 +336,9 @@ export function getScheduleDisplay(schedule: string): string {
   const schedules: Record<string, string> = {
     '0 */3 * * *': 'A cada 3 horas',
     '*/5 * * * *': 'A cada 5 minutos',
+    '0 */6 * * *': 'A cada 6 horas',
     '0 2 * * *': 'Diariamente às 02:00',
+    '0 3 * * 0': 'Domingos às 03:00',
   }
 
   return schedules[schedule] || schedule

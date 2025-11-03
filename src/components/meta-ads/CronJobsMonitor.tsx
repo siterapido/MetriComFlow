@@ -54,7 +54,7 @@ export function CronJobsMonitor() {
   const { data: logs, isLoading: logsLoading, refetch: refetchLogs } = useCronJobLogs(50)
   const invokeCronJob = useInvokeCronJob()
 
-  const handleManualInvoke = async (functionName: 'sync-daily-insights' | 'meta-conversion-dispatch') => {
+  const handleManualInvoke = async (functionName: 'sync-daily-insights' | 'meta-conversion-dispatch' | 'fetch-meta-leads') => {
     try {
       await invokeCronJob.mutateAsync(functionName)
       toast({
@@ -206,7 +206,7 @@ export function CronJobsMonitor() {
               </AlertDescription>
             </Alert>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <ManualJobCard
                 title="Sincronização de Métricas"
                 description="Busca métricas do Meta Ads dos últimos 7 dias"
@@ -220,6 +220,14 @@ export function CronJobsMonitor() {
                 description="Envia eventos de conversão pendentes para Meta CAPI"
                 schedule="Automático: a cada 5 minutos"
                 functionName="meta-conversion-dispatch"
+                onInvoke={handleManualInvoke}
+                isLoading={invokeCronJob.isPending}
+              />
+              <ManualJobCard
+                title="Sincronização de Leads"
+                description="Busca leads do Meta Ads API dos últimos 3 dias"
+                schedule="Automático: a cada 6 horas"
+                functionName="fetch-meta-leads"
                 onInvoke={handleManualInvoke}
                 isLoading={invokeCronJob.isPending}
               />
@@ -361,8 +369,8 @@ interface ManualJobCardProps {
   title: string
   description: string
   schedule: string
-  functionName: 'sync-daily-insights' | 'meta-conversion-dispatch'
-  onInvoke: (functionName: 'sync-daily-insights' | 'meta-conversion-dispatch') => Promise<void>
+  functionName: 'sync-daily-insights' | 'meta-conversion-dispatch' | 'fetch-meta-leads'
+  onInvoke: (functionName: 'sync-daily-insights' | 'meta-conversion-dispatch' | 'fetch-meta-leads') => Promise<void>
   isLoading: boolean
 }
 
