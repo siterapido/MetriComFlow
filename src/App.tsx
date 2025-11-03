@@ -13,6 +13,7 @@ import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
 import LeadsLinear from "./pages/LeadsLinear";
 import MetaAdsConfig from "./pages/MetaAdsConfig";
+import TrafficMetrics from "./pages/TrafficMetrics";
 import Users from "./pages/Users";
 import LeadForms from "./pages/LeadForms";
 import NotFound from "./pages/NotFound";
@@ -66,9 +67,9 @@ const App = () => (
                 {/* Rota /metas desabilitada temporariamente */}
                 <Route path="/metas" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/metas-legacy" element={<Navigate to="/dashboard" replace />} />
-                {/* Rota de métricas (antiga /meta-ads-config redirecionada) */}
-                <Route path="/metricas" element={<MetaAdsConfig />} />
-                <Route path="/meta-ads-config" element={<Navigate to="/metricas" replace />} />
+                {/* Rotas de métricas */}
+                <Route path="/metricas" element={<TrafficMetrics />} />
+                <Route path="/meta-ads-config" element={<MetaAdsConfig />} />
                 <Route path="/metrics" element={<Navigate to="/metricas" replace />} />
                 {/* Nova página unificada de gestão de equipe */}
                 <Route path="/equipe" element={<TeamManagement />} />

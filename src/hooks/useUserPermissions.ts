@@ -54,7 +54,21 @@ export const useUserPermissions = () => {
       if (error) throw error;
 
       const userType = profile?.user_type || "sales";
-      const isOwner = userType === "owner";
+
+      // Papel do usuário na organização ativa (membership.role)
+      let orgRole: "owner" | "admin" | "manager" | "member" | null = null;
+      if (org?.id) {
+        const { data: membership } = await supabase
+          .from("organization_memberships")
+          .select("role")
+          .eq("profile_id", user.id)
+          .eq("organization_id", org.id)
+          .eq("is_active", true)
+          .maybeSingle();
+        orgRole = (membership?.role as any) ?? null;
+      }
+
+      const isOwner = orgRole === "owner";
       const isTrafficManager = userType === "traffic_manager";
       const isSales = userType === "sales";
 

@@ -38,6 +38,39 @@ async function sendEmailInvitation(params: {
   organizationName: string;
   invitedByName: string;
 }) {
+  // If configured, prefer sending via Supabase Auth's built-in email invite
+  // This uses the Auth email provider (SMTP) configured in Supabase Studio.
+  const USE_SUPABASE_AUTH_INVITE = (Deno.env.get("USE_SUPABASE_AUTH_INVITE") ?? "").toLowerCase() === "true";
+  if (USE_SUPABASE_AUTH_INVITE) {
+    const SUPABASE_URL = Deno.env.get("PROJECT_URL") ?? Deno.env.get("SUPABASE_URL") ?? "";
+    const SUPABASE_SERVICE_ROLE_KEY =
+      Deno.env.get("SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      console.warn("[Invites] Missing Supabase envs; skipping Supabase Auth invite email");
+    } else {
+      try {
+        const createClient = await loadCreateClient();
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        const adminAny = (supabase.auth.admin as unknown) as { inviteUserByEmail?: (email: string, opts?: { redirectTo?: string }) => Promise<{ data: unknown; error: unknown }> };
+
+        if (typeof adminAny?.inviteUserByEmail === "function") {
+          const { error } = await adminAny.inviteUserByEmail!(params.to, { redirectTo: params.inviteLink });
+          if (error) {
+            console.warn("[Invites] Supabase Auth inviteUserByEmail returned error", error);
+          } else {
+            console.log("✅ Convite enviado via Supabase Auth para", params.to);
+            return; // Sent via Supabase; stop here and do not try Resend
+          }
+        } else {
+          console.warn("[Invites] inviteUserByEmail not available on this client version");
+        }
+      } catch (e) {
+        console.warn("[Invites] Failed to send via Supabase Auth, will try Resend fallback", e);
+      }
+    }
+  }
+
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
   if (!RESEND_API_KEY) {

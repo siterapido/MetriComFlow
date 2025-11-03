@@ -4,14 +4,18 @@ import { supabase } from '@/lib/supabase'
 // Add real-time invalidation support
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useActiveOrganization } from '@/hooks/useActiveOrganization'
 
 export function useRevenueRecords(category?: string, year?: number) {
+  const { data: org } = useActiveOrganization()
   return useQuery({
-    queryKey: ['revenue-records', category, year],
+    queryKey: ['revenue-records', category, year, org?.id],
     queryFn: async () => {
+      if (!org?.id) return []
       let query = supabase
         .from('revenue_records')
         .select('*')
+        .eq('organization_id', org.id)
         .order('date', { ascending: false })
 
       if (category) {
@@ -42,6 +46,7 @@ export type DashboardSummary = {
 
 export function useDashboardSummary() {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   // Real-time: refetch summary whenever leads change
   useEffect(() => {
@@ -59,8 +64,9 @@ export function useDashboardSummary() {
   }, [queryClient])
 
   return useQuery<DashboardSummary>({
-    queryKey: ['dashboard-summary'],
+    queryKey: ['dashboard-summary', org?.id],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Selecione uma organização para ver o dashboard.')
       const now = new Date()
       const year = now.getFullYear()
       const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
@@ -79,6 +85,7 @@ export function useDashboardSummary() {
         .from('leads')
         .select('value, closed_won_at')
         .eq('status', 'fechado_ganho')
+        .eq('organization_id', org.id)
         .gte('closed_won_at', monthStart)
         .lt('closed_won_at', monthEnd) // Usa 'lt' porque já adicionamos 1 dia ao monthEnd
 
@@ -94,6 +101,7 @@ export function useDashboardSummary() {
         .from('leads')
         .select('value, closed_won_at')
         .eq('status', 'fechado_ganho')
+        .eq('organization_id', org.id)
         .gte('closed_won_at', `${year}-01-01`)
         .lt('closed_won_at', yearEnd) // Usa 'lt' com início do próximo ano
 
@@ -120,6 +128,7 @@ export function useDashboardSummary() {
         .from('leads')
         .select('id,value,status')
         .in('status', activeStatuses)
+        .eq('organization_id', org.id)
 
       if (leadsErr) {
         console.error('[useDashboardSummary] Erro ao buscar leads ativos:', leadsErr)
@@ -167,6 +176,7 @@ export function useMetaKPIs(
   options?: { enabled?: boolean }
 ) {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   // Real-time: refetch KPIs when campaign insights or leads close change
   useEffect(() => {
@@ -187,8 +197,9 @@ export function useMetaKPIs(
   }, [queryClient])
 
   return useQuery<MetaKPIs>({
-    queryKey: ['meta-kpis', filters?.accountId, filters?.campaignId, filters?.dateRange],
+    queryKey: ['meta-kpis', filters?.accountId, filters?.campaignId, filters?.dateRange, org?.id],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Selecione uma organização para ver as métricas.')
       const accountId = filters?.accountId
       const campaignId = filters?.campaignId
 
@@ -218,9 +229,12 @@ export function useMetaKPIs(
       // Gastos e leads do período via campaign_daily_insights com filtros
       let insightsQuery = supabase
         .from('campaign_daily_insights')
-        .select('spend, leads_count, date, ad_campaigns!inner(ad_account_id)')
+        .select('spend, leads_count, date, ad_campaigns!inner(ad_account_id, ad_accounts!inner(organization_id))')
         .gte('date', startStr)
         .lt('date', endStr) // Usa 'lt' porque já adicionamos 1 dia ao endStr
+
+      // Escopo da organização via ad_accounts
+      insightsQuery = insightsQuery.eq('ad_campaigns.ad_accounts.organization_id', org.id)
 
       if (campaignId) {
         insightsQuery = insightsQuery.eq('campaign_id', campaignId)
@@ -252,6 +266,7 @@ export function useMetaKPIs(
         .from('leads')
         .select('value, campaign_id, source')
         .eq('status', 'fechado_ganho')
+        .eq('organization_id', org.id)
         .gte('closed_won_at', startStr)
         .lt('closed_won_at', endStr) // Usa 'lt' porque já adicionamos 1 dia ao endStr
 
@@ -262,7 +277,8 @@ export function useMetaKPIs(
         // Se filtrar por conta, busca campanhas dessa conta
         const { data: campList, error: campErr } = await supabase
           .from('ad_campaigns')
-          .select('id')
+          .select('id, ad_accounts!inner(organization_id)')
+          .eq('ad_accounts.organization_id', org.id)
           .eq('ad_account_id', accountId)
         if (campErr) {
           console.error('[useMetaKPIs] Erro ao buscar campanhas para filtro de ROAS:', campErr)
@@ -341,6 +357,7 @@ export type PipelineMetrics = {
 
 export function usePipelineMetrics(filters?: { dateRange?: { start: string; end: string } }) {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   // Real-time: refetch whenever leads change
   useEffect(() => {
@@ -358,8 +375,9 @@ export function usePipelineMetrics(filters?: { dateRange?: { start: string; end:
   }, [queryClient])
 
   return useQuery<PipelineMetrics>({
-    queryKey: ['pipeline-metrics', filters?.dateRange],
+    queryKey: ['pipeline-metrics', filters?.dateRange, org?.id],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Selecione uma organização para ver as métricas.')
       let startStr: string | undefined
       let endStr: string | undefined
 
@@ -377,6 +395,7 @@ export function usePipelineMetrics(filters?: { dateRange?: { start: string; end:
       let leadsQuery = supabase
         .from('leads')
         .select('id, status, value, created_at, updated_at')
+        .eq('organization_id', org.id)
 
       if (startStr && endStr) {
         leadsQuery = leadsQuery
@@ -473,6 +492,7 @@ export type PipelineEvolution = {
 
 export function usePipelineEvolution(dateRange?: { start: string; end: string }) {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   // Real-time: refetch when lead activity changes
   useEffect(() => {
@@ -490,8 +510,9 @@ export function usePipelineEvolution(dateRange?: { start: string; end: string })
   }, [queryClient])
 
   return useQuery<PipelineEvolution>({
-    queryKey: ['pipeline-evolution', dateRange],
+    queryKey: ['pipeline-evolution', dateRange, org?.id],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Selecione uma organização para ver a evolução do pipeline.')
       let startStr: string
       let endStr: string
 
@@ -513,11 +534,30 @@ export function usePipelineEvolution(dateRange?: { start: string; end: string })
 
       console.log('[usePipelineEvolution] Buscando evolução do pipeline:', { startStr, endStr })
 
-      // Buscar histórico de atividades para rastrear mudanças de estágio
+      // Primeiro, buscar IDs de leads da organização no período
+      const { data: orgLeadIds, error: orgLeadsErr } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('organization_id', org.id)
+        .gte('created_at', startStr)
+        .lt('created_at', endStr)
+
+      if (orgLeadsErr) {
+        console.error('[usePipelineEvolution] Erro ao buscar leads da organização:', orgLeadsErr)
+        throw orgLeadsErr
+      }
+
+      const leadIds = (orgLeadIds || []).map((r: any) => r.id)
+      if (leadIds.length === 0) {
+        return [] as PipelineEvolution
+      }
+
+      // Buscar histórico de atividades somente desses leads
       const { data: activities, error: activitiesErr } = await supabase
         .from('lead_activity')
         .select('lead_id, action_type, from_status, to_status, created_at')
         .eq('action_type', 'moved')
+        .in('lead_id', leadIds)
         .gte('created_at', startStr)
         .lt('created_at', endStr) // Usa 'lt' porque já adicionamos 1 dia ao endStr
         .order('created_at', { ascending: true })
@@ -600,6 +640,7 @@ export function useCombinedFunnelData(
   options?: { enabled?: boolean }
 ) {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   // Real-time: refetch when insights or leads change
   useEffect(() => {
@@ -620,8 +661,9 @@ export function useCombinedFunnelData(
   }, [queryClient])
 
   return useQuery<CombinedFunnelData>({
-    queryKey: ['combined-funnel', filters?.dateRange, filters?.accountId, filters?.campaignId],
+    queryKey: ['combined-funnel', filters?.dateRange, filters?.accountId, filters?.campaignId, org?.id],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Selecione uma organização para ver as métricas.')
       let startStr: string
       let endStr: string
 
@@ -646,9 +688,11 @@ export function useCombinedFunnelData(
       // 1. Buscar métricas do Meta Ads (top of funnel)
       let insightsQuery = supabase
         .from('campaign_daily_insights')
-        .select('impressions, clicks, spend, leads_count, date, ad_campaigns!inner(ad_account_id)')
+        .select('impressions, clicks, spend, leads_count, date, ad_campaigns!inner(ad_account_id, ad_accounts!inner(organization_id))')
         .gte('date', startStr)
         .lt('date', endStr) // Usa 'lt' porque já adicionamos 1 dia ao endStr
+
+      insightsQuery = insightsQuery.eq('ad_campaigns.ad_accounts.organization_id', org.id)
 
       if (filters?.campaignId) {
         insightsQuery = insightsQuery.eq('campaign_id', filters.campaignId)
@@ -674,6 +718,7 @@ export function useCombinedFunnelData(
       let leadsQuery = supabase
         .from('leads')
         .select('id, status, value, created_at, source, campaign_id')
+        .eq('organization_id', org.id)
         .gte('created_at', startStr)
         .lt('created_at', endStr) // Usa 'lt' porque já adicionamos 1 dia ao endStr
 

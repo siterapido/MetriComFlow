@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { Tables, TablesInsert, TablesUpdate } from '@/lib/database.types'
 import { useEffect } from 'react'
+import { useActiveOrganization } from '@/hooks/useActiveOrganization'
 
 // Type definitions
 export type Lead = Tables<'leads'> & {
@@ -48,6 +49,7 @@ export interface LeadFilters {
 
 export function useLeads(filters?: LeadFilters, campaignId?: string) {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   // Real-time: invalidar consultas de leads ao ocorrerem mudanças
   useEffect(() => {
@@ -64,7 +66,7 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
   }, [queryClient])
 
   return useQuery({
-    queryKey: ['leads', filters, campaignId],
+    queryKey: ['leads', org?.id, filters, campaignId],
     queryFn: async () => {
       console.log('[useLeads] 🔍 Iniciando busca de leads...')
       console.log('[useLeads] Filtros:', { filters, campaignId })
@@ -84,6 +86,10 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
 
       console.log('[useLeads] ✅ Usuário autenticado:', session.user.email)
       console.log('[useLeads] Token expira em:', new Date(session.expires_at! * 1000).toLocaleString())
+
+      if (!org?.id) {
+        throw new Error('Organização ativa não definida. Selecione uma para continuar.')
+      }
 
       let query = supabase
         .from('leads')
@@ -136,6 +142,7 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
             external_id
           )
         `)
+        .eq('organization_id', org.id)
         .order('position')
 
       // Aplicar filtros
@@ -224,6 +231,7 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
 
 export const useCreateLead = () => {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   return useMutation({
     mutationFn: async (values: LeadInsert) => {
@@ -251,9 +259,17 @@ export const useCreateLead = () => {
 
       console.log('[useCreateLead] Payload sanitizado:', sanitizedValues)
 
+      if (!org?.id) throw new Error('Organização ativa não definida')
+
+      // Garantir escopo da organização
+      const withOrg: LeadInsert = {
+        ...sanitizedValues,
+        organization_id: (sanitizedValues as any).organization_id ?? (org.id as any),
+      }
+
       const { data, error } = await supabase
         .from('leads')
-        .insert(sanitizedValues)
+        .insert(withOrg)
         .select()
         .single()
 
@@ -286,6 +302,7 @@ export const useCreateLead = () => {
 
 export const useUpdateLead = () => {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: LeadUpdate }) => {
@@ -328,10 +345,13 @@ export const useUpdateLead = () => {
 
       console.log('[useUpdateLead] Payload sanitizado:', sanitizedUpdates)
 
+      if (!org?.id) throw new Error('Organização ativa não definida')
+
       const { data, error } = await supabase
         .from('leads')
         .update(sanitizedUpdates)
         .eq('id', id)
+        .eq('organization_id', org.id)
         .select()
         .single()
 
@@ -542,14 +562,17 @@ export function usePipelineStats() {
 
 // Hook para leads com follow-up pendente
 export function useLeadsFollowUp() {
+  const { data: org } = useActiveOrganization()
   return useQuery({
-    queryKey: ['leads-follow-up'],
+    queryKey: ['leads-follow-up', org?.id],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
       const today = new Date().toISOString().split('T')[0]
       
       const { data, error } = await supabase
         .from('leads')
         .select('id, title, assignee_name, next_follow_up_date, last_contact_date, priority')
+        .eq('organization_id', org.id)
         .lte('next_follow_up_date', today)
         .neq('status', 'fechado_ganho')
         .neq('status', 'fechado_perdido')
@@ -565,13 +588,17 @@ export function useLeadsFollowUp() {
 // Hook para atualizar score do lead
 export function useUpdateLeadScore() {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   return useMutation({
     mutationFn: async ({ leadId, score }: { leadId: string; score: number }) => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
+
       const { data, error } = await supabase
         .from('leads')
         .update({ lead_score: score })
         .eq('id', leadId)
+        .eq('organization_id', org.id)
         .select()
         .single()
 
@@ -590,12 +617,15 @@ export function useUpdateLeadScore() {
 
 // Hook para buscar produtos de interesse disponíveis
 export function useProductInterests() {
+  const { data: org } = useActiveOrganization()
   return useQuery({
-    queryKey: ['product-interests'],
+    queryKey: ['product-interests', org?.id],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
       const { data, error } = await supabase
         .from('leads')
         .select('product_interest')
+        .eq('organization_id', org.id)
         .not('product_interest', 'is', null)
 
       if (error) throw error
@@ -610,12 +640,15 @@ export function useProductInterests() {
 
 // Hook para buscar detalhes de origem disponíveis
 export function useLeadSourceDetails() {
+  const { data: org } = useActiveOrganization()
   return useQuery({
-    queryKey: ['lead-source-details'],
+    queryKey: ['lead-source-details', org?.id],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
       const { data, error } = await supabase
         .from('leads')
         .select('lead_source_detail')
+        .eq('organization_id', org.id)
         .not('lead_source_detail', 'is', null)
 
       if (error) throw error

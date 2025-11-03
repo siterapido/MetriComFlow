@@ -188,6 +188,24 @@ Deno.serve(async (req) => {
       console.error("Erro ao atualizar convite:", updateInvitationError);
     }
 
+    // Definir organização ativa no perfil se estiver vazio ou se for novo usuário
+    try {
+      const { data: profilePref } = await supabase
+        .from('profiles')
+        .select('active_organization_id')
+        .eq('id', userId)
+        .maybeSingle();
+      if (isNewUser || !profilePref?.active_organization_id) {
+        const { error: prefErr } = await supabase
+          .from('profiles')
+          .update({ active_organization_id: invitation.organization_id })
+          .eq('id', userId);
+        if (prefErr) console.error('Erro ao salvar org ativa no perfil:', prefErr)
+      }
+    } catch (e) {
+      console.error('Falha ao definir organização ativa no perfil:', e)
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

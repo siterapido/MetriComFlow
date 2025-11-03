@@ -4,6 +4,7 @@ import { LogOut, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import OrganizationSwitcher from "@/components/organization/OrganizationSwitcher";
 
 export function Header() {
   const { user, signOut } = useAuth();
@@ -23,6 +24,12 @@ export function Header() {
       return;
     }
 
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem('activeOrgId');
+      }
+    } catch (_e) {}
+
     toast({ title: "Sessão encerrada", description: "Você saiu com sucesso." });
     navigate("/", { replace: true });
   };
@@ -35,6 +42,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2">
+        <OrganizationSwitcher />
         <button
           type="button"
           onClick={() => navigate("/meu-perfil")}
