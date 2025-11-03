@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { Tables, TablesInsert, TablesUpdate } from '@/lib/database.types'
 import { useEffect } from 'react'
+import { useActiveOrganization } from '@/hooks/useActiveOrganization'
 
 // Type definitions
 export type Lead = Tables<'leads'> & {
@@ -48,25 +49,38 @@ export interface LeadFilters {
 
 export function useLeads(filters?: LeadFilters, campaignId?: string) {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
-  // Real-time: invalidar consultas de leads ao ocorrerem mudanças
+  // Real-time: invalidar consultas de leads ao ocorrerem mudanças (COM FILTRO DE ORG)
   useEffect(() => {
+    if (!org?.id) return
+
     const channel = supabase
       .channel('realtime-leads')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['leads'] })
-      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'leads',
+          filter: `organization_id=eq.${org.id}` // ✅ FILTRO POR ORGANIZAÇÃO
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['leads', org.id] })
+        }
+      )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [queryClient])
+  }, [queryClient, org?.id])
 
   return useQuery({
-    queryKey: ['leads', filters, campaignId],
+    queryKey: ['leads', org?.id, filters, campaignId], // ✅ INCLUIR ORG.ID NA QUERY KEY
     queryFn: async () => {
       console.log('[useLeads] 🔍 Iniciando busca de leads...')
+      console.log('[useLeads] Organization ID:', org?.id)
       console.log('[useLeads] Filtros:', { filters, campaignId })
 
       // Verificar autenticação antes de fazer a query
@@ -82,8 +96,13 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
         throw new Error('Você precisa estar autenticado para visualizar os leads. Por favor, faça login novamente.')
       }
 
+      if (!org?.id) {
+        console.error('[useLeads] ❌ Organização não encontrada!')
+        throw new Error('Você precisa pertencer a uma organização para visualizar leads.')
+      }
+
       console.log('[useLeads] ✅ Usuário autenticado:', session.user.email)
-      console.log('[useLeads] Token expira em:', new Date(session.expires_at! * 1000).toLocaleString())
+      console.log('[useLeads] ✅ Organização ativa:', org.name)
 
       let query = supabase
         .from('leads')
@@ -136,6 +155,7 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
             external_id
           )
         `)
+        .eq('organization_id', org.id) // ✅ FILTRO CRÍTICO POR ORGANIZAÇÃO
         .order('position')
 
       // Aplicar filtros
@@ -216,6 +236,7 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
 
       return data as Lead[]
     },
+    enabled: !!org?.id, // ✅ SÓ EXECUTAR SE ORGANIZAÇÃO ESTIVER CARREGADA
     staleTime: 0, // sempre fresco para refletir mudanças imediatas
     refetchOnMount: true,
     refetchOnWindowFocus: true,
@@ -424,27 +445,44 @@ export function useDeleteLead() {
 
 export function useLeadActivity(leadId?: string) {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
-  // Real-time: invalidar histórico quando houver novas atividades
+  // Real-time: invalidar histórico quando houver novas atividades (COM FILTRO DE ORG)
   useEffect(() => {
+    if (!org?.id) return
+
     const channel = supabase
       .channel('realtime-lead-activity')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'lead_activity' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['lead-activity'] })
-      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lead_activity',
+          filter: `organization_id=eq.${org.id}` // ✅ FILTRO POR ORGANIZAÇÃO
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['lead-activity', org.id] })
+        }
+      )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [queryClient])
+  }, [queryClient, org?.id])
 
   return useQuery<LeadActivity[]>({
-    queryKey: ['lead-activity', leadId],
+    queryKey: ['lead-activity', org?.id, leadId], // ✅ INCLUIR ORG.ID
     queryFn: async () => {
+      if (!org?.id) {
+        throw new Error('Organização não encontrada')
+      }
+
       let query = supabase
         .from('lead_activity')
         .select('*')
+        .eq('organization_id', org.id) // ✅ FILTRO POR ORGANIZAÇÃO
         .order('created_at', { ascending: false })
 
       if (leadId) {
@@ -458,19 +496,26 @@ export function useLeadActivity(leadId?: string) {
       if (error) throw error
       return data as LeadActivity[]
     },
-    enabled: true,
+    enabled: !!org?.id, // ✅ SÓ EXECUTAR SE ORGANIZAÇÃO ESTIVER CARREGADA
     staleTime: 0,
   })
 }
 
 // Hook para buscar leads por status (visão do pipeline)
 export function useLeadsByStatus() {
+  const { data: org } = useActiveOrganization()
+
   return useQuery({
-    queryKey: ['leads-by-status'],
+    queryKey: ['leads-by-status', org?.id], // ✅ INCLUIR ORG.ID
     queryFn: async () => {
+      if (!org?.id) {
+        throw new Error('Organização não encontrada')
+      }
+
       const { data, error } = await supabase
         .from('leads')
         .select('id, title, status, value, priority, assignee_name, created_at')
+        .eq('organization_id', org.id) // ✅ FILTRO POR ORGANIZAÇÃO
         .order('position')
 
       if (error) throw error
@@ -486,18 +531,26 @@ export function useLeadsByStatus() {
 
       return grouped
     },
+    enabled: !!org?.id, // ✅ SÓ EXECUTAR SE ORGANIZAÇÃO ESTIVER CARREGADA
     staleTime: 30000, // 30 segundos
   })
 }
 
 // Hook para estatísticas do pipeline
 export function usePipelineStats() {
+  const { data: org } = useActiveOrganization()
+
   return useQuery({
-    queryKey: ['pipeline-stats'],
+    queryKey: ['pipeline-stats', org?.id], // ✅ INCLUIR ORG.ID
     queryFn: async () => {
+      if (!org?.id) {
+        throw new Error('Organização não encontrada')
+      }
+
       const { data, error } = await supabase
         .from('leads')
         .select('status, value, priority, created_at, closed_won_at')
+        .eq('organization_id', org.id) // ✅ FILTRO POR ORGANIZAÇÃO
 
       if (error) throw error
 
@@ -514,7 +567,7 @@ export function usePipelineStats() {
       data.forEach(lead => {
         // Contar por status
         stats.byStatus[lead.status] = (stats.byStatus[lead.status] || 0) + 1
-        
+
         // Contar por prioridade
         if (lead.priority) {
           stats.byPriority[lead.priority] = (stats.byPriority[lead.priority] || 0) + 1
@@ -536,20 +589,28 @@ export function usePipelineStats() {
 
       return stats
     },
+    enabled: !!org?.id, // ✅ SÓ EXECUTAR SE ORGANIZAÇÃO ESTIVER CARREGADA
     staleTime: 60000, // 1 minuto
   })
 }
 
 // Hook para leads com follow-up pendente
 export function useLeadsFollowUp() {
+  const { data: org } = useActiveOrganization()
+
   return useQuery({
-    queryKey: ['leads-follow-up'],
+    queryKey: ['leads-follow-up', org?.id], // ✅ INCLUIR ORG.ID
     queryFn: async () => {
+      if (!org?.id) {
+        throw new Error('Organização não encontrada')
+      }
+
       const today = new Date().toISOString().split('T')[0]
-      
+
       const { data, error } = await supabase
         .from('leads')
         .select('id, title, assignee_name, next_follow_up_date, last_contact_date, priority')
+        .eq('organization_id', org.id) // ✅ FILTRO POR ORGANIZAÇÃO
         .lte('next_follow_up_date', today)
         .neq('status', 'fechado_ganho')
         .neq('status', 'fechado_perdido')
@@ -558,6 +619,7 @@ export function useLeadsFollowUp() {
       if (error) throw error
       return data
     },
+    enabled: !!org?.id, // ✅ SÓ EXECUTAR SE ORGANIZAÇÃO ESTIVER CARREGADA
     staleTime: 300000, // 5 minutos
   })
 }
@@ -590,12 +652,19 @@ export function useUpdateLeadScore() {
 
 // Hook para buscar produtos de interesse disponíveis
 export function useProductInterests() {
+  const { data: org } = useActiveOrganization()
+
   return useQuery({
-    queryKey: ['product-interests'],
+    queryKey: ['product-interests', org?.id], // ✅ INCLUIR ORG.ID
     queryFn: async () => {
+      if (!org?.id) {
+        throw new Error('Organização não encontrada')
+      }
+
       const { data, error } = await supabase
         .from('leads')
         .select('product_interest')
+        .eq('organization_id', org.id) // ✅ FILTRO POR ORGANIZAÇÃO
         .not('product_interest', 'is', null)
 
       if (error) throw error
@@ -604,18 +673,26 @@ export function useProductInterests() {
       const interests = [...new Set(data.map(item => item.product_interest).filter(Boolean))]
       return interests.sort()
     },
+    enabled: !!org?.id, // ✅ SÓ EXECUTAR SE ORGANIZAÇÃO ESTIVER CARREGADA
     staleTime: 300000, // 5 minutos
   })
 }
 
 // Hook para buscar detalhes de origem disponíveis
 export function useLeadSourceDetails() {
+  const { data: org } = useActiveOrganization()
+
   return useQuery({
-    queryKey: ['lead-source-details'],
+    queryKey: ['lead-source-details', org?.id], // ✅ INCLUIR ORG.ID
     queryFn: async () => {
+      if (!org?.id) {
+        throw new Error('Organização não encontrada')
+      }
+
       const { data, error } = await supabase
         .from('leads')
         .select('lead_source_detail')
+        .eq('organization_id', org.id) // ✅ FILTRO POR ORGANIZAÇÃO
         .not('lead_source_detail', 'is', null)
 
       if (error) throw error
@@ -624,6 +701,7 @@ export function useLeadSourceDetails() {
       const details = [...new Set(data.map(item => item.lead_source_detail).filter(Boolean))]
       return details.sort()
     },
+    enabled: !!org?.id, // ✅ SÓ EXECUTAR SE ORGANIZAÇÃO ESTIVER CARREGADA
     staleTime: 300000, // 5 minutos
   })
 }
