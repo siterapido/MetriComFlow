@@ -46,7 +46,12 @@ COMMENT ON FUNCTION public.fetch_meta_leads_cron IS 'Sincroniza leads do Meta Ad
 -- ============================================================================
 
 -- Remover job existente (se houver) para evitar duplicação
-SELECT cron.unschedule('fetch-meta-leads-every-6h');
+DO $$
+BEGIN
+  PERFORM cron.unschedule('fetch-meta-leads-every-6h');
+EXCEPTION WHEN OTHERS THEN
+  NULL; -- Ignora se não existir
+END $$;
 
 -- Job 4: Buscar leads do Meta Ads API a cada 6 horas
 -- Horários de execução: 00:00, 06:00, 12:00, 18:00
@@ -64,7 +69,7 @@ SELECT cron.schedule(
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS public.meta_lead_sync_log (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ad_account_id UUID REFERENCES public.ad_accounts(id) ON DELETE CASCADE,
   sync_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   sync_completed_at TIMESTAMPTZ,
@@ -85,13 +90,13 @@ CREATE INDEX IF NOT EXISTS idx_meta_lead_sync_log_status ON public.meta_lead_syn
 -- RLS Policies
 ALTER TABLE public.meta_lead_sync_log ENABLE ROW LEVEL SECURITY;
 
--- Admins podem ver todos os logs
-CREATE POLICY "Admins can view all sync logs"
+-- Owners podem ver todos os logs
+CREATE POLICY "Owners can view all sync logs"
   ON public.meta_lead_sync_log FOR SELECT
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND user_type = 'admin'
+      WHERE id = auth.uid() AND user_type = 'owner'
     )
   );
 
@@ -203,7 +208,13 @@ END;
 $$;
 
 -- Agendar limpeza semanal (domingos às 03:00)
-SELECT cron.unschedule('cleanup-old-lead-sync-logs-weekly');
+DO $$
+BEGIN
+  PERFORM cron.unschedule('cleanup-old-lead-sync-logs-weekly');
+EXCEPTION WHEN OTHERS THEN
+  NULL; -- Ignora se não existir
+END $$;
+
 SELECT cron.schedule(
   'cleanup-old-lead-sync-logs-weekly',
   '0 3 * * 0',  -- Domingos às 03:00
@@ -242,10 +253,7 @@ END $$;
 -- ============================================================================
 
 COMMENT ON FUNCTION public.fetch_meta_leads_cron IS
-'Busca leads do Meta Ads API dos últimos 3 dias e insere no CRM. ' ||
-'Executa a cada 6 horas (00:00, 06:00, 12:00, 18:00). ' ||
-'Deduplicação automática via external_lead_id. ' ||
-'Garante que leads que chegam fora do webhook também sejam sincronizados.';
+'Busca leads do Meta Ads API dos últimos 3 dias e insere no CRM. Executa a cada 6 horas (00:00, 06:00, 12:00, 18:00). Deduplicação automática via external_lead_id. Garante que leads que chegam fora do webhook também sejam sincronizados.';
 
 -- ============================================================================
 -- QUERY DE TESTE (comentada)

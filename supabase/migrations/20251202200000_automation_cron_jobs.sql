@@ -56,13 +56,13 @@ CREATE TRIGGER trigger_calculate_cron_job_duration
 -- RLS Policies
 ALTER TABLE public.cron_job_logs ENABLE ROW LEVEL SECURITY;
 
--- Admins podem ver todos os logs
-CREATE POLICY "Admins can view all cron logs"
+-- Owners podem ver todos os logs
+CREATE POLICY "Owners can view all cron logs"
   ON public.cron_job_logs FOR SELECT
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = auth.uid() AND user_type = 'admin'
+      WHERE id = auth.uid() AND user_type = 'owner'
     )
   );
 
@@ -242,8 +242,19 @@ $$;
 -- ============================================================================
 
 -- Remover jobs existentes (se houver) para evitar duplicação
-SELECT cron.unschedule('sync-meta-insights-every-3h');
-SELECT cron.unschedule('dispatch-meta-conversions-every-5min');
+DO $$
+BEGIN
+  PERFORM cron.unschedule('sync-meta-insights-every-3h');
+EXCEPTION WHEN OTHERS THEN
+  NULL; -- Ignora se não existir
+END $$;
+
+DO $$
+BEGIN
+  PERFORM cron.unschedule('dispatch-meta-conversions-every-5min');
+EXCEPTION WHEN OTHERS THEN
+  NULL; -- Ignora se não existir
+END $$;
 
 -- Job 1: Sincronizar métricas do Meta Ads a cada 3 horas
 -- Horários de execução: 00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00
@@ -346,7 +357,13 @@ END;
 $$;
 
 -- Job 3: Limpar logs antigos (uma vez por dia às 02:00)
-SELECT cron.unschedule('cleanup-old-cron-logs-daily');
+DO $$
+BEGIN
+  PERFORM cron.unschedule('cleanup-old-cron-logs-daily');
+EXCEPTION WHEN OTHERS THEN
+  NULL; -- Ignora se não existir
+END $$;
+
 SELECT cron.schedule(
   'cleanup-old-cron-logs-daily',
   '0 2 * * *',  -- 02:00 todos os dias
