@@ -229,9 +229,31 @@ export const useCreateLead = () => {
     mutationFn: async (values: LeadInsert) => {
       console.log('[useCreateLead] Criando lead:', values)
 
+      const uuidLikeKey = (k: string) => k.endsWith('_id') || k === 'campaign_id' || k === 'assignee_id'
+      const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/
+
+      const sanitizedValues = Object.fromEntries(
+        Object.entries(values)
+          .filter(([_, v]) => v !== undefined)
+          .map(([k, v]) => {
+            if (uuidLikeKey(k)) {
+              if (v === null) return [k, null]
+              if (typeof v === 'string') {
+                const trimmed = v.trim()
+                if (!trimmed) return [k, null]
+                if (!uuidRegex.test(trimmed)) return [k, null]
+                return [k, trimmed]
+              }
+            }
+            return [k, v]
+          })
+      ) as LeadInsert
+
+      console.log('[useCreateLead] Payload sanitizado:', sanitizedValues)
+
       const { data, error } = await supabase
         .from('leads')
-        .insert(values)
+        .insert(sanitizedValues)
         .select()
         .single()
 
@@ -281,16 +303,43 @@ export const useUpdateLead = () => {
         console.log('[useUpdateLead] 🔄 Limpando closed_won_at (status mudou para:', updates.status, ')')
       }
 
+      // Sanitização: remover campos undefined (não atualiza) e
+      // converter strings vazias em null para colunas UUID (ex: *_id)
+      const uuidLikeKey = (k: string) => k.endsWith('_id') || k === 'campaign_id' || k === 'assignee_id'
+      const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/
+
+      const sanitizedUpdates = Object.fromEntries(
+        Object.entries(finalUpdates)
+          .filter(([_, v]) => v !== undefined)
+          .map(([k, v]) => {
+            if (uuidLikeKey(k)) {
+              if (v === null) return [k, null]
+              if (typeof v === 'string') {
+                const trimmed = v.trim()
+                if (!trimmed) return [k, null]
+                // Qualquer valor não-UUID (ex.: 'none') vira null
+                if (!uuidRegex.test(trimmed)) return [k, null]
+                return [k, trimmed]
+              }
+            }
+            return [k, v]
+          })
+      ) as LeadUpdate
+
+      console.log('[useUpdateLead] Payload sanitizado:', sanitizedUpdates)
+
       const { data, error } = await supabase
         .from('leads')
-        .update(finalUpdates)
+        .update(sanitizedUpdates)
         .eq('id', id)
         .select()
         .single()
 
       if (error) {
         console.error('[useUpdateLead] Erro ao atualizar lead:', error)
-        throw error
+        const msg = `[${(error as any)?.code ?? 'ERR'}] ${(error as any)?.message ?? 'Falha ao atualizar lead'}` +
+          ((error as any)?.details ? ` - ${(error as any).details}` : '')
+        throw new Error(msg)
       }
 
       console.log('[useUpdateLead] Lead atualizado com sucesso:', data)
@@ -315,7 +364,9 @@ export const useUpdateLead = () => {
         queryClient.setQueryData(['leads'], context.previousLeads)
       }
       console.error('[useUpdateLead] Erro ao atualizar lead:', err)
-      toast.error('Erro ao atualizar lead')
+      const anyErr = err as any
+      const message = anyErr?.message || anyErr?.error || (anyErr?.code ? `Código: ${anyErr.code}` : 'Erro ao atualizar lead')
+      toast.error(message)
     },
     onSettled: () => {
       console.log('[useUpdateLead] Atualizando queries em tempo real')

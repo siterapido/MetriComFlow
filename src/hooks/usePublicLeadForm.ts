@@ -134,7 +134,7 @@ export function usePublicLeadForm(params: { formId?: string | null; profileSlug?
       let base: any = null;
       {
         const selectFull = `id, name, description, success_message, is_active, theme`;
-        let { data, error } = await supabase
+        const { data, error } = await supabase
           .from("lead_forms")
           .select(selectFull)
           .eq("id", resolvedFormId)

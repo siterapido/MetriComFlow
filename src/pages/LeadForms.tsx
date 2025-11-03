@@ -281,7 +281,7 @@ const LeadForms = () => {
           : `organization_id.eq.${organization.id}`;
 
         // 1ª tentativa: filtro com deleted_at
-        let { data, error } = await baseQuery.or(withDeleted);
+        const { data, error } = await baseQuery.or(withDeleted);
 
         if (error) {
           const code = (error as any)?.code ?? "";
@@ -429,7 +429,7 @@ const LeadForms = () => {
     mutationFn: async ({ form: formPayload, fields, variant }: CreateLeadFormPayload) => {
       // Tenta inserir; se houver colunas ausentes (PGRST204), remove do payload e tenta novamente (compat com esquemas antigos)
       let createdForm: Tables<"lead_forms"> | null = null;
-      let payload: Record<string, unknown> = { ...formPayload } as Record<string, unknown>;
+      const payload: Record<string, unknown> = { ...formPayload } as Record<string, unknown>;
       const attemptInsert = async () => supabase.from("lead_forms").insert(payload).select("*").single();
 
       for (let i = 0; i < 3; i++) {
@@ -441,7 +441,7 @@ const LeadForms = () => {
         const code = (error as any)?.code ?? "";
         const message = String((error as any)?.message ?? "");
         const match = message.match(/Could not find the '([^']+)' column/i);
-        if (code === "PGRST204" && match && match[1] && payload.hasOwnProperty(match[1])) {
+        if (code === "PGRST204" && match && match[1] && Object.prototype.hasOwnProperty.call(payload, match[1])) {
           delete (payload as any)[match[1]];
           continue;
         }
@@ -644,14 +644,14 @@ const LeadForms = () => {
   const softDeleteMutation = useMutation({
     mutationFn: async (id: string) => {
       // tenta soft-delete; se coluna inexistente, faz hard delete
-      let payload: Record<string, unknown> = { deleted_at: new Date().toISOString(), is_active: false };
+      const payload: Record<string, unknown> = { deleted_at: new Date().toISOString(), is_active: false };
       for (let i = 0; i < 3; i++) {
         const { error } = await supabase.from("lead_forms").update(payload).eq("id", id);
         if (!error) return;
         const code = (error as any)?.code ?? "";
         const message = String((error as any)?.message ?? "");
         const match = message.match(/Could not find the '([^']+)' column/i);
-        if (code === "PGRST204" && match && match[1] && payload.hasOwnProperty(match[1])) {
+        if (code === "PGRST204" && match && match[1] && Object.prototype.hasOwnProperty.call(payload, match[1])) {
           delete (payload as any)[match[1]];
           continue;
         }
@@ -1022,7 +1022,7 @@ const LeadForms = () => {
                       ? crypto.randomUUID()
                       : `form-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
 
-                    let payload: Record<string, unknown> = {
+                    const payload: Record<string, unknown> = {
                       id,
                       name: baseName,
                       slug,
@@ -1043,7 +1043,7 @@ const LeadForms = () => {
                       const code = (error as any)?.code ?? "";
                       const message = String((error as any)?.message ?? "");
                       const match = message.match(/Could not find the '([^']+)' column/i);
-                      if (code === "PGRST204" && match && match[1] && payload.hasOwnProperty(match[1])) {
+                      if (code === "PGRST204" && match && match[1] && Object.prototype.hasOwnProperty.call(payload, match[1])) {
                         delete (payload as any)[match[1]];
                         continue;
                       }
@@ -1278,101 +1278,7 @@ const LeadForms = () => {
               </Table>
             </CardContent>
           </Card>
-          {false && (
-          <Card className="border-border bg-card">
-            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle className="text-lg font-semibold text-foreground">Lixeira</CardTitle>
-                <CardDescription>
-                  Formulários excluídos recentemente. Você pode restaurar ou remover permanentemente.
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (trashCount <= 0) return;
-                  if (confirm(`Esvaziar lixeira e remover ${trashCount} formulário(s) permanentemente?`)) {
-                    emptyTrashMutation.mutate();
-                  }
-                }}
-                disabled={trashCount <= 0 || emptyTrashMutation.isPending}
-                className="gap-2"
-              >
-                <Trash2 className="w-4 h-4" /> Esvaziar lixeira {trashCount > 0 ? `(${trashCount})` : ""}
-              </Button>
-            </CardHeader>
-            <CardContent className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Formulário</TableHead>
-                    <TableHead className="hidden md:table-cell">Excluído em</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loadingTrash ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="py-10">
-                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                          <Loader2 className="w-4 h-4 animate-spin" /> Carregando lixeira...
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (trashList ?? []).length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="py-10 text-center text-sm text-muted-foreground">
-                        Lixeira vazia.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    (trashList ?? []).map((formItem) => (
-                      <TableRow key={formItem.id} className="hover:bg-muted/40">
-                        <TableCell>
-                          <div className="space-y-1">
-                            <p className="font-medium text-foreground">{formItem.name}</p>
-                            {formItem.description && (
-                              <p className="text-xs text-muted-foreground max-w-lg">{formItem.description}</p>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                          {(formItem as any).deleted_at ? formatDate((formItem as any).deleted_at) : "--"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              className="gap-1"
-                              onClick={() => restoreMutation.mutate(formItem.id)}
-                              disabled={restoreMutation.isPending}
-                            >
-                              <RotateCcw className="w-3 h-3" /> Restaurar
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              className="gap-1"
-                              onClick={() => {
-                                if (confirm(`Remover permanentemente "${formItem.name}"?`)) {
-                                  hardDeleteMutation.mutate(formItem.id);
-                                }
-                              }}
-                              disabled={hardDeleteMutation.isPending}
-                            >
-                              <Trash2 className="w-3 h-3" /> Excluir definitivamente
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-          )}
+          
 
           <Card className="border-dashed border-border bg-muted/30">
             <CardHeader>
@@ -1873,7 +1779,7 @@ const LeadForms = () => {
                             size="sm"
                             className="gap-1"
                             onClick={() => {
-                              if (confirm(`Remover permanentemente \"${formItem.name}\"?`)) {
+                              if (confirm(`Remover permanentemente "${formItem.name}"?`)) {
                                 hardDeleteMutation.mutate(formItem.id);
                               }
                             }}

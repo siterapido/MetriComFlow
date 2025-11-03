@@ -56,6 +56,12 @@ export default function Dashboard() {
     { enabled: metaQueriesEnabled }
   );
 
+  // CRM pipeline evolution over time (some views may reference this)
+  // Defining it here prevents ReferenceError if JSX references exist.
+  const { data: pipelineEvolution, isLoading: pipelineLoading } = usePipelineEvolution(
+    metaFilters.dateRange
+  );
+
   // Sprint 2: Daily breakdown for temporal chart
   const { data: dailyBreakdown, isLoading: dailyLoading } = useUnifiedDailyBreakdown(
     {
@@ -335,84 +341,6 @@ export default function Dashboard() {
       {hasMetaConnection && (
         <MetaToRevenueFunnel metrics={unifiedMetrics} isLoading={unifiedLoading} />
       )}
-
-      {/* Evolução do Pipeline */}
-      <div className="space-y-6">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-primary" />
-          <h2 className="text-xl font-bold text-foreground">Evolução do Pipeline</h2>
-        </div>
-
-        <Card className="border-border bg-card">
-          <CardHeader>
-            <CardTitle className="text-foreground">Movimentações ao Longo do Tempo</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              Acompanhe a evolução do pipeline e fechamentos
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {pipelineEvolution && pipelineEvolution.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={pipelineEvolution}>
-                  <defs>
-                    <linearGradient id="colorActive" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#2DA7FF" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#2DA7FF" stopOpacity={0.1}/>
-                    </linearGradient>
-                    <linearGradient id="colorWon" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#16A34A" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#16A34A" stopOpacity={0.1}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis
-                    dataKey="date"
-                    stroke="#9CA3AF"
-                    tickFormatter={(value) => {
-                      const date = new Date(value);
-                      return `${date.getDate()}/${date.getMonth() + 1}`;
-                    }}
-                  />
-                  <YAxis stroke="#9CA3AF" />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#1F2937",
-                      border: "1px solid #374151",
-                      borderRadius: "8px",
-                      color: "#F9FAFB"
-                    }}
-                    labelFormatter={(value) => {
-                      const date = new Date(value);
-                      return date.toLocaleDateString('pt-BR');
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="total_active"
-                    stroke="#2DA7FF"
-                    fillOpacity={1}
-                    fill="url(#colorActive)"
-                    name="Pipeline Ativo"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="fechado_ganho"
-                    stroke="#16A34A"
-                    fillOpacity={1}
-                    fill="url(#colorWon)"
-                    name="Fechados (Ganho)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-                <BarChart3 className="w-12 h-12 mb-2 opacity-50" />
-                <p>Sem dados de evolução no período</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }

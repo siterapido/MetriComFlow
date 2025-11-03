@@ -167,7 +167,8 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
           assignee_id: formData.assigneeId || null,
           assignee_name: selectedAssigneeName,
           source: formData.source,
-          campaign_id: formData.source === "meta_ads" ? formData.campaign_id : null,
+          // Nunca envie string vazia para UUIDs; use null quando não selecionado
+          campaign_id: formData.source === "meta_ads" ? (formData.campaign_id ?? null) : null,
         },
       });
 
@@ -218,9 +219,12 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
       onOpenChange(false);
     } catch (error) {
       console.error("Error updating lead:", error);
+      const anyErr = error as any;
+      const description =
+        anyErr?.message || anyErr?.error?.message || anyErr?.data?.message || (anyErr?.code ? `Código: ${anyErr.code}` : "Ocorreu um erro desconhecido");
       toast({
         title: "Erro ao atualizar lead",
-        description: error instanceof Error ? error.message : "Ocorreu um erro desconhecido",
+        description,
         variant: "destructive",
       });
     } finally {

@@ -209,14 +209,14 @@ export const LeadFormBuilderDrawer = ({ form, open, onClose }: LeadFormBuilderDr
       };
       if (values.slug && values.slug.trim()) payload.slug = values.slug.trim();
 
-      let attempt = { ...payload } as Record<string, unknown>;
+      const attempt = { ...payload } as Record<string, unknown>;
       for (let i = 0; i < 3; i++) {
         const { error } = await supabase.from("lead_forms").update(attempt).eq("id", form.id);
         if (!error) return;
         const code = (error as any)?.code ?? "";
         const message = String((error as any)?.message ?? "");
         const match = message.match(/Could not find the '([^']+)' column/i);
-        if (code === "PGRST204" && match && match[1] && attempt.hasOwnProperty(match[1])) {
+        if (code === "PGRST204" && match && match[1] && Object.prototype.hasOwnProperty.call(attempt, match[1])) {
           delete (attempt as any)[match[1]];
           continue;
         }
@@ -589,7 +589,7 @@ export const LeadFormBuilderDrawer = ({ form, open, onClose }: LeadFormBuilderDr
                             toast.success("Logo enviada");
                           } catch (err: any) {
                             console.error("[LeadFormBuilder] upload logo", err);
-                            const hint = `Crie um bucket público chamado \"${DEFAULT_BUCKET}\" (ou defina VITE_LEAD_FORM_ASSETS_BUCKET) em Supabase Storage.`;
+                            const hint = `Crie um bucket público chamado "${DEFAULT_BUCKET}" (ou defina VITE_LEAD_FORM_ASSETS_BUCKET) em Supabase Storage.`;
                             toast.error(`Falha ao enviar a logo. ${hint}`);
                           } finally {
                             setUploadingLogo(false);
@@ -646,7 +646,7 @@ export const LeadFormBuilderDrawer = ({ form, open, onClose }: LeadFormBuilderDr
                             toast.success("Capa enviada");
                           } catch (err: any) {
                             console.error("[LeadFormBuilder] upload banner", err);
-                            const hint = `Crie um bucket público chamado \"${DEFAULT_BUCKET}\" (ou defina VITE_LEAD_FORM_ASSETS_BUCKET) em Supabase Storage.`;
+                            const hint = `Crie um bucket público chamado "${DEFAULT_BUCKET}" (ou defina VITE_LEAD_FORM_ASSETS_BUCKET) em Supabase Storage.`;
                             toast.error(`Falha ao enviar a capa. ${hint}`);
                           } finally {
                             setUploadingBanner(false);
