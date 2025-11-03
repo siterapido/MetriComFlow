@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useQueryClient } from '@tanstack/react-query';
 import { useActiveOrganization } from '@/hooks/useActiveOrganization';
+import { logDebug } from '@/lib/debug';
 
 interface MetaConnection {
   id: string;
@@ -70,21 +71,21 @@ export function useMetaAuth() {
   // Helper to parse Supabase FunctionsHttpError and extract JSON/text body
   const parseFunctionsError = async (error: any): Promise<{ message?: string; error?: string } | null> => {
     try {
-      console.log('🔍 Parsing error:', error);
-      console.log('🔍 Error context:', error?.context);
+      logDebug('🔍 Parsing error:', error);
+      logDebug('🔍 Error context:', error?.context);
 
       // Try to get response from context
       const res = error?.context?.response;
       if (res) {
-        console.log('🔍 Response object found:', res);
+        logDebug('🔍 Response object found:', res);
 
         // Try to read the response body
         if (typeof res.text === 'function') {
           const raw = await res.text();
-          console.log('🔍 Raw response text:', raw);
+          logDebug('🔍 Raw response text:', raw);
           try {
             const parsed = JSON.parse(raw);
-            console.log('🔍 Parsed JSON:', parsed);
+            logDebug('🔍 Parsed JSON:', parsed);
             return parsed;
           } catch {
             return { message: raw, error: raw };
@@ -93,18 +94,18 @@ export function useMetaAuth() {
 
         // Try to get body directly
         if (res.body) {
-          console.log('🔍 Response body:', res.body);
-          return res.body;
-        }
+        logDebug('🔍 Response body:', res.body);
+        return res.body;
       }
+    }
 
       // Some versions return context.error directly
       if (error?.context?.error) {
-        console.log('🔍 Context error:', error.context.error);
+        logDebug('🔍 Context error:', error.context.error);
         return error.context.error;
       }
 
-      console.log('🔍 No parseable error found');
+      logDebug('🔍 No parseable error found');
       return null;
     } catch (parseErr) {
       console.error('🔍 Error parsing error:', parseErr);
@@ -168,10 +169,10 @@ export function useMetaAuth() {
         throw new Error('No active session. Please log in again.');
       }
 
-      console.log('🔐 Using session token for meta-auth');
-      console.log('🔗 Frontend REDIRECT_URI:', REDIRECT_URI);
-      console.log('🌍 Current window.location.origin:', window.location.origin);
-      console.log('⚙️  Environment variables:', {
+      logDebug('🔐 Using session token for meta-auth');
+      logDebug('🔗 Frontend REDIRECT_URI:', REDIRECT_URI);
+      logDebug('🌍 Current window.location.origin:', window.location.origin);
+      logDebug('⚙️  Environment variables:', {
         VITE_META_REDIRECT_URI: (import.meta as any).env?.VITE_META_REDIRECT_URI || 'not set',
         VITE_APP_URL: (import.meta as any).env?.VITE_APP_URL || 'not set',
         MODE: (import.meta as any).env?.MODE || 'not set',
@@ -200,7 +201,7 @@ export function useMetaAuth() {
     try {
       setConnecting(true);
 
-      console.log('🔄 Exchanging code with redirect_uri:', REDIRECT_URI);
+      logDebug('🔄 Exchanging code with redirect_uri:', REDIRECT_URI);
 
       // Get the access token for authorization
       const { data: { session } } = await supabase.auth.getSession();
@@ -224,15 +225,15 @@ export function useMetaAuth() {
         })
       });
 
-      console.log('📥 Response status:', response.status, response.statusText);
+      logDebug('📥 Response status:', response.status, response.statusText);
 
       const responseText = await response.text();
-      console.log('📥 Response body (raw):', responseText);
+      logDebug('📥 Response body (raw):', responseText);
 
       let data;
       try {
         data = JSON.parse(responseText);
-        console.log('📥 Response body (parsed):', data);
+        logDebug('📥 Response body (parsed):', data);
       } catch (parseError) {
         console.error('❌ Failed to parse response:', parseError);
         throw new Error(`Invalid response from server: ${responseText}`);
@@ -247,7 +248,7 @@ export function useMetaAuth() {
       }
 
       if (data?.success) {
-        console.log('✅ Successfully connected to Meta Business');
+        logDebug('✅ Successfully connected to Meta Business');
         // Refresh data after successful connection
         await fetchData();
         return;
@@ -262,7 +263,7 @@ export function useMetaAuth() {
 
       // Gracefully handle duplicate exchange attempts (common in React 18 StrictMode dev)
       if (/authorization code has been used/i.test(errorMessage)) {
-        console.log('⚠️ Code already used, fetching existing data');
+        logDebug('⚠️ Code already used, fetching existing data');
         await fetchData();
         return;
       }
@@ -452,7 +453,7 @@ export function useMetaAuth() {
         throw error;
       }
 
-      console.log('✅ Ad account added successfully:', data);
+      logDebug('✅ Ad account added successfully:', data);
 
       // Refresh data
       await fetchData();
@@ -476,7 +477,7 @@ export function useMetaAuth() {
 
       if (error) throw error;
 
-      console.log('✅ Ad account deactivated successfully');
+      logDebug('✅ Ad account deactivated successfully');
 
       // Refresh data
       await fetchData();
@@ -499,7 +500,7 @@ export function useMetaAuth() {
 
       if (error) throw error;
 
-      console.log('✅ Ad account activated successfully');
+      logDebug('✅ Ad account activated successfully');
 
       // Refresh data
       await fetchData();
@@ -522,7 +523,7 @@ export function useMetaAuth() {
 
       if (error) throw error;
 
-      console.log('✅ Ad account renamed successfully');
+      logDebug('✅ Ad account renamed successfully');
 
       // Refresh data
       await fetchData();
@@ -562,15 +563,15 @@ export function useMetaAuth() {
         })
       });
 
-      console.log('📥 List accounts response status:', response.status, response.statusText);
+      logDebug('📥 List accounts response status:', response.status, response.statusText);
 
       const responseText = await response.text();
-      console.log('📥 List accounts response body (raw):', responseText);
+      logDebug('📥 List accounts response body (raw):', responseText);
 
       let data;
       try {
         data = JSON.parse(responseText);
-        console.log('📥 List accounts response body (parsed):', data);
+        logDebug('📥 List accounts response body (parsed):', data);
       } catch (parseError) {
         console.error('❌ Failed to parse response:', parseError);
         throw new Error(`Invalid response from server: ${responseText}`);
@@ -583,7 +584,7 @@ export function useMetaAuth() {
       }
 
       if (data?.success && data?.available_accounts) {
-        console.log('✅ Successfully fetched available accounts:', data.available_accounts.length);
+        logDebug('✅ Successfully fetched available accounts:', data.available_accounts.length);
         setAvailableAccounts(data.available_accounts);
         return data.available_accounts;
       } else {
@@ -611,7 +612,7 @@ export function useMetaAuth() {
 
       if (error) throw error;
 
-      console.log('✅ Ad account deleted permanently');
+      logDebug('✅ Ad account deleted permanently');
 
       // Refresh data
       await fetchData();
@@ -632,7 +633,7 @@ export function useMetaAuth() {
     if (!user) throw new Error('User not authenticated');
 
     try {
-      console.log('🔄 Merging accounts:', { sourceAccountId, targetAccountId });
+      logDebug('🔄 Merging accounts:', { sourceAccountId, targetAccountId });
 
       const { data, error } = await supabase.rpc('merge_ad_accounts', {
         p_source_account_id: sourceAccountId,
@@ -643,7 +644,7 @@ export function useMetaAuth() {
 
       const result = Array.isArray(data) ? data[0] : data;
 
-      console.log('✅ Accounts merged successfully:', result);
+      logDebug('✅ Accounts merged successfully:', result);
 
       // Refresh data
       await fetchData();
@@ -772,8 +773,8 @@ export function useMetaAuth() {
       });
 
       const responseText = await response.text();
-      console.log('📥 Sync response status:', response.status);
-      console.log('📥 Sync response body:', responseText);
+      logDebug('📥 Sync response status:', response.status);
+      logDebug('📥 Sync response body:', responseText);
 
       let data;
       try {
@@ -800,7 +801,7 @@ export function useMetaAuth() {
 
   // Handle OAuth callback
   const handleOAuthCallback = async () => {
-    const url = new URL(window.location.href);
+      const url = new URL(window.location.href);
     const urlParams = new URLSearchParams(url.search);
     const code = urlParams.get('code');
     const error = urlParams.get('error');
@@ -830,7 +831,7 @@ export function useMetaAuth() {
       const sessionKey = `meta_oauth_code_${state}`;
       const alreadyHandled = sessionStorage.getItem(sessionKey);
       if (alreadyHandled === code || lastHandledCodeRef.current === code) {
-        console.log('⚠️ Code already handled, skipping');
+        logDebug('⚠️ Code already handled, skipping');
         return;
       }
       sessionStorage.setItem(sessionKey, code);

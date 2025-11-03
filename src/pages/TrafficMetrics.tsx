@@ -26,8 +26,10 @@ import {
 import { DateRangeFilter } from '@/components/meta-ads/DateRangeFilter';
 import { MetaAdsKPICards } from '@/components/meta-ads/MetaAdsKPICards';
 import { CreativeGrid } from '@/components/metrics/CreativeCard';
+import { CampaignPerformanceTable } from '@/components/metrics/CampaignPerformanceTable';
 import { useMetaConnectionStatus } from '@/hooks/useMetaConnectionStatus';
 import { useMetricsSummary, useAdAccounts, useAdCampaigns } from '@/hooks/useMetaMetrics';
+import { useMetaAuth } from '@/hooks/useMetaAuth';
 import {
   useAdSets,
   useAds,
@@ -36,6 +38,8 @@ import {
   useCreativePerformance,
   useSyncAdSets,
   useSyncAds,
+  useSyncAdSetInsights,
+  useSyncAdInsights,
 } from '@/hooks/useAdSetsAndAds';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency, formatNumber } from '@/lib/formatters';
@@ -52,6 +56,9 @@ export default function TrafficMetrics() {
   const [selectedAdSet, setSelectedAdSet] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'overview' | 'campaigns' | 'adsets' | 'creatives'>('overview');
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Meta auth utilities (to ensure campaigns are present)
+  const { syncCampaigns } = useMetaAuth();
 
   // Meta Connection Status
   const { hasActiveConnection, isLoading: statusLoading } = useMetaConnectionStatus();
@@ -110,11 +117,26 @@ export default function TrafficMetrics() {
   // Mutations
   const syncAdSets = useSyncAdSets();
   const syncAds = useSyncAds();
+  const syncAdSetInsights = useSyncAdSetInsights();
+  const syncAdInsights = useSyncAdInsights();
 
   // Handlers
   const handleSyncAll = async () => {
     setIsSyncing(true);
     try {
+      // Step 0: Ensure campaigns are synced for selected scope
+      const accountsToSync = selectedAccount === 'all'
+        ? (accounts || []).map(a => a.id)
+        : [selectedAccount];
+
+      for (const accId of accountsToSync) {
+        try {
+          await syncCampaigns(accId);
+        } catch (err) {
+          console.warn('⚠️ Error syncing campaigns for account', accId, err);
+        }
+      }
+
       // Step 1: Sync ad sets
       await syncAdSets.mutateAsync({
         campaign_ids: selectedCampaign === 'all' ? undefined : [selectedCampaign],
@@ -125,9 +147,25 @@ export default function TrafficMetrics() {
         campaign_ids: selectedCampaign === 'all' ? undefined : [selectedCampaign],
       });
 
+      // Step 3: Sync ad set insights (metrics)
+      await syncAdSetInsights.mutateAsync({
+        since: dateRange.start,
+        until: dateRange.end,
+        ad_account_ids: selectedAccount === 'all' ? undefined : [selectedAccount],
+        campaign_ids: selectedCampaign === 'all' ? undefined : [selectedCampaign],
+      });
+
+      // Step 4: Sync ad insights (metrics)
+      await syncAdInsights.mutateAsync({
+        since: dateRange.start,
+        until: dateRange.end,
+        ad_account_ids: selectedAccount === 'all' ? undefined : [selectedAccount],
+        campaign_ids: selectedCampaign === 'all' ? undefined : [selectedCampaign],
+      });
+
       toast({
         title: 'Sincronização Completa',
-        description: 'Conjuntos e criativos sincronizados com sucesso!',
+        description: 'Campanhas, conjuntos, criativos e métricas sincronizados com sucesso!',
       });
     } catch (error) {
       console.error('Sync error:', error);
@@ -355,12 +393,14 @@ export default function TrafficMetrics() {
           <Card className="border-border bg-card">
             <CardHeader>
               <CardTitle>Performance por Campanha</CardTitle>
-              <CardDescription>Visão consolidada das campanhas ativas</CardDescription>
+              <CardDescription>Métricas detalhadas de todas as campanhas no período selecionado</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">
-                [Aqui virá a tabela de campanhas - já existe em MetaAdsConfig]
-              </p>
+              <CampaignPerformanceTable
+                accountId={selectedAccount === 'all' ? undefined : selectedAccount}
+                campaignId={selectedCampaign === 'all' ? undefined : selectedCampaign}
+                dateRange={dateRange}
+              />
             </CardContent>
           </Card>
         </TabsContent>

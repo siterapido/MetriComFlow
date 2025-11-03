@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { Tables, TablesInsert, TablesUpdate } from '@/lib/database.types'
 import { useEffect } from 'react'
 import { useActiveOrganization } from '@/hooks/useActiveOrganization'
+import { logDebug } from '@/lib/debug'
 
 // Type definitions
 export type Lead = Tables<'leads'> & {
@@ -68,8 +69,8 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
   return useQuery({
     queryKey: ['leads', org?.id, filters, campaignId],
     queryFn: async () => {
-      console.log('[useLeads] 🔍 Iniciando busca de leads...')
-      console.log('[useLeads] Filtros:', { filters, campaignId })
+      logDebug('[useLeads] 🔍 Iniciando busca de leads...')
+      logDebug('[useLeads] Filtros:', { filters, campaignId })
 
       // Verificar autenticação antes de fazer a query
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
@@ -84,8 +85,8 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
         throw new Error('Você precisa estar autenticado para visualizar os leads. Por favor, faça login novamente.')
       }
 
-      console.log('[useLeads] ✅ Usuário autenticado:', session.user.email)
-      console.log('[useLeads] Token expira em:', new Date(session.expires_at! * 1000).toLocaleString())
+      logDebug('[useLeads] ✅ Usuário autenticado:', session.user.email)
+      logDebug('[useLeads] Token expira em:', new Date(session.expires_at! * 1000).toLocaleString())
 
       if (!org?.id) {
         throw new Error('Organização ativa não definida. Selecione uma para continuar.')
@@ -199,14 +200,14 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
         throw error
       }
 
-      console.log('[useLeads] ✅ Leads encontrados:', data?.length || 0)
-      console.log('[useLeads] Agrupados por status:', data?.reduce((acc, lead) => {
+      logDebug('[useLeads] ✅ Leads encontrados:', data?.length || 0)
+      logDebug('[useLeads] Agrupados por status:', data?.reduce((acc, lead) => {
         acc[lead.status] = (acc[lead.status] || 0) + 1
         return acc
       }, {} as Record<string, number>))
 
       if (data && data.length > 0) {
-        console.log('[useLeads] Primeiros 3 leads:', data.slice(0, 3).map(l => ({
+        logDebug('[useLeads] Primeiros 3 leads:', data.slice(0, 3).map(l => ({
           id: l.id,
           title: l.title,
           status: l.status,
@@ -235,7 +236,7 @@ export const useCreateLead = () => {
 
   return useMutation({
     mutationFn: async (values: LeadInsert) => {
-      console.log('[useCreateLead] Criando lead:', values)
+      logDebug('[useCreateLead] Criando lead:', values)
 
       const uuidLikeKey = (k: string) => k.endsWith('_id') || k === 'campaign_id' || k === 'assignee_id'
       const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/
@@ -257,7 +258,7 @@ export const useCreateLead = () => {
           })
       ) as LeadInsert
 
-      console.log('[useCreateLead] Payload sanitizado:', sanitizedValues)
+      logDebug('[useCreateLead] Payload sanitizado:', sanitizedValues)
 
       if (!org?.id) throw new Error('Organização ativa não definida')
 
@@ -278,11 +279,11 @@ export const useCreateLead = () => {
         throw error
       }
 
-      console.log('[useCreateLead] Lead criado com sucesso:', data)
+      logDebug('[useCreateLead] Lead criado com sucesso:', data)
       return data
     },
     onSuccess: () => {
-      console.log('[useCreateLead] Invalidando queries de leads')
+      logDebug('[useCreateLead] Invalidando queries de leads')
 
       // Invalidar TODAS as queries de leads (com e sem filtros)
       queryClient.invalidateQueries({ queryKey: ['leads'] })
@@ -306,18 +307,18 @@ export const useUpdateLead = () => {
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: LeadUpdate }) => {
-      console.log('[useUpdateLead] Atualizando lead:', { id, updates })
+      logDebug('[useUpdateLead] Atualizando lead:', { id, updates })
 
       // Se o status está mudando para "fechado_ganho", adicionar closed_won_at automaticamente
       const finalUpdates = { ...updates }
 
       if (updates.status === 'fechado_ganho' && !updates.closed_won_at) {
         finalUpdates.closed_won_at = new Date().toISOString()
-        console.log('[useUpdateLead] ✅ Adicionando closed_won_at automaticamente:', finalUpdates.closed_won_at)
+        logDebug('[useUpdateLead] ✅ Adicionando closed_won_at automaticamente:', finalUpdates.closed_won_at)
       } else if (updates.status && updates.status !== 'fechado_ganho') {
         // Se está mudando PARA FORA de "fechado_ganho", limpar closed_won_at
         finalUpdates.closed_won_at = null
-        console.log('[useUpdateLead] 🔄 Limpando closed_won_at (status mudou para:', updates.status, ')')
+        logDebug('[useUpdateLead] 🔄 Limpando closed_won_at (status mudou para:', updates.status, ')')
       }
 
       // Sanitização: remover campos undefined (não atualiza) e
@@ -409,7 +410,7 @@ export function useDeleteLead() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      console.log('[useDeleteLead] Deletando lead:', id)
+      logDebug('[useDeleteLead] Deletando lead:', id)
 
       const { error } = await supabase
         .from('leads')
@@ -421,10 +422,10 @@ export function useDeleteLead() {
         throw error
       }
 
-      console.log('[useDeleteLead] Lead deletado com sucesso')
+      logDebug('[useDeleteLead] Lead deletado com sucesso')
     },
     onSuccess: () => {
-      console.log('[useDeleteLead] Invalidando queries')
+      logDebug('[useDeleteLead] Invalidando queries')
 
       // Invalidar queries de leads
       queryClient.invalidateQueries({ queryKey: ['leads'] })

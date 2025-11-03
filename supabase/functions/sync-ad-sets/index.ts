@@ -15,7 +15,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const META_API_VERSION = "v21.0";
+const META_API_VERSION = "v24.0";
 
 interface AdSetFromMeta {
   id: string;
@@ -40,7 +40,7 @@ serve(async (req) => {
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+          "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-application-name",
         },
       });
     }
@@ -126,7 +126,7 @@ serve(async (req) => {
         console.log(`🔍 Fetching ad sets for campaign: ${campaign.external_id}`);
 
         const metaUrl = `https://graph.facebook.com/${META_API_VERSION}/${campaign.external_id}/adsets`;
-        const params = new URLSearchParams({
+        const baseParams = new URLSearchParams({
           access_token: accessToken,
           fields: [
             "id",
@@ -145,20 +145,44 @@ serve(async (req) => {
           limit: "100",
         });
 
-        if (since) {
-          params.append("since", since);
+        if (since) baseParams.append("since", since);
+
+        // Try with user token first, then fallback to META_ACCESS_TOKEN if available
+        const buildUrl = (token: string) => {
+          const p = new URLSearchParams(baseParams);
+          p.set("access_token", token);
+          return `${metaUrl}?${p.toString()}`;
+        };
+
+        const fallbackToken = Deno.env.get("META_ACCESS_TOKEN");
+        let firstUrl = buildUrl(accessToken);
+        let res = await fetch(firstUrl);
+        if (!res.ok && fallbackToken && fallbackToken !== accessToken) {
+          console.warn(`⚠️ Primary token failed for campaign ${campaign.external_id} (status ${res.status}). Retrying with META_ACCESS_TOKEN.`);
+          firstUrl = buildUrl(fallbackToken);
+          res = await fetch(firstUrl);
         }
-
-        const response = await fetch(`${metaUrl}?${params.toString()}`);
-
-        if (!response.ok) {
-          const errorData = await response.text();
+        if (!res.ok) {
+          const errorData = await res.text();
           console.error(`❌ Meta API error for campaign ${campaign.external_id}:`, errorData);
-          continue; // Skip this campaign and continue with others
+          continue;
         }
 
-        const data = await response.json();
-        const adSets: AdSetFromMeta[] = data.data || [];
+        const firstData = await res.json();
+        const adSets: AdSetFromMeta[] = (firstData?.data || []).slice();
+
+        // Pagination: follow paging.next if present
+        let nextUrl: string | null = firstData?.paging?.next || null;
+        while (nextUrl) {
+          const pageRes = await fetch(nextUrl);
+          if (!pageRes.ok) {
+            console.warn(`⚠️ Paging request failed for campaign ${campaign.external_id} (status ${pageRes.status}). Stopping pagination.`);
+            break;
+          }
+          const pageData = await pageRes.json();
+          if (Array.isArray(pageData?.data)) adSets.push(...pageData.data);
+          nextUrl = pageData?.paging?.next || null;
+        }
 
         console.log(`✅ Found ${adSets.length} ad sets for campaign ${campaign.external_id}`);
 

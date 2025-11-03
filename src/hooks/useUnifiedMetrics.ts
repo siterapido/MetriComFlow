@@ -12,6 +12,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useActiveOrganization } from '@/hooks/useActiveOrganization'
+import { logDebug } from '@/lib/debug'
 
 export interface UnifiedMetrics {
   // Meta Ads (top of funnel)
@@ -82,7 +83,7 @@ export function useUnifiedMetrics(
         endStr = now.toISOString().split('T')[0]
       }
 
-      console.log('[useUnifiedMetrics] Fetching data:', { startStr, endStr, accountId: filters?.accountId, campaignId: filters?.campaignId })
+      logDebug('[useUnifiedMetrics] Fetching data:', { startStr, endStr, accountId: filters?.accountId, campaignId: filters?.campaignId })
 
       // 1. Buscar métricas do Meta Ads (campaign_daily_insights)
       let insightsQuery = supabase
@@ -113,7 +114,7 @@ export function useUnifiedMetrics(
       const meta_ctr = meta_impressions > 0 ? (meta_clicks / meta_impressions) * 100 : 0
       const meta_cpl = meta_leads > 0 ? meta_spend / meta_leads : null
 
-      console.log('[useUnifiedMetrics] Meta Ads aggregated:', { meta_spend, meta_impressions, meta_clicks, meta_leads, meta_ctr, meta_cpl })
+      logDebug('[useUnifiedMetrics] Meta Ads aggregated:', { meta_spend, meta_impressions, meta_clicks, meta_leads, meta_ctr, meta_cpl })
 
       // 2. Buscar leads do CRM (todos os leads da org no período)
       let leadsQuery = supabase
@@ -165,7 +166,7 @@ export function useUnifiedMetrics(
         ?.filter((l: any) => !['fechado_ganho', 'fechado_perdido'].includes(l.status))
         .reduce((sum, l: any) => sum + (l.value || 0), 0) || 0
 
-      console.log('[useUnifiedMetrics] CRM aggregated:', {
+      logDebug('[useUnifiedMetrics] CRM aggregated:', {
         crm_total_leads,
         crm_qualificados,
         crm_propostas,
@@ -209,7 +210,7 @@ export function useUnifiedMetrics(
         has_data,
       }
 
-      console.log('[useUnifiedMetrics] Final result:', result)
+      logDebug('[useUnifiedMetrics] Final result:', result)
 
       return result
     },
@@ -270,7 +271,7 @@ export function useUnifiedDailyBreakdown(
         endStr = now.toISOString().split('T')[0]
       }
 
-      console.log('[useUnifiedDailyBreakdown] Fetching daily data:', { startStr, endStr })
+      logDebug('[useUnifiedDailyBreakdown] Fetching daily data:', { startStr, endStr })
 
       // 1. Buscar insights diários do Meta
       let insightsQuery = supabase
@@ -390,7 +391,7 @@ export function useUnifiedDailyBreakdown(
         }))
         .sort((a, b) => a.date.localeCompare(b.date))
 
-      console.log('[useUnifiedDailyBreakdown] Daily breakdown calculated:', result.length, 'days')
+      logDebug('[useUnifiedDailyBreakdown] Daily breakdown calculated:', result.length, 'days')
 
       return result
     },

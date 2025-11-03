@@ -175,6 +175,86 @@ export const useSyncAdSets = () => {
 };
 
 /**
+ * Sync ad set insights (métricas) from Meta API
+ */
+export const useSyncAdSetInsights = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({
+      since,
+      until,
+      ad_account_ids,
+      campaign_ids,
+      ad_set_ids,
+    }: {
+      since?: string;
+      until?: string;
+      ad_account_ids?: string[];
+      campaign_ids?: string[];
+      ad_set_ids?: string[];
+    }) => {
+      const { data, error } = await supabase.functions.invoke('sync-adset-insights', {
+        body: { since, until, ad_account_ids, campaign_ids, ad_set_ids },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_data) => {
+      queryClient.invalidateQueries({ queryKey: ['ad-set-metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['ad-sets'] });
+      toast({ title: 'Métricas de Conjuntos', description: 'Insights por conjunto sincronizados.' });
+    },
+    onError: (error) => {
+      console.error('Error syncing ad set insights:', error);
+      toast({ title: 'Erro ao Sincronizar Métricas (Conjuntos)', description: 'Tente novamente.', variant: 'destructive' });
+    },
+  });
+};
+
+/**
+ * Sync ad insights (métricas por criativo) from Meta API
+ */
+export const useSyncAdInsights = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({
+      since,
+      until,
+      ad_account_ids,
+      campaign_ids,
+      ad_set_ids,
+      ad_ids,
+    }: {
+      since?: string;
+      until?: string;
+      ad_account_ids?: string[];
+      campaign_ids?: string[];
+      ad_set_ids?: string[];
+      ad_ids?: string[];
+    }) => {
+      const { data, error } = await supabase.functions.invoke('sync-ad-insights', {
+        body: { since, until, ad_account_ids, campaign_ids, ad_set_ids, ad_ids },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_data) => {
+      queryClient.invalidateQueries({ queryKey: ['ad-metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['ads'] });
+      toast({ title: 'Métricas de Criativos', description: 'Insights por criativo sincronizados.' });
+    },
+    onError: (error) => {
+      console.error('Error syncing ad insights:', error);
+      toast({ title: 'Erro ao Sincronizar Métricas (Criativos)', description: 'Tente novamente.', variant: 'destructive' });
+    },
+  });
+};
+
+/**
  * Get ad set metrics aggregated by date range
  */
 export const useAdSetMetrics = (

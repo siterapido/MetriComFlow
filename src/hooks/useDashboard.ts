@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useActiveOrganization } from '@/hooks/useActiveOrganization'
+import { logDebug } from '@/lib/debug'
 
 export function useRevenueRecords(category?: string, year?: number) {
   const { data: org } = useActiveOrganization()
@@ -72,7 +73,7 @@ export function useDashboardSummary() {
       const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
       const currentMonthName = monthNames[now.getMonth()]
 
-      console.log('[useDashboardSummary] Buscando dados para:', { year, currentMonthName })
+      logDebug('[useDashboardSummary] Buscando dados para:', { year, currentMonthName })
 
       // Faturamento mensal e anual via CRM (leads fechados)
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
@@ -113,7 +114,7 @@ export function useDashboardSummary() {
       const faturamento_mensal = (closedMonth || []).reduce((sum, r: any) => sum + (r.value ?? 0), 0)
       const faturamento_anual = (closedYear || []).reduce((sum, r: any) => sum + (r.value ?? 0), 0)
 
-      console.log('[useDashboardSummary] Faturamento (CRM):', {
+      logDebug('[useDashboardSummary] Faturamento (CRM):', {
         closedMonth: closedMonth?.length || 0,
         closedYear: closedYear?.length || 0,
         faturamento_mensal,
@@ -138,7 +139,7 @@ export function useDashboardSummary() {
       const oportunidades_ativas = activeLeads?.length ?? 0
       const pipeline_value = (activeLeads || []).reduce((sum, l: any) => sum + (l.value ?? 0), 0)
 
-      console.log('[useDashboardSummary] Oportunidades (CRM):', {
+      logDebug('[useDashboardSummary] Oportunidades (CRM):', {
         activeStatuses,
         activeLeads: activeLeads?.length || 0,
         leadsList: activeLeads?.map(l => ({ id: l.id, status: l.status, value: l.value })),
@@ -153,7 +154,7 @@ export function useDashboardSummary() {
         pipeline_value,
       }
 
-      console.log('[useDashboardSummary] Resultado final:', result)
+      logDebug('[useDashboardSummary] Resultado final:', result)
 
       return result
     },
@@ -224,7 +225,7 @@ export function useMetaKPIs(
         endStr = end.toISOString().split('T')[0]
       }
 
-      console.log('[useMetaKPIs] Buscando dados do período (com filtros):', { startStr, endStr, accountId, campaignId })
+      logDebug('[useMetaKPIs] Buscando dados do período (com filtros):', { startStr, endStr, accountId, campaignId })
 
       // Gastos e leads do período via campaign_daily_insights com filtros
       let insightsQuery = supabase
@@ -249,13 +250,13 @@ export function useMetaKPIs(
         // Não lançar erro, retornar zeros
       }
 
-      console.log('[useMetaKPIs] Insights encontrados:', insights?.length || 0)
+      logDebug('[useMetaKPIs] Insights encontrados:', insights?.length || 0)
 
       const investimento_total = (insights || []).reduce((sum, d) => sum + (d.spend ?? 0), 0)
       const leads_gerados = (insights || []).reduce((sum, d) => sum + (d.leads_count ?? 0), 0)
       const cpl = leads_gerados > 0 ? investimento_total / leads_gerados : 0
 
-      console.log('[useMetaKPIs] Métricas calculadas:', { investimento_total, leads_gerados, cpl })
+      logDebug('[useMetaKPIs] Métricas calculadas:', { investimento_total, leads_gerados, cpl })
 
       // Calcular ROAS baseado em TODOS os leads fechados "fechado_ganho" do período (CRM completo)
       // IMPORTANTE: Agora considera TODOS os leads fechados, não apenas os de Meta Ads
@@ -305,7 +306,7 @@ export function useMetaKPIs(
         return acc
       }, {} as Record<string, number>)
 
-      console.log('[useMetaKPIs] ROAS calculado (CRM completo):', {
+      logDebug('[useMetaKPIs] ROAS calculado (CRM completo):', {
         revenue,
         investimento_total,
         roas,
@@ -323,7 +324,7 @@ export function useMetaKPIs(
         has_data,
       }
 
-      console.log('[useMetaKPIs] Resultado final:', result)
+      logDebug('[useMetaKPIs] Resultado final:', result)
 
       return result
     },
@@ -389,7 +390,7 @@ export function usePipelineMetrics(filters?: { dateRange?: { start: string; end:
         endStr = endDate.toISOString().split('T')[0]
       }
 
-      console.log('[usePipelineMetrics] Buscando métricas do pipeline:', { startStr, endStr })
+      logDebug('[usePipelineMetrics] Buscando métricas do pipeline:', { startStr, endStr })
 
       // Buscar todos os leads (ou filtrado por período se houver)
       let leadsQuery = supabase
@@ -410,7 +411,7 @@ export function usePipelineMetrics(filters?: { dateRange?: { start: string; end:
         throw leadsErr
       }
 
-      console.log('[usePipelineMetrics] Leads encontrados:', leads?.length || 0)
+      logDebug('[usePipelineMetrics] Leads encontrados:', leads?.length || 0)
 
       // Inicializar métricas
       const stages = {
@@ -469,7 +470,7 @@ export function usePipelineMetrics(filters?: { dateRange?: { start: string; end:
         active_pipeline_value,
       }
 
-      console.log('[usePipelineMetrics] Resultado final:', result)
+      logDebug('[usePipelineMetrics] Resultado final:', result)
 
       return result
     },
@@ -532,7 +533,7 @@ export function usePipelineEvolution(dateRange?: { start: string; end: string })
         endStr = now.toISOString().split('T')[0]
       }
 
-      console.log('[usePipelineEvolution] Buscando evolução do pipeline:', { startStr, endStr })
+      logDebug('[usePipelineEvolution] Buscando evolução do pipeline:', { startStr, endStr })
 
       // Primeiro, buscar IDs de leads da organização no período
       const { data: orgLeadIds, error: orgLeadsErr } = await supabase
@@ -567,7 +568,7 @@ export function usePipelineEvolution(dateRange?: { start: string; end: string })
         throw activitiesErr
       }
 
-      console.log('[usePipelineEvolution] Atividades encontradas:', activities?.length || 0)
+      logDebug('[usePipelineEvolution] Atividades encontradas:', activities?.length || 0)
 
       // Agrupar por data
       const dailyMetrics: Record<string, any> = {}
@@ -600,7 +601,7 @@ export function usePipelineEvolution(dateRange?: { start: string; end: string })
         a.date.localeCompare(b.date)
       )
 
-      console.log('[usePipelineEvolution] Evolução calculada:', result.length, 'dias')
+      logDebug('[usePipelineEvolution] Evolução calculada:', result.length, 'dias')
 
       return result as PipelineEvolution
     },
@@ -683,7 +684,7 @@ export function useCombinedFunnelData(
         endStr = now.toISOString().split('T')[0]
       }
 
-      console.log('[useCombinedFunnelData] Buscando dados:', { startStr, endStr, accountId: filters?.accountId, campaignId: filters?.campaignId })
+      logDebug('[useCombinedFunnelData] Buscando dados:', { startStr, endStr, accountId: filters?.accountId, campaignId: filters?.campaignId })
 
       // 1. Buscar métricas do Meta Ads (top of funnel)
       let insightsQuery = supabase
@@ -712,7 +713,7 @@ export function useCombinedFunnelData(
       const spend = (insights || []).reduce((sum, d) => sum + (d.spend ?? 0), 0)
       const cpl = leads_meta > 0 ? spend / leads_meta : 0
 
-      console.log('[useCombinedFunnelData] Meta Ads:', { impressions, clicks, leads_meta, cpl })
+      logDebug('[useCombinedFunnelData] Meta Ads:', { impressions, clicks, leads_meta, cpl })
 
       // 2. Buscar métricas do CRM (bottom of funnel)
       let leadsQuery = supabase
@@ -763,7 +764,7 @@ export function useCombinedFunnelData(
         }
       })
 
-      console.log('[useCombinedFunnelData] CRM:', stages)
+      logDebug('[useCombinedFunnelData] CRM:', stages)
 
       const result: CombinedFunnelData = {
         impressions,
@@ -775,7 +776,7 @@ export function useCombinedFunnelData(
         won_value,
       }
 
-      console.log('[useCombinedFunnelData] Resultado final:', result)
+      logDebug('[useCombinedFunnelData] Resultado final:', result)
 
       return result
     },
