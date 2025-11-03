@@ -12,7 +12,7 @@ Este guia explica, passo a passo, como configurar a Mailgun para que e‑mails r
 ---
 
 ## Pré‑requisitos
-- Conta Mailgun ativa com um domínio verificado (DNS ok para receber e‑mails: registros MX, SPF e DKIM).
+- Conta    ativa com um domínio verificado (DNS ok para receber e‑mails: registros MX, SPF e DKIM).
 - Projeto Supabase com as Edge Functions implantadas.
 - A organização no Insightfy deve ter um `slug` (usado no endereço de e‑mail).
 
