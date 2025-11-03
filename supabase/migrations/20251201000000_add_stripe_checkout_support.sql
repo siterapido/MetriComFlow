@@ -34,7 +34,7 @@ BEGIN
       AND table_name = 'subscription_payments'
   ) THEN
     CREATE TABLE public.subscription_payments (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       subscription_id UUID NOT NULL REFERENCES public.organization_subscriptions(id) ON DELETE CASCADE,
       amount NUMERIC(10, 2) NOT NULL,
       payment_method TEXT,
@@ -92,7 +92,7 @@ BEGIN
           JOIN public.organization_memberships om
             ON om.organization_id = os.organization_id
           WHERE os.id = subscription_payments.subscription_id
-            AND om.user_id = auth.uid()
+            AND om.profile_id = auth.uid()
             AND om.is_active = TRUE
         )
       );

@@ -1,5 +1,12 @@
 # Como os Leads são Rastreados no Sistema
 
+## ✅ Atualizações Recentes (Formulários + CRM)
+
+- Nome do lead agora é obrigatório em todos os formulários (UI e validação no servidor).
+- Cada lead recebe um identificador legível único (`public_id`, ex.: `L-20251103-AB12CD`).
+- Vínculo automático com campanhas Meta Ads via `utm_campaign` (com opção manual na criação do formulário).
+
+
 ## 📊 Problema Identificado
 
 **Status Atual**: Os gráficos mostram **zero leads** porque não há dados do Meta Ads sincronizados no sistema.

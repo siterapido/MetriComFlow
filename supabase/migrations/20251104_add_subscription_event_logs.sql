@@ -3,7 +3,7 @@
 -- Created: 2025-11-04
 
 CREATE TABLE IF NOT EXISTS public.subscription_event_logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES public.organizations (id) ON DELETE CASCADE,
   subscription_id UUID NOT NULL REFERENCES public.organization_subscriptions (id) ON DELETE CASCADE,
   event_type TEXT NOT NULL CHECK (

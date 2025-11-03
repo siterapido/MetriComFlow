@@ -37,6 +37,30 @@ interface LeadFormField {
   crm_field: string | null;
 }
 
+function findNameFieldKey(fields: LeadFormField[]): { key: string; label: string } | null {
+  // Prefer explicit CRM mapping
+  const byCrm = fields.find((f) => (f.crm_field || "").toLowerCase() === "full_name");
+  if (byCrm) return { key: byCrm.key, label: byCrm.label };
+
+  // Common key conventions
+  const preferredKeys = new Set([
+    "full_name",
+    "fullname",
+    "name",
+    "nome",
+    "nome_completo",
+  ]);
+  const byKey = fields.find((f) => preferredKeys.has((f.key || "").toLowerCase()));
+  if (byKey) return { key: byKey.key, label: byKey.label };
+
+  // Heuristic by label
+  const byLabel = fields.find((f) => (f.label || "").toLowerCase().includes("nome"));
+  if (byLabel) return { key: byLabel.key, label: byLabel.label };
+
+  // Fallback to a generic expected key
+  return { key: "full_name", label: "Nome" };
+}
+
 interface LeadFormVariant {
   id: string;
   slug: string;
@@ -348,6 +372,21 @@ Deno.serve(async (req: Request) => {
   const fields = (form.lead_form_fields ?? []).sort((a, b) => a.order_index - b.order_index);
   const issues = collectValidationIssues(fields, payload);
 
+  // Name is mandatory for all forms (business rule)
+  const nameField = findNameFieldKey(fields);
+  if (nameField) {
+    const nm = sanitizeValue(payload[nameField.key]);
+    const isEmpty =
+      nm === null || nm === undefined || (typeof nm === "string" && nm.trim().length === 0);
+    if (isEmpty) {
+      issues.push({
+        field: nameField.key,
+        code: "missing",
+        message: `O campo "${nameField.label || "Nome"}" é obrigatório.`,
+      });
+    }
+  }
+
   const variantSlug = body.variantSlug?.toLowerCase() ?? null;
   const variants = form.lead_form_variants ?? [];
   const variant =
@@ -450,13 +489,30 @@ Deno.serve(async (req: Request) => {
 
   const description = buildLeadDescription(fields, payload, tracking);
 
+  // Determine campaign automatically via UTM if no explicit variant campaign
+  let resolvedCampaignId: string | null = variant?.campaign_id ?? null;
+  if (!resolvedCampaignId && tracking?.utmCampaign) {
+    const utm = String(tracking.utmCampaign).trim();
+    if (utm.length > 0) {
+      const { data: foundCampaign, error: campErr } = await supabase
+        .from("ad_campaigns")
+        .select("id")
+        .or(`external_id.eq.${utm},name.eq.${utm}`)
+        .limit(1)
+        .maybeSingle();
+      if (!campErr && foundCampaign?.id) {
+        resolvedCampaignId = foundCampaign.id as string;
+      }
+    }
+  }
+
   const leadInsert = {
     title: buildLeadTitle(form, payload),
     description,
     status: "novo_lead",
     source: variant?.campaign_source === "meta_ads" ? "meta_ads" : "manual",
     lead_source_detail: variant ? `${variant.name}${tracking?.utmCampaign ? ` • ${tracking.utmCampaign}` : ""}` : null,
-    campaign_id: variant?.campaign_id ?? null,
+    campaign_id: resolvedCampaignId,
     external_lead_id: tracking?.metaLeadId ?? null,
     ad_id: variant?.meta_ad_id ?? null,
     adset_id: variant?.meta_adset_id ?? null,

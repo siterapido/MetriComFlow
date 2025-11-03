@@ -18,7 +18,7 @@ CREATE EXTENSION IF NOT EXISTS http;
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS public.cron_job_logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   job_name TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('success', 'error', 'running')),
   started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

@@ -395,10 +395,20 @@ export const LeadFormBuilderDrawer = ({ form, open, onClose }: LeadFormBuilderDr
   });
 
   const onToggleRequired = (field: LeadFormField, checked: boolean) => {
+    // Nome do lead é obrigatório em todos os formulários
+    if (field.key === "full_name" && !checked) {
+      toast.warning("O campo Nome do lead é obrigatório e não pode ser desmarcado.");
+      return;
+    }
     updateFieldMutation.mutate({ id: field.id, is_required: checked });
   };
 
   const onRemoveField = (field: LeadFormField) => {
+    // Nome do lead não pode ser removido
+    if (field.key === "full_name") {
+      toast.warning("O campo Nome do lead é obrigatório e não pode ser removido.");
+      return;
+    }
     deleteFieldMutation.mutate(field.id);
   };
 
@@ -906,6 +916,7 @@ export const LeadFormBuilderDrawer = ({ form, open, onClose }: LeadFormBuilderDr
                         <div className="flex items-center gap-2">
                           <Switch
                             checked={field.is_required ?? false}
+                            disabled={field.key === "full_name"}
                             onCheckedChange={(checked) => onToggleRequired(field, checked)}
                           />
                           <span className="text-xs text-muted-foreground">Campo obrigatório</span>
@@ -915,7 +926,7 @@ export const LeadFormBuilderDrawer = ({ form, open, onClose }: LeadFormBuilderDr
                           size="sm"
                           className="gap-1"
                           onClick={() => onRemoveField(field)}
-                          disabled={deleteFieldMutation.isPending}
+                          disabled={deleteFieldMutation.isPending || field.key === "full_name"}
                         >
                           <Trash2 className="h-4 w-4" />
                           Remover

@@ -79,10 +79,20 @@ const defaultFieldsSchema = z
     message: z.boolean(),
   })
   .superRefine((value, ctx) => {
-    if (!Object.values(value).some(Boolean)) {
+    // Nome do lead é sempre obrigatório
+    if (!value.fullName) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Selecione pelo menos um campo obrigatório",
+        message: "O campo Nome do lead é obrigatório em todos os formulários",
+        path: ["fullName"],
+      });
+    }
+    // Também exige pelo menos um campo (além do nome) marcado, quando aplicável
+    const totalSelected = Object.values(value).filter(Boolean).length;
+    if (totalSelected === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Selecione pelo menos um campo",
         path: [],
       });
     }
@@ -1678,7 +1688,9 @@ const LeadForms = () => {
                     >
                       <Checkbox
                         checked={isChecked}
+                        disabled={key === "fullName"}
                         onCheckedChange={(checked) => {
+                          if (key === "fullName") return; // Nome sempre obrigatório
                           form.setValue(`defaultFields.${key}` as const, Boolean(checked), {
                             shouldDirty: true,
                             shouldTouch: true,
@@ -1689,7 +1701,9 @@ const LeadForms = () => {
                       <div className="space-y-1">
                         <p className="text-sm font-medium text-foreground">
                           {template.label}
-                          {template.isRequired && <span className="ml-1 text-destructive">*</span>}
+                          {(template.isRequired || key === "fullName") && (
+                            <span className="ml-1 text-destructive">*</span>
+                          )}
                         </p>
                         {template.placeholder && (
                           <p className="text-xs text-muted-foreground">{template.placeholder}</p>

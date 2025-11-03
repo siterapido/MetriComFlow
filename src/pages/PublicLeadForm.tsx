@@ -52,8 +52,15 @@ const PublicLeadForm = () => {
   }>();
   const [searchParams] = useSearchParams();
   const variantSlug = searchParams.get("variant");
+  const utmCampaign = searchParams.get("utm_campaign");
+  const toSlug = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)+/g, "");
+  const resolvedVariantSlug = variantSlug || (utmCampaign ? toSlug(utmCampaign) : null);
 
-  const { data, isLoading, error } = usePublicLeadForm({ formId, profileSlug, formSlug, variantSlug });
+  const { data, isLoading, error } = usePublicLeadForm({ formId, profileSlug, formSlug, variantSlug: resolvedVariantSlug });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionState, setSubmissionState] = useState<SubmitSuccessState | null>(null);

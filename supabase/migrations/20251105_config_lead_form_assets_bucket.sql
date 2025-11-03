@@ -50,8 +50,3 @@ begin
   end if;
 end $$;
 
-comment on policy lead_form_assets_read on storage.objects is 'Permite leitura pública dos arquivos do bucket lead-form-assets';
-comment on policy lead_form_assets_insert on storage.objects is 'Permite upload por usuários autenticados no bucket lead-form-assets';
-comment on policy lead_form_assets_update on storage.objects is 'Permite atualizar objetos do bucket lead-form-assets por usuários autenticados';
-comment on policy lead_form_assets_delete on storage.objects is 'Permite remover objetos do bucket lead-form-assets por usuários autenticados';
-
