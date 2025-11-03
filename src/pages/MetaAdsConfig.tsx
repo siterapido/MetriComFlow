@@ -41,6 +41,7 @@ import { ConversionTimeFunnel } from "@/components/meta-ads/ConversionTimeFunnel
 import { AudienceDistribution } from "@/components/meta-ads/AudienceDistribution";
 import { CostQualityChart } from "@/components/meta-ads/CostQualityChart";
 import { CampaignScorecard } from "@/components/meta-ads/CampaignScorecard";
+import { CronJobsMonitor } from "@/components/meta-ads/CronJobsMonitor";
 import { useFilteredInsights, useMetricsSummary, useCampaignFinancialsFiltered, useAdAccounts, useAdCampaigns, getLastNDaysDateRange, useConversionFunnel, useConversionTimeFunnel } from "@/hooks/useMetaMetrics";
 import { formatCurrency } from "@/lib/formatters";
 import { useUserSettings } from "@/hooks/useUserSettings";
@@ -957,6 +958,9 @@ export default function MetaAdsConfig() {
               />
             </CardContent>
           </Card>
+
+          {/* Cron Jobs Monitor */}
+          <CronJobsMonitor />
         </>
       )}
 
