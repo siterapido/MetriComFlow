@@ -260,21 +260,10 @@ CREATE INDEX IF NOT EXISTS idx_team_invitations_token ON public.team_invitations
 CREATE INDEX IF NOT EXISTS idx_team_invitations_email ON public.team_invitations(email);
 CREATE INDEX IF NOT EXISTS idx_team_invitations_org ON public.team_invitations(organization_id);
 CREATE INDEX IF NOT EXISTS idx_team_invitations_status ON public.team_invitations(status);
-DROP FUNCTION IF EXISTS public.expire_old_team_invitations();
-CREATE OR REPLACE FUNCTION public.expire_old_team_invitations()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.expires_at < NOW() THEN
-    NEW.status = 'expired';
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-DROP TRIGGER IF EXISTS trg_expire_team_invitation ON public.team_invitations;
-CREATE TRIGGER trg_expire_team_invitation
-  BEFORE INSERT OR UPDATE ON public.team_invitations
-  FOR EACH ROW
-  EXECUTE FUNCTION public.expire_old_team_invitations();
+
+-- NOTE: Trigger removed - expiration validation happens at read-time instead
+-- This avoids conflicts with RLS policies and simplifies the schema
+
 DROP FUNCTION IF EXISTS public.get_invitation_by_token(TEXT);
 CREATE OR REPLACE FUNCTION public.get_invitation_by_token(invitation_token TEXT)
 RETURNS TABLE (

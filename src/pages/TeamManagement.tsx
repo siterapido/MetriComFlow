@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Users, Plus, Search, Filter, UserPlus, Mail, TrendingUp } from "lucide-react";
 import { useTeamManagement, type MemberFilter, type UserTypeFilter } from "@/hooks/useTeamManagement";
-import { InviteMemberDialog } from "@/components/team/InviteMemberDialog";
+import { SimpleInviteDialog } from "@/components/team/SimpleInviteDialog";
 import { UnifiedMemberCard } from "@/components/team/UnifiedMemberCard";
 import { InvitationCard } from "@/components/team/InvitationCard";
 import { useQueryClient } from "@tanstack/react-query";
@@ -98,7 +98,7 @@ export default function TeamManagement() {
 
   return (
     <div className="p-6 space-y-6">
-      <InviteMemberDialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen} />
+      <SimpleInviteDialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen} />
 
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
