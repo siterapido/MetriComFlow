@@ -23,6 +23,7 @@ import { Loader2, AlertTriangle, TrendingUp } from "lucide-react";
 import { useInvitations } from "@/hooks/useInvitations";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
 import { useOrganizationPlanLimits } from "@/hooks/useSubscription";
+import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 
 const inviteSchema = z.object({
   email: z.string().email("Informe um email válido"),
@@ -43,6 +44,7 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
   const { sendInvitation, isSending } = useInvitations();
   const { data: permissions } = useUserPermissions();
   const { data: limits } = useOrganizationPlanLimits();
+  const { data: organization } = useActiveOrganization();
 
   const canAddUser = permissions?.canAddUser ?? true;
   const usersLimitReached = limits?.users_limit_reached ?? false;
@@ -217,9 +219,19 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSending}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSending || usersLimitReached || subscriptionRestricted}>
+              <Button
+                type="submit"
+                disabled={isSending || usersLimitReached || subscriptionRestricted || !organization?.id}
+                title={!organization?.id ? "Carregando organização..." : ""}
+              >
                 {isSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {usersLimitReached ? "Limite atingido" : subscriptionRestricted ? "Acesso bloqueado" : "Enviar convite"}
+                {!organization?.id
+                  ? "Carregando..."
+                  : usersLimitReached
+                  ? "Limite atingido"
+                  : subscriptionRestricted
+                  ? "Acesso bloqueado"
+                  : "Enviar convite"}
               </Button>
             </div>
           </form>

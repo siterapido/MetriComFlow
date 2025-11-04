@@ -66,6 +66,12 @@ export function useInvitations() {
         throw new Error("Você precisa estar autenticado para enviar convites.");
       }
 
+      // Build request body - only include organization_id if it exists
+      const body: any = { ...payload };
+      if (organization?.id) {
+        body.organization_id = organization.id;
+      }
+
       const { data, error } = await supabase.functions.invoke<{
         success: boolean;
         invite_link?: string;
@@ -75,10 +81,7 @@ export function useInvitations() {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: {
-          ...payload,
-          organization_id: organization?.id,
-        },
+        body,
       });
 
       if (error) {
