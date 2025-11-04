@@ -26,7 +26,10 @@ import { useOrganizationPlanLimits } from "@/hooks/useSubscription";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 
 const inviteSchema = z.object({
-  email: z.string().email("Informe um email válido"),
+  email: z.string().refine(
+    (val) => val === "" || val.includes("@"),
+    "Informe um email válido ou deixe vazio para convite genérico"
+  ),
   user_type: z.enum(["sales", "traffic_manager", "owner"]),
   role: z.enum(["owner", "admin", "manager", "member"], {
     errorMap: () => ({ message: "Selecione um nível de acesso válido" }),

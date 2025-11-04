@@ -96,7 +96,13 @@ export default function TeamManagement() {
     try {
       setGenerating(true);
       setInviteLink(null);
-      const res = await sendInvitation({});
+      // Para convites genéricos (sem email), basta não incluir o email
+      // A Edge Function detecta isso e cria um link genérico
+      const res = await sendInvitation({
+        email: "", // Email vazio = convite genérico
+        role: "member",
+        user_type: "sales",
+      });
       const link = (res as any)?.invite_link as string | undefined;
       if (link) setInviteLink(link);
       toast({ title: "Convite criado", description: "Link gerado para copiar." });
