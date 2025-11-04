@@ -26,7 +26,7 @@ interface MetaAdsConnectionCardProps {
 }
 
 export function MetaAdsConnectionCard({ onConnectionSuccess }: MetaAdsConnectionCardProps) {
-  const { connectMetaBusiness, disconnectMetaBusiness } = useMetaAuth();
+  const { connectMetaBusiness, disconnectMetaBusiness, connections } = useMetaAuth();
   const { hasActiveConnection, isLoading: statusLoading } = useMetaConnectionStatus();
   const { data: adAccounts, isLoading: accountsLoading } = useAdAccounts({ enabled: hasActiveConnection });
   const [isConnecting, setIsConnecting] = useState(false);
@@ -37,10 +37,8 @@ export function MetaAdsConnectionCard({ onConnectionSuccess }: MetaAdsConnection
     setError(null);
     try {
       const authUrl = await connectMetaBusiness();
-      if (authUrl) {
-        window.open(authUrl, 'meta-auth', 'width=800,height=600');
-        onConnectionSuccess?.();
-      }
+      onConnectionSuccess?.();
+      window.location.href = authUrl;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao conectar');
     } finally {
@@ -50,7 +48,12 @@ export function MetaAdsConnectionCard({ onConnectionSuccess }: MetaAdsConnection
 
   const handleDisconnect = async () => {
     try {
-      await disconnectMetaBusiness();
+      const connectionId = connections[0]?.id;
+      if (!connectionId) {
+        setError('Nenhuma conexão ativa encontrada.');
+        return;
+      }
+      await disconnectMetaBusiness(connectionId);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao desconectar');

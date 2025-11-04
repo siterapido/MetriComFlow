@@ -35,14 +35,12 @@
 ```
 
 #### **Opção B: Via Script (Automático)**
-```bash
-./scripts/sync-meta-ads-metrics.sh
+```
+
 ```
 
 #### **Opção C: Simulação (Sem Risco)**
-```bash
-./scripts/sync-meta-ads-metrics.sh --dry-run
-```
+
 
 ### 3️⃣ Visualizar Dados (Imediato)
 

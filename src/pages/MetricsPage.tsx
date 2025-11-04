@@ -93,7 +93,7 @@ export default function MetricsPage() {
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span>Conecte-se ao Meta Business Manager para acompanhar os indicadores de anúncios.</span>
             <Button variant="outline" size="sm" asChild>
-              <a href="/meta-ads-config">Configurar Meta Ads</a>
+              <a href="/metricas">Abrir métricas Meta Ads</a>
             </Button>
           </AlertDescription>
         </Alert>
@@ -175,4 +175,3 @@ export default function MetricsPage() {
     </div>
   );
 }
-

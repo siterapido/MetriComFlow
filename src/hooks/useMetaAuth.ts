@@ -22,6 +22,8 @@ interface AdAccount {
   connected_by: string;
   created_at: string;
   updated_at: string;
+  is_active: boolean;
+  connected_at?: string;
 }
 
 interface AvailableAdAccount {
@@ -274,16 +276,15 @@ export function useMetaAuth() {
   };
 
   // Start OAuth flow
-  const connectMetaBusiness = async (): Promise<void> => {
+  const connectMetaBusiness = async (): Promise<string> => {
+    setConnecting(true);
+
     try {
-      setConnecting(true);
       const authUrl = await getAuthUrl();
-      window.location.href = authUrl;
+      return authUrl;
     } catch (error) {
       console.error('Error starting OAuth flow:', error);
-      setConnecting(false);
-      
-      // Provide more specific error messages
+
       if (error instanceof Error) {
         if (error.message.includes('Invalid Meta App ID')) {
           throw new Error('Configuração do Meta App ID inválida. Entre em contato com o suporte técnico.');
@@ -291,8 +292,10 @@ export function useMetaAuth() {
           throw new Error('Credenciais do Meta não configuradas. Entre em contato com o suporte técnico.');
         }
       }
-      
+
       throw new Error('Erro ao conectar com Meta Business. Tente novamente ou entre em contato com o suporte.');
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -383,7 +386,7 @@ export function useMetaAuth() {
     external_id: string;
     business_name: string;
     provider?: string;
-  }): Promise<void> => {
+  }): Promise<AdAccount> => {
     if (!user) throw new Error('User not authenticated');
     if (!activeOrg?.id) throw new Error('No active organization');
 
@@ -453,10 +456,18 @@ export function useMetaAuth() {
         throw error;
       }
 
-      logDebug('✅ Ad account added successfully:', data);
+      const insertedAccount = data?.[0] as AdAccount | undefined;
+
+      if (!insertedAccount) {
+        throw new Error('Não foi possível registrar a conta de anúncios.');
+      }
+
+      logDebug('✅ Ad account added successfully:', insertedAccount);
 
       // Refresh data
       await fetchData();
+
+      return insertedAccount;
     } catch (error) {
       console.error('Error adding ad account:', error);
       throw error;

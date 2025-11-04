@@ -22,12 +22,13 @@ import {
   RefreshCw,
   AlertCircle,
   BarChart3,
+  Link2,
 } from 'lucide-react';
 import { DateRangeFilter } from '@/components/meta-ads/DateRangeFilter';
 import { MetaAdsKPICards } from '@/components/meta-ads/MetaAdsKPICards';
 import { CreativeGrid } from '@/components/metrics/CreativeCard';
 import { CampaignPerformanceTable } from '@/components/metrics/CampaignPerformanceTable';
-import { MetaAdsConnectionCard } from '@/components/metrics/MetaAdsConnectionCard';
+import { MetaAdsConnectionDialog } from '@/components/metrics/MetaAdsConnectionDialog';
 import { useMetaConnectionStatus } from '@/hooks/useMetaConnectionStatus';
 import { useMetricsSummary, useAdAccounts, useAdCampaigns } from '@/hooks/useMetaMetrics';
 import { useMetaAuth } from '@/hooks/useMetaAuth';
@@ -59,20 +60,20 @@ export default function TrafficMetrics() {
   const [selectedAdSet, setSelectedAdSet] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'overview' | 'campaigns' | 'adsets' | 'creatives'>('overview');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showConnectionDialog, setShowConnectionDialog] = useState(false);
 
   // Meta auth utilities (to ensure campaigns are present)
   const { syncCampaigns } = useMetaAuth();
 
-  // Handle successful connection
-  const handleConnectionSuccess = () => {
-    // Invalidate related queries to refresh connection status
+  const invalidateMetaQueries = () => {
     queryClient.invalidateQueries({ queryKey: ['metaConnectionStatus'] });
     queryClient.invalidateQueries({ queryKey: ['adAccounts'] });
     queryClient.invalidateQueries({ queryKey: ['adCampaigns'] });
-    toast({
-      title: 'Conexão Estabelecida',
-      description: 'Meta Business conectado com sucesso! Clique em Sincronizar para atualizar os dados.',
-    });
+  };
+
+  const handleAccountsUpdatedFromDialog = () => {
+    invalidateMetaQueries();
+    setShowConnectionDialog(false);
   };
 
   // Meta Connection Status
@@ -210,15 +211,50 @@ export default function TrafficMetrics() {
           </div>
         </div>
 
-        <MetaAdsConnectionCard onConnectionSuccess={handleConnectionSuccess} />
+        <div className="rounded-xl border border-dashed border-border bg-muted/40 p-8">
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold text-foreground">Conecte suas contas do Meta Ads</h2>
+              <p className="text-sm text-muted-foreground">
+                Escolha as contas publicitárias diretamente daqui e sincronize campanhas, conjuntos e criativos
+                sem sair da aba de métricas.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                onClick={() => setShowConnectionDialog(true)}
+                className="gap-2"
+              >
+                <Link2 className="w-4 h-4" />
+                Conectar Meta Ads
+              </Button>
+            </div>
+
+            <Alert>
+              <AlertDescription>
+                <strong>Importante:</strong> ao finalizar a conexão, todos os dados de campanhas, conjuntos e criativos
+                ficam disponíveis automaticamente para análise nesta página.
+              </AlertDescription>
+            </Alert>
+          </div>
+        </div>
+
+        <MetaAdsConnectionDialog
+          open={showConnectionDialog}
+          onOpenChange={setShowConnectionDialog}
+          dateRange={dateRange}
+          onAccountsUpdated={handleAccountsUpdatedFromDialog}
+        />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header com Filtros */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <>
+      <div className="space-y-6 animate-fade-in">
+        {/* Header com Filtros */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-md">
             <BarChart3 className="w-7 h-7 text-white" />
@@ -231,6 +267,16 @@ export default function TrafficMetrics() {
 
         {/* Filtros Inline */}
         <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowConnectionDialog(true)}
+            className="gap-2"
+          >
+            <Link2 className="w-4 h-4" />
+            Contas Meta
+          </Button>
+
           <DateRangeFilter value={dateRange} onChange={setDateRange} />
 
           <Select value={selectedAccount} onValueChange={setSelectedAccount}>
@@ -516,6 +562,14 @@ export default function TrafficMetrics() {
           )}
         </TabsContent>
       </Tabs>
-    </div>
+      </div>
+
+      <MetaAdsConnectionDialog
+        open={showConnectionDialog}
+        onOpenChange={setShowConnectionDialog}
+        dateRange={dateRange}
+        onAccountsUpdated={handleAccountsUpdatedFromDialog}
+      />
+    </>
   );
 }

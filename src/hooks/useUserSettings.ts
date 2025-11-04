@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
-export type DashboardHome = "dashboard" | "leads" | "leads/kanban" | "meta-ads-config";
+export type DashboardHome = "dashboard" | "leads" | "leads/kanban" | "metricas";
 
 export interface NotificationSettings {
   emailLeads: boolean;
@@ -54,8 +54,10 @@ const normalizeDefaultHome = (value: unknown): DashboardHome => {
       return "leads";
     case "leads/kanban":
       return "leads/kanban";
+    case "metricas":
+      return "metricas";
     case "meta-ads-config":
-      return "meta-ads-config";
+      return "metricas";
     case "dashboard":
       return "dashboard";
     case "metas":
@@ -190,7 +192,7 @@ export const DASHBOARD_HOME_PATHS: Record<DashboardHome, string> = {
   dashboard: "/dashboard",
   leads: "/leads/linear",
   "leads/kanban": "/leads/kanban",
-  "meta-ads-config": "/meta-ads-config",
+  metricas: "/metricas",
 };
 
 export const resolveDefaultHomePath = (settings?: UserSettings | null) => {
