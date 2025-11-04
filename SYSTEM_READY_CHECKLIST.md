@@ -109,7 +109,7 @@ ae45b25 - fix(invitations): resolve HTTP 400 errors and complete system document
 ### Teste 1: Convite com Email Específico
 
 ```
-1. Vá para https://metricom-flow.vercel.app/equipe
+1. Vá para https://www.insightfy.com.br/equipe
 2. Faça login como owner/admin
 3. Clique em "Convidar novo membro"
 4. Preencha:
@@ -232,7 +232,7 @@ npx supabase functions logs accept-invitation --limit 20
 
 **AÇÃO DO USUÁRIO**: Testar o sistema agora
 
-1. **Ir para**: https://metricom-flow.vercel.app/equipe
+1. **Ir para**: https://www.insightfy.com.br/equipe
 2. **Fazer**: Hard refresh (Ctrl+Shift+R)
 3. **Testar**: Gerar link de convite
 4. **Reportar**: Se funciona ou se ainda dá erro
