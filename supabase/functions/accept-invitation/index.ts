@@ -15,6 +15,7 @@ interface AcceptInvitationRequest {
   token: string;
   password?: string;
   full_name?: string;
+  email?: string; // Email real do usuário (obrigatório para convites genéricos)
 }
 
 Deno.serve(async (req) => {
@@ -34,7 +35,7 @@ Deno.serve(async (req) => {
     const createClient = await loadCreateClient();
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const { token, password, full_name }: AcceptInvitationRequest = await req.json();
+    const { token, password, full_name, email: userEmail }: AcceptInvitationRequest = await req.json();
 
     if (!token) {
       throw new Error("Token do convite é obrigatório.");
@@ -66,10 +67,25 @@ Deno.serve(async (req) => {
       throw new Error("Convite expirado.");
     }
 
+    // Detectar se é convite genérico (email sintético)
+    const isGenericInvite = invitation.email.includes("@link.insightfy.local");
+
+    // Para convites genéricos, usar email fornecido pelo usuário
+    // Para convites com email específico, usar email do convite
+    const targetEmail = isGenericInvite
+      ? (userEmail || "").trim()
+      : invitation.email;
+
+    if (isGenericInvite && !targetEmail) {
+      throw new Error("Email é obrigatório para convites genéricos.");
+    }
+
+    console.log(`📧 Email do usuário: ${targetEmail} (genérico: ${isGenericInvite})`);
+
     const { data: existingProfile } = await supabase
       .from("profiles")
       .select("id, email, full_name, user_type")
-      .eq("email", invitation.email)
+      .eq("email", targetEmail)
       .maybeSingle();
 
     let userId: string;
@@ -101,10 +117,10 @@ Deno.serve(async (req) => {
           throw new Error("Nome completo é obrigatório para novos usuários.");
         }
 
-        console.log("👤 Criando novo usuário para:", invitation.email);
+        console.log("👤 Criando novo usuário para:", targetEmail);
 
         const { data: newUser, error: signUpError } = await supabase.auth.admin.createUser({
-          email: invitation.email,
+          email: targetEmail,
           password,
           user_metadata: {
             full_name,
@@ -126,7 +142,7 @@ Deno.serve(async (req) => {
 
         const { error: profileError } = await supabase.from("profiles").insert({
           id: userId,
-          email: invitation.email,
+          email: targetEmail,
           full_name,
           user_type: invitation.user_type,
           role: "user",
