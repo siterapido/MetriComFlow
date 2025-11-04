@@ -1,23 +1,25 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useEffect } from 'react'
+import { useActiveOrganization } from '@/hooks/useActiveOrganization'
 import type { Goal, GoalInsert, GoalUpdate, GoalProgress, GoalProgressInsert } from '@/types/goals'
 
 /**
- * Fetch all goals with optional filters
+ * Fetch all goals with optional filters (ORGANIZATION-SCOPED)
  */
 export function useGoals(filters?: {
   status?: 'active' | 'completed' | 'paused' | 'archived'
   period?: { start: string; end: string }
 }) {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   // Real-time: refetch when goals change
   useEffect(() => {
     const channel = supabase
       .channel('realtime-goals')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'goals' }, () => {
-        queryClient.refetchQueries({ queryKey: ['goals'], type: 'active' })
+        queryClient.refetchQueries({ queryKey: ['goals'] })
       })
       .subscribe()
 
@@ -27,11 +29,14 @@ export function useGoals(filters?: {
   }, [queryClient])
 
   return useQuery<Goal[]>({
-    queryKey: ['goals', filters?.status, filters?.period],
+    queryKey: ['goals', org?.id, filters?.status, filters?.period],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
+
       let query = supabase
         .from('goals')
         .select('*')
+        .eq('organization_id', org.id)
         .order('created_at', { ascending: false })
 
       if (filters?.status) {
@@ -49,6 +54,7 @@ export function useGoals(filters?: {
       if (error) throw error
       return (data || []) as Goal[]
     },
+    enabled: !!org?.id,
     staleTime: 0,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
@@ -56,10 +62,11 @@ export function useGoals(filters?: {
 }
 
 /**
- * Fetch a single goal by ID
+ * Fetch a single goal by ID (ORGANIZATION-SCOPED)
  */
 export function useGoal(id: string) {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   useEffect(() => {
     const channel = supabase
@@ -80,18 +87,21 @@ export function useGoal(id: string) {
   }, [id, queryClient])
 
   return useQuery<Goal>({
-    queryKey: ['goal', id],
+    queryKey: ['goal', id, org?.id],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
+
       const { data, error } = await supabase
         .from('goals')
         .select('*')
         .eq('id', id)
+        .eq('organization_id', org.id)
         .single()
 
       if (error) throw error
       return data as Goal
     },
-    enabled: !!id,
+    enabled: !!id && !!org?.id,
     staleTime: 0,
   })
 }
@@ -119,19 +129,23 @@ export function useGoalProgress(goalId: string) {
 }
 
 /**
- * Create a new goal
+ * Create a new goal (ORGANIZATION-SCOPED)
  */
 export function useCreateGoal() {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   return useMutation({
     mutationFn: async (goalData: GoalInsert) => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
+
       const { data: { user } } = await supabase.auth.getUser()
 
       const insertData = {
         ...goalData,
+        organization_id: org.id,
         created_by: user?.id || null,
-      }
+      } as any
 
       const { data, error } = await supabase
         .from('goals')
@@ -149,17 +163,21 @@ export function useCreateGoal() {
 }
 
 /**
- * Update an existing goal
+ * Update an existing goal (ORGANIZATION-SCOPED)
  */
 export function useUpdateGoal() {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: GoalUpdate }) => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
+
       const { data, error } = await supabase
         .from('goals')
         .update(updates)
         .eq('id', id)
+        .eq('organization_id', org.id)
         .select()
         .single()
 
@@ -174,17 +192,21 @@ export function useUpdateGoal() {
 }
 
 /**
- * Delete a goal
+ * Delete a goal (ORGANIZATION-SCOPED)
  */
 export function useDeleteGoal() {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   return useMutation({
     mutationFn: async (id: string) => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
+
       const { error } = await supabase
         .from('goals')
         .delete()
         .eq('id', id)
+        .eq('organization_id', org.id)
 
       if (error) throw error
     },
@@ -219,20 +241,24 @@ export function useRecordGoalProgress() {
 }
 
 /**
- * Calculate and update goal current_value based on goal_type
+ * Calculate and update goal current_value based on goal_type (ORGANIZATION-SCOPED)
  * This function queries the appropriate data sources (CRM, Meta Ads, Revenue)
  * and updates the goal's current_value
  */
 export function useCalculateGoalProgress() {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   return useMutation({
     mutationFn: async (goalId: string) => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
+
       // 1. Fetch the goal
       const { data: goal, error: goalError } = await supabase
         .from('goals')
         .select('*')
         .eq('id', goalId)
+        .eq('organization_id', org.id)
         .single()
 
       if (goalError || !goal) throw goalError || new Error('Goal not found')
@@ -251,6 +277,7 @@ export function useCalculateGoalProgress() {
           const { data: closedLeads } = await supabase
             .from('leads')
             .select('value')
+            .eq('organization_id', org.id)
             .eq('status', 'fechado_ganho')
             .gte('closed_won_at', periodStart)
             .lt('closed_won_at', periodEndStr)
@@ -263,6 +290,7 @@ export function useCalculateGoalProgress() {
           const { data: leads } = await supabase
             .from('leads')
             .select('id')
+            .eq('organization_id', org.id)
             .gte('created_at', periodStart)
             .lt('created_at', periodEndStr)
 
@@ -274,6 +302,7 @@ export function useCalculateGoalProgress() {
           const { data: convertedLeads } = await supabase
             .from('leads')
             .select('id')
+            .eq('organization_id', org.id)
             .eq('status', 'fechado_ganho')
             .gte('closed_won_at', periodStart)
             .lt('closed_won_at', periodEndStr)
@@ -286,6 +315,7 @@ export function useCalculateGoalProgress() {
           const { data: allLeads } = await supabase
             .from('leads')
             .select('id, status')
+            .eq('organization_id', org.id)
             .in('status', ['fechado_ganho', 'fechado_perdido'])
             .gte('created_at', periodStart)
             .lt('created_at', periodEndStr)
@@ -300,6 +330,7 @@ export function useCalculateGoalProgress() {
           const { data: activeLeads } = await supabase
             .from('leads')
             .select('value')
+            .eq('organization_id', org.id)
             .in('status', ['novo_lead', 'qualificacao', 'proposta', 'negociacao'])
 
           currentValue = (activeLeads || []).reduce((sum: number, lead: any) => sum + (lead.value || 0), 0)
@@ -310,6 +341,7 @@ export function useCalculateGoalProgress() {
           const { data: closedLeads } = await supabase
             .from('leads')
             .select('value')
+            .eq('organization_id', org.id)
             .eq('status', 'fechado_ganho')
             .gte('closed_won_at', periodStart)
             .lt('closed_won_at', periodEndStr)
@@ -572,6 +604,7 @@ export function useCalculateGoalProgress() {
           const { data: records } = await supabase
             .from('revenue_records')
             .select('amount')
+            .eq('organization_id', org.id)
             .eq('year', year)
             .gte('date', periodStart)
             .lt('date', periodEndStr)
@@ -589,6 +622,7 @@ export function useCalculateGoalProgress() {
           const { data: records } = await supabase
             .from('revenue_records')
             .select('amount')
+            .eq('organization_id', org.id)
             .eq('year', year)
             .eq('category', goal.revenue_category)
             .gte('date', periodStart)
@@ -622,16 +656,20 @@ export function useCalculateGoalProgress() {
 }
 
 /**
- * Bulk calculate all active goals
+ * Bulk calculate all active goals (ORGANIZATION-SCOPED)
  */
 export function useBulkCalculateGoals() {
   const calculateProgress = useCalculateGoalProgress()
+  const { data: org } = useActiveOrganization()
 
   return useMutation({
     mutationFn: async () => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
+
       const { data: goals, error } = await supabase
         .from('goals')
         .select('id')
+        .eq('organization_id', org.id)
         .eq('status', 'active')
 
       if (error) throw error
