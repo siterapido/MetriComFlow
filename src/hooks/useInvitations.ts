@@ -16,14 +16,15 @@ export interface TeamInvitation {
   invited_by: string;
   organization_id: string;
   metadata: Record<string, unknown> | null;
+  token: string;
   invite_link?: string;
 }
 
 export interface InvitationPayload {
-  email: string;
+  email?: string;
   // role is optional; defaults to 'member' server-side
   role?: "owner" | "admin" | "manager" | "member";
-  user_type: "owner" | "traffic_manager" | "sales";
+  user_type?: "owner" | "traffic_manager" | "sales"; // optional; server defaults
   organization_id?: string;
 }
 
@@ -108,9 +109,13 @@ export function useInvitations() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["team-invitations"] });
+      const emailSent = (data as any)?.email_sent as boolean | undefined;
       toast({
-        title: "Convite enviado",
-        description: data?.message ?? "O membro receberá um email com instruções.",
+        title: emailSent === false ? "Convite criado (email falhou)" : "Convite criado",
+        description:
+          data?.message ?? (emailSent === false
+            ? "Copie e envie o link manualmente."
+            : "O membro receberá um email com instruções."),
       });
     },
     onError: (error) => {

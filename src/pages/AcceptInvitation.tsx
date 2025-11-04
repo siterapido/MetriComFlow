@@ -204,9 +204,6 @@ export default function AcceptInvitation() {
                   Você foi convidado para a organização
                   <span className="ml-1 font-medium text-foreground">{invitation.organization_name}</span>
                 </p>
-                <p className="text-sm text-muted-foreground">
-                  Acesso destinado ao email <span className="font-medium text-foreground">{invitation.email}</span>
-                </p>
               </div>
 
               {!session && (

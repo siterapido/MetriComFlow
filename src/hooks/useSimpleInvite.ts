@@ -37,22 +37,24 @@ export function useSimpleInvite() {
         throw new Error("Nenhuma organização ativa");
       }
 
-      const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
-      const redirectTo = `${appUrl}/accept-invitation`;
+      // Convite deve ser feito no servidor usando SERVICE_ROLE
+      // Chama Edge Function `send-invite` passando o token do usuário atual
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        throw new Error("Sessão inválida. Faça login novamente.");
+      }
 
-      // Usar Supabase Auth nativo para convidar
-      // Isso é 100% seguro - Supabase gerencia tokens, expiração, etc
-      const { data, error } = await supabase.auth.admin.inviteUserByEmail(
-        payload.email,
+      const { data, error } = await supabase.functions.invoke(
+        "send-invite",
         {
-          redirectTo,
-          data: {
-            // Passar info do convite para o novo user poder se registrar
-            organization_id: organization.id,
-            organization_name: organization.name,
-            invited_by: "app", // Supabase preenche isso
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}` },
+          body: {
+            email: payload.email,
             role: payload.role || "member",
             user_type: payload.user_type || "sales",
+            organization_id: organization.id,
           },
         }
       );
@@ -60,7 +62,7 @@ export function useSimpleInvite() {
       if (error) {
         console.error("Erro ao convidar usuário:", error);
         throw new Error(
-          error.message || "Não foi possível enviar o convite"
+          (error as any)?.message || "Não foi possível enviar o convite"
         );
       }
 

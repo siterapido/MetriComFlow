@@ -4,9 +4,14 @@ import type { Database } from './database.types'
 // Get environment variables (and sanitize to avoid trailing newlines/spaces)
 const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const rawSupabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+const rawAppUrl = import.meta.env.VITE_APP_URL as string | undefined
+
 const supabaseUrl = rawSupabaseUrl?.trim()
 const supabaseAnonKey = rawSupabaseAnonKey?.trim()
-const appUrl = import.meta.env.VITE_APP_URL || (typeof window !== 'undefined' ? window.location.origin : undefined)
+
+// Normalize app URL: trim whitespace and remove trailing slash to avoid // in redirects
+const normalizedEnvAppUrl = rawAppUrl?.trim().replace(/\/$/, '')
+const appUrl = normalizedEnvAppUrl || (typeof window !== 'undefined' ? window.location.origin : undefined)
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
@@ -22,6 +27,9 @@ try {
     }
     if (rawSupabaseAnonKey && rawSupabaseAnonKey !== supabaseAnonKey) {
       console.warn('[Supabase] VITE_SUPABASE_ANON_KEY tinha espaços/linhas a mais. Valor foi trimado.')
+    }
+    if (rawAppUrl && rawAppUrl !== normalizedEnvAppUrl) {
+      console.warn('[Supabase] VITE_APP_URL tinha espaços/linhas a mais ou barra final. Valor foi normalizado.')
     }
   }
 } catch (err) {

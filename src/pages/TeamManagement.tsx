@@ -12,12 +12,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, Plus, Search, Filter, UserPlus, Mail, TrendingUp } from "lucide-react";
+import { Users, Plus, Search, Filter, Mail } from "lucide-react";
 import { useTeamManagement, type MemberFilter, type UserTypeFilter } from "@/hooks/useTeamManagement";
-import { SimpleInviteDialog } from "@/components/team/SimpleInviteDialog";
 import { UnifiedMemberCard } from "@/components/team/UnifiedMemberCard";
 import { InvitationCard } from "@/components/team/InvitationCard";
-import { useQueryClient } from "@tanstack/react-query";
 import OrganizationNameEditor from "@/components/organization/OrganizationNameEditor";
 import { useToast } from "@/hooks/use-toast";
 
@@ -47,8 +45,6 @@ function MembersSkeleton() {
 }
 
 export default function TeamManagement() {
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-  const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const {
@@ -60,7 +56,7 @@ export default function TeamManagement() {
     updateMemberRole,
     updateMemberUserType,
     removeMember,
-    resendInvitation,
+    sendInvitation,
     revokeInvitation,
     isLoading,
     isProcessing,
@@ -88,17 +84,31 @@ export default function TeamManagement() {
     void removeMember(membershipId);
   };
 
-  const handleResendInvitation = (invitation: any) => {
-    void resendInvitation(invitation);
-  };
-
   const handleRevokeInvitation = (invitationId: string) => {
     void revokeInvitation(invitationId);
   };
 
+  // Área de convite por link (sem popup)
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+
+  async function handleGenerateInvite() {
+    try {
+      setGenerating(true);
+      setInviteLink(null);
+      const res = await sendInvitation({});
+      const link = (res as any)?.invite_link as string | undefined;
+      if (link) setInviteLink(link);
+      toast({ title: "Convite criado", description: "Link gerado para copiar." });
+    } catch (e) {
+      toast({ title: "Erro ao gerar convite", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
-      <SimpleInviteDialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen} />
 
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -121,15 +131,49 @@ export default function TeamManagement() {
           </div>
         </div>
 
-        <Button
-          onClick={() => setInviteDialogOpen(true)}
-          disabled={!isOwner}
-          className="bg-primary hover:bg-primary/90 gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          Convidar membro
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={handleGenerateInvite}
+            disabled={!isOwner || generating}
+            className="bg-primary hover:bg-primary/90 gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            {generating ? "Gerando..." : "Gerar link de convite"}
+          </Button>
+        </div>
       </div>
+
+      {isOwner && (
+        <Card className="bg-card border-border">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-sm text-muted-foreground">Use o link abaixo para convidar qualquer pessoa. Ao acessar, poderá criar conta ou entrar e será vinculada à organização.</p>
+            <div className="flex gap-2">
+              <Input readOnly value={inviteLink ?? "Clique em 'Gerar link de convite'"} className="text-xs" />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!inviteLink}
+                onClick={async () => {
+                  if (!inviteLink) return;
+                  try {
+                    await navigator.clipboard.writeText(inviteLink);
+                    toast({ title: "Link copiado" });
+                  } catch (error) {
+                    console.error("Falha ao copiar convite", error);
+                    toast({
+                      title: "Não foi possível copiar",
+                      description: "Copie manualmente o link no campo ao lado.",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              >
+                Copiar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Permission Warning */}
       {!isOwner && (
@@ -263,18 +307,12 @@ export default function TeamManagement() {
                     ? "Tente ajustar os filtros de busca"
                     : "Convide sua equipe para colaborar nas metas, leads e métricas da organização."}
                 </p>
-                {isOwner &&
-                  !filters.search &&
-                  filters.roleFilter === "all" &&
-                  filters.userTypeFilter === "all" && (
-                    <Button
-                      onClick={() => setInviteDialogOpen(true)}
-                      className="bg-primary hover:bg-primary/90 gap-2"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Convidar primeiro membro
-                    </Button>
-                  )}
+                {isOwner && !filters.search && filters.roleFilter === "all" && filters.userTypeFilter === "all" && (
+                  <Button onClick={handleGenerateInvite} className="bg-primary hover:bg-primary/90 gap-2">
+                    <Plus className="h-4 w-4" />
+                    Gerar link de convite
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -310,12 +348,9 @@ export default function TeamManagement() {
                   Todos os convites foram aceitos ou expirados.
                 </p>
                 {isOwner && (
-                  <Button
-                    onClick={() => setInviteDialogOpen(true)}
-                    className="bg-primary hover:bg-primary/90 gap-2"
-                  >
+                  <Button onClick={handleGenerateInvite} className="bg-primary hover:bg-primary/90 gap-2">
                     <Plus className="h-4 w-4" />
-                    Enviar novo convite
+                    Gerar link de convite
                   </Button>
                 )}
               </CardContent>
@@ -326,7 +361,6 @@ export default function TeamManagement() {
                 <InvitationCard
                   key={invitation.id}
                   invitation={invitation}
-                  onResend={() => handleResendInvitation(invitation)}
                   onRevoke={() => handleRevokeInvitation(invitation.id)}
                   isProcessing={isProcessing}
                 />

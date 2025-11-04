@@ -26,7 +26,7 @@ type RoleType = "owner" | "admin" | "manager" | "member";
 type UserType = "owner" | "traffic_manager" | "sales";
 
 interface InvitationRequest {
-  email: string;
+  email?: string;
   role?: RoleType;
   user_type?: UserType;
   organization_id?: string;
@@ -157,15 +157,17 @@ Deno.serve(async (req) => {
     const role: RoleType = body.role ?? "member";
     const userType: UserType = body.user_type ?? "sales";
     const email = body.email?.trim().toLowerCase();
+    const isGeneric = !email;
     const requestedOrganizationId = body.organization_id?.trim();
 
-    if (!email || !email.includes("@")) {
-      throw new Error("Email inválido.");
-    }
-
-    const emailDomain = email.split("@")[1]?.toLowerCase();
-    if (emailDomain && SUSPICIOUS_DOMAINS.includes(emailDomain)) {
-      throw new Error("Domínio de email não permitido. Utilize um email corporativo.");
+    if (!isGeneric) {
+      if (!email!.includes("@")) {
+        throw new Error("Email inválido.");
+      }
+      const emailDomain = email!.split("@")[1]?.toLowerCase();
+      if (emailDomain && SUSPICIOUS_DOMAINS.includes(emailDomain)) {
+        throw new Error("Domínio de email não permitido. Utilize um email corporativo.");
+      }
     }
 
     const validRoles: RoleType[] = ["owner", "admin", "manager", "member"];
@@ -186,76 +188,85 @@ Deno.serve(async (req) => {
     let userOrgRole: "owner" | "admin" | "manager" | "member" | null = null;
 
     if (requestedOrganizationId) {
-      // Check if user has owner/admin role in requested org
-      const memberRes = await supabase
-        .from("organization_memberships")
-        .select("role")
-        .eq("organization_id", requestedOrganizationId)
-        .eq("profile_id", user.id)
-        .eq("is_active", true)
-        .maybeSingle();
-
-      if (memberRes.error || !memberRes.data) {
-        throw new Error("Você não tem permissão para gerenciar esta organização.");
-      }
-
-      userOrgRole = memberRes.data.role as any;
-      if (!["owner", "admin"].includes(userOrgRole)) {
-        throw new Error("Apenas owners e admins podem enviar convites.");
-      }
-
-      // Fetch organization details
+      // Fetch organization first to determine ownership
       const orgRes = await supabase
         .from("organizations")
-        .select("id, name, owner_id")
+        .select("id, name, owner_id, is_active")
         .eq("id", requestedOrganizationId)
-        .eq("is_active", true)
         .maybeSingle();
 
-      organization = orgRes.data as any;
       organizationError = orgRes.error;
+      organization = orgRes.data as any;
+
+      if (organizationError || !organization || organization.is_active === false) {
+        throw new Error("Organização não encontrada ou inativa.");
+      }
+
+      if (organization.owner_id === user.id) {
+        userOrgRole = "owner";
+      } else {
+        const memberRes = await supabase
+          .from("organization_memberships")
+          .select("role")
+          .eq("organization_id", requestedOrganizationId)
+          .eq("profile_id", user.id)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (memberRes.error || !memberRes.data) {
+          throw new Error("Você não tem permissão para gerenciar esta organização.");
+        }
+
+        userOrgRole = memberRes.data.role as any;
+        if (!(["owner", "admin"] as const).includes(userOrgRole)) {
+          throw new Error("Apenas owners e admins podem enviar convites.");
+        }
+      }
     } else {
-      // Find first organization where user is owner or admin
-      const memberRes = await supabase
-        .from("organization_memberships")
-        .select("organization_id, role")
-        .eq("profile_id", user.id)
-        .eq("is_active", true);
-
-      if (memberRes.error) {
-        console.error("Erro ao buscar memberships:", memberRes.error);
-        throw new Error("Erro ao verificar permissões de organização.");
-      }
-
-      // Filter for owner or admin roles
-      const validMemberships = memberRes.data?.filter((m: any) => ["owner", "admin"].includes(m.role)) || [];
-
-      if (validMemberships.length === 0) {
-        throw new Error("Você não pertence a nenhuma organização como owner ou admin.");
-      }
-
-      const memberData = validMemberships[0];
-      userOrgRole = memberData.role as any;
-      const orgId = memberData.organization_id;
-
-      if (!orgId) {
-        throw new Error("Erro ao processar organização. ID inválido.");
-      }
-
-      // Fetch organization details
-      const orgRes = await supabase
+      // Primeiro tenta organização onde usuário é owner
+      const ownerOrgRes = await supabase
         .from("organizations")
-        .select("id, name, owner_id")
-        .eq("id", orgId)
+        .select("id, name, owner_id, is_active")
+        .eq("owner_id", user.id)
         .eq("is_active", true)
         .maybeSingle();
 
-      if (orgRes.error) {
-        console.error("Erro ao buscar organização:", orgRes.error);
-      }
+      if (ownerOrgRes.data) {
+        organization = ownerOrgRes.data as any;
+        userOrgRole = "owner";
+      } else {
+        const memberRes = await supabase
+          .from("organization_memberships")
+          .select("organization_id, role")
+          .eq("profile_id", user.id)
+          .eq("is_active", true)
+          .in("role", ["owner", "admin"]);
 
-      organization = orgRes.data as any;
-      organizationError = orgRes.error;
+        if (memberRes.error) {
+          console.error("Erro ao buscar memberships:", memberRes.error);
+          throw new Error("Erro ao verificar permissões de organização.");
+        }
+
+        const validMembership = memberRes.data?.[0];
+        if (!validMembership) {
+          throw new Error("Você não pertence a nenhuma organização como owner ou admin.");
+        }
+
+        userOrgRole = validMembership.role as any;
+
+        const orgRes = await supabase
+          .from("organizations")
+          .select("id, name, owner_id, is_active")
+          .eq("id", validMembership.organization_id)
+          .maybeSingle();
+
+        if (orgRes.error) {
+          console.error("Erro ao buscar organização:", orgRes.error);
+        }
+
+        organization = orgRes.data as any;
+        organizationError = orgRes.error;
+      }
     }
 
     if (organizationError || !organization) {
@@ -275,36 +286,38 @@ Deno.serve(async (req) => {
       throw new Error("Limite de convites por hora excedido. Tente novamente mais tarde.");
     }
 
-    const { data: profileByEmail } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle();
-
-    if (profileByEmail?.id) {
-      const { data: existingMembership } = await supabase
-        .from("organization_memberships")
+    if (!isGeneric) {
+      const { data: profileByEmail } = await supabase
+        .from("profiles")
         .select("id")
-        .eq("organization_id", organization.id)
-        .eq("profile_id", profileByEmail.id)
-        .eq("is_active", true)
+        .eq("email", email)
         .maybeSingle();
 
-      if (existingMembership) {
-        throw new Error("Este usuário já faz parte da organização.");
+      if (profileByEmail?.id) {
+        const { data: existingMembership } = await supabase
+          .from("organization_memberships")
+          .select("id")
+          .eq("organization_id", organization.id)
+          .eq("profile_id", profileByEmail.id)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (existingMembership) {
+          throw new Error("Este usuário já faz parte da organização.");
+        }
       }
-    }
 
-    const { data: pendingInvitation } = await supabase
-      .from("team_invitations")
-      .select("id")
-      .eq("organization_id", organization.id)
-      .eq("email", email)
-      .eq("status", "pending")
-      .maybeSingle();
+      const { data: pendingInvitation } = await supabase
+        .from("team_invitations")
+        .select("id")
+        .eq("organization_id", organization.id)
+        .eq("email", email)
+        .eq("status", "pending")
+        .maybeSingle();
 
-    if (pendingInvitation) {
-      throw new Error("Já existe um convite pendente para este email.");
+      if (pendingInvitation) {
+        throw new Error("Já existe um convite pendente para este email.");
+      }
     }
 
     const tokenValue = crypto.randomUUID();
@@ -313,10 +326,14 @@ Deno.serve(async (req) => {
       organization_name: organization.name,
       invited_by_email: user.email,
       invited_by_name: (user.user_metadata as Record<string, string> | null)?.full_name ?? user.email,
+      generic: isGeneric,
     };
 
+    const syntheticEmail = `invite+${tokenValue.slice(0, 8)}@link.insightfy.local`;
+    const actualEmail = isGeneric ? syntheticEmail : (email as string);
+
     console.log("📝 Tentando inserir convite com dados:", {
-      email,
+      email: actualEmail,
       organization_id: organization.id,
       invited_by: user.id,
       role,
@@ -328,7 +345,7 @@ Deno.serve(async (req) => {
     const { data: createdInvitation, error: invitationError } = await supabase
       .from("team_invitations")
       .insert({
-        email,
+        email: actualEmail,
         organization_id: organization.id,
         invited_by: user.id,
         role,
@@ -349,29 +366,27 @@ Deno.serve(async (req) => {
     const APP_URL = Deno.env.get("APP_URL") ?? "http://localhost:5173";
     const inviteLink = `${APP_URL.replace(/\/$/, "")}/accept-invitation?token=${tokenValue}`;
 
-    try {
-      await sendEmailInvitation({
-        to: email,
-        inviteLink,
-        organizationName: organization.name,
-        invitedByName: invitationMetadata.invited_by_name ?? "Equipe InsightFy",
-      });
-      console.log("✅ Convite enviado por email para", email);
-    } catch (emailError) {
-      // ⚠️ Email failed - delete the invitation and throw error to inform user
-      console.error("❌ Falha ao enviar email de convite. Deletando registro...", emailError);
-
+    // Respeita feature flag: por padrão, não envia email; apenas retorna link copiável
+    const INVITE_EMAIL_ENABLED = (Deno.env.get("INVITE_EMAIL_ENABLED") ?? "false").toLowerCase() === "true";
+    let emailSent = false;
+    let responseMessage = "Convite criado. Copie e compartilhe o link.";
+    if (INVITE_EMAIL_ENABLED && !isGeneric) {
       try {
-        await supabase
-          .from("team_invitations")
-          .delete()
-          .eq("id", createdInvitation.id);
-        console.log("🗑️  Convite deletado após falha de email");
-      } catch (deleteError) {
-        console.error("❌ Erro ao deletar convite:", deleteError);
+        await sendEmailInvitation({
+          to: email!,
+          inviteLink,
+          organizationName: organization.name,
+          invitedByName: invitationMetadata.invited_by_name ?? "Equipe InsightFy",
+        });
+        emailSent = true;
+        responseMessage = `Convite enviado por email para ${email}`;
+        console.log("✅ Convite enviado por email para", email);
+      } catch (emailError) {
+        // Não deletar o convite: manter link disponível para cópia manual
+        emailSent = false;
+        responseMessage = "Email de convite falhou. Copie e compartilhe o link manualmente.";
+        console.error("❌ Falha ao enviar email de convite. Mantendo convite ativo e retornando link.", emailError);
       }
-
-      throw new Error("Não foi possível enviar o email de convite. Tente novamente.");
     }
 
     return new Response(
@@ -380,7 +395,8 @@ Deno.serve(async (req) => {
         invitation_id: createdInvitation.id,
         invite_link: inviteLink,
         expires_at: createdInvitation.expires_at,
-        message: `Convite enviado com sucesso para ${email}`,
+        email_sent: emailSent,
+        message: responseMessage,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

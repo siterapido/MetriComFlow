@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { MoreVertical, Mail, RefreshCw, X, Clock, Crown, Shield, Users, UserCog } from "lucide-react";
+import { MoreVertical, Mail, RefreshCw, X, Clock, Crown, Shield, Users, UserCog, Link as LinkIcon, Copy } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { TeamInvitation } from "@/hooks/useInvitations";
@@ -16,12 +16,11 @@ import { USER_TYPE_LABELS } from "@/hooks/useUserPermissions";
 
 interface InvitationCardProps {
   invitation: TeamInvitation;
-  onResend: () => void;
   onRevoke: () => void;
   isProcessing: boolean;
 }
 
-export function InvitationCard({ invitation, onResend, onRevoke, isProcessing }: InvitationCardProps) {
+export function InvitationCard({ invitation, onRevoke, isProcessing }: InvitationCardProps) {
   const getInitials = (email: string) => {
     return email.substring(0, 2).toUpperCase();
   };
@@ -77,6 +76,19 @@ export function InvitationCard({ invitation, onResend, onRevoke, isProcessing }:
     addSuffix: true,
   });
 
+  const appUrl = (import.meta as any).env?.VITE_APP_URL?.replace(/\/$/, "") || (typeof window !== 'undefined' ? window.location.origin : "");
+  const inviteLink = `${appUrl}/accept-invitation?token=${invitation.token}`;
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+    } catch (_) {
+      // no-op
+    }
+  };
+
+  const isGeneric = (invitation as any).metadata && (invitation as any).metadata.generic === true;
+
   return (
     <Card className="bg-card border-border hover-lift transition-all duration-300 group">
       <CardContent className="p-6">
@@ -90,8 +102,10 @@ export function InvitationCard({ invitation, onResend, onRevoke, isProcessing }:
             </Avatar>
 
             <div className="flex-1 min-w-0">
-              {/* Email */}
-              <h3 className="text-lg font-semibold text-foreground truncate mb-1">{invitation.email}</h3>
+              {/* Título do convite */}
+              <h3 className="text-lg font-semibold text-foreground truncate mb-1">
+                {isGeneric ? "Convite genérico" : invitation.email}
+              </h3>
 
               {/* Status Badge */}
               <div className="flex items-center gap-2 mb-3">
@@ -147,9 +161,9 @@ export function InvitationCard({ invitation, onResend, onRevoke, isProcessing }:
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 bg-card border-border">
-              <DropdownMenuItem onClick={onResend} className="cursor-pointer" disabled={isProcessing}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Reenviar convite
+              <DropdownMenuItem onClick={copyLink} className="cursor-pointer" disabled={isProcessing}>
+                <LinkIcon className="h-4 w-4 mr-2" />
+                Copiar link
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={onRevoke}

@@ -24,7 +24,6 @@ import Profile from "./pages/Profile";
 import Team from "./pages/Team";
 import TeamManagement from "./pages/TeamManagement";
 import AcceptInvitation from "./pages/AcceptInvitation";
-import SimpleAcceptInvitation from "./pages/SimpleAcceptInvitation";
 import SubscriptionPlans from "./pages/SubscriptionPlans";
 import FinalizeSignup from "./pages/FinalizeSignup";
 import PublicLeadForm from "./pages/PublicLeadForm";
@@ -57,7 +56,7 @@ const App = () => (
             <Route path="/auth/update-password" element={<UpdatePassword />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-            <Route path="/accept-invitation" element={<SimpleAcceptInvitation />} />
+            <Route path="/accept-invitation" element={<AcceptInvitation />} />
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
