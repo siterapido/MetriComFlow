@@ -32,10 +32,8 @@ CREATE TABLE IF NOT EXISTS public.subscription_plans (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
-
 -- Enable RLS
 ALTER TABLE public.subscription_plans ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -61,11 +59,9 @@ BEGIN
       WITH CHECK (auth.jwt() ->> 'role' = 'service_role');
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_subscription_plans_slug ON public.subscription_plans(slug);
 CREATE INDEX IF NOT EXISTS idx_subscription_plans_active ON public.subscription_plans(is_active);
 CREATE INDEX IF NOT EXISTS idx_subscription_plans_display_order ON public.subscription_plans(display_order);
-
 -- =====================================================
 -- ORGANIZATION SUBSCRIPTIONS
 -- =====================================================
@@ -99,10 +95,8 @@ CREATE TABLE IF NOT EXISTS public.organization_subscriptions (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
-
 -- Enable RLS
 ALTER TABLE public.organization_subscriptions ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -150,12 +144,10 @@ BEGIN
       );
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_org_subscriptions_org ON public.organization_subscriptions(organization_id);
 CREATE INDEX IF NOT EXISTS idx_org_subscriptions_plan ON public.organization_subscriptions(plan_id);
 CREATE INDEX IF NOT EXISTS idx_org_subscriptions_status ON public.organization_subscriptions(status);
 CREATE INDEX IF NOT EXISTS idx_org_subscriptions_next_billing ON public.organization_subscriptions(next_billing_date);
-
 -- =====================================================
 -- SUBSCRIPTION USAGE TRACKING
 -- =====================================================
@@ -174,10 +166,8 @@ CREATE TABLE IF NOT EXISTS public.subscription_usage (
   last_checked_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
-
 -- Enable RLS
 ALTER TABLE public.subscription_usage ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -211,9 +201,7 @@ BEGIN
       WITH CHECK (TRUE);
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_subscription_usage_org ON public.subscription_usage(organization_id);
-
 -- =====================================================
 -- MATERIALIZED VIEW: ORGANIZATION PLAN LIMITS
 -- =====================================================
@@ -254,7 +242,6 @@ BEGIN
     ';
   END IF;
 END $$;
-
 DO $$
 BEGIN
   IF EXISTS (
@@ -265,7 +252,6 @@ BEGIN
     EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS idx_org_plan_limits_org ON public.organization_plan_limits(organization_id)';
   END IF;
 END $$;
-
 DO $$
 BEGIN
   IF EXISTS (
@@ -277,7 +263,6 @@ BEGIN
     EXECUTE 'GRANT SELECT ON public.organization_plan_limits TO authenticated, anon';
   END IF;
 END $$;
-
 -- Function to refresh the materialized view
 CREATE OR REPLACE FUNCTION public.refresh_organization_plan_limits()
 RETURNS VOID AS $$
@@ -291,7 +276,6 @@ BEGIN
   END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- =====================================================
 -- TRIGGERS FOR USAGE TRACKING
 -- =====================================================
@@ -331,14 +315,12 @@ BEGIN
   RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- Trigger on organization_memberships changes
 DROP TRIGGER IF EXISTS trg_update_usage_on_membership_change ON public.organization_memberships;
 CREATE TRIGGER trg_update_usage_on_membership_change
   AFTER INSERT OR UPDATE OR DELETE ON public.organization_memberships
   FOR EACH ROW
   EXECUTE FUNCTION public.update_subscription_usage_counts();
-
 -- Trigger on ad_accounts changes (need to add organization_id to ad_accounts first)
 -- This will be added after backfilling ad_accounts with organization_id
 
@@ -364,7 +346,6 @@ BEGIN
   RETURN NOT limits.ad_accounts_limit_reached;
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
-
 -- Function to check if organization can add user
 CREATE OR REPLACE FUNCTION public.can_add_user(org_id UUID)
 RETURNS BOOLEAN AS $$
@@ -383,7 +364,6 @@ BEGIN
   RETURN NOT limits.users_limit_reached;
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
-
 -- Function to get organization's current plan
 CREATE OR REPLACE FUNCTION public.get_organization_plan(org_id UUID)
 RETURNS TABLE (
@@ -416,7 +396,6 @@ BEGIN
   LIMIT 1;
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
-
 -- =====================================================
 -- SEED DATA: DEFAULT SUBSCRIPTION PLANS
 -- =====================================================
@@ -460,7 +439,6 @@ VALUES
     FALSE
   )
 ON CONFLICT (slug) DO NOTHING;
-
 -- =====================================================
 -- BACKFILL: CREATE DEFAULT SUBSCRIPTIONS FOR EXISTING ORGS
 -- =====================================================
@@ -512,7 +490,6 @@ BEGIN
   END LOOP;
 END;
 $$;
-
 -- =====================================================
 -- BACKFILL: INITIALIZE USAGE TRACKING
 -- =====================================================
@@ -528,7 +505,6 @@ SELECT
   NOW() AS updated_at
 FROM public.organizations o
 ON CONFLICT (organization_id) DO NOTHING;
-
 -- Refresh materialized view
 DO $$
 BEGIN
@@ -540,7 +516,6 @@ BEGIN
     PERFORM public.refresh_organization_plan_limits();
   END IF;
 END $$;
-
 -- =====================================================
 -- UPDATE TRIGGERS
 -- =====================================================
@@ -551,21 +526,18 @@ CREATE TRIGGER trg_subscription_plans_updated_at
   BEFORE UPDATE ON public.subscription_plans
   FOR EACH ROW
   EXECUTE FUNCTION public.set_timestamp_updated_at();
-
 -- Add updated_at trigger to organization_subscriptions
 DROP TRIGGER IF EXISTS trg_organization_subscriptions_updated_at ON public.organization_subscriptions;
 CREATE TRIGGER trg_organization_subscriptions_updated_at
   BEFORE UPDATE ON public.organization_subscriptions
   FOR EACH ROW
   EXECUTE FUNCTION public.set_timestamp_updated_at();
-
 -- Add updated_at trigger to subscription_usage
 DROP TRIGGER IF EXISTS trg_subscription_usage_updated_at ON public.subscription_usage;
 CREATE TRIGGER trg_subscription_usage_updated_at
   BEFORE UPDATE ON public.subscription_usage
   FOR EACH ROW
   EXECUTE FUNCTION public.set_timestamp_updated_at();
-
 COMMENT ON TABLE public.subscription_plans IS 'Available subscription plans with feature limits';
 COMMENT ON TABLE public.organization_subscriptions IS 'Active subscriptions for organizations';
 COMMENT ON TABLE public.subscription_usage IS 'Real-time tracking of resource usage per organization';

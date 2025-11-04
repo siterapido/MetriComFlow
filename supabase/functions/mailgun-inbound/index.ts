@@ -240,7 +240,7 @@ Deno.serve(async (req: Request) => {
 
     // Audit trail
     try {
-      await supabase.from("lead_activity").insert({
+      const activityInsert: Record<string, unknown> = {
         lead_id: leadId,
         lead_title: newLead?.title ?? leadTitle,
         user_id: null,
@@ -249,7 +249,14 @@ Deno.serve(async (req: Request) => {
         from_status: null,
         to_status: "novo_lead",
         description: `Email recebido${sender ? ` de ${sender}` : ""}${recipient ? ` para ${recipient}` : ""}.`,
-      });
+      };
+
+      // Include organization_id if available (required by NOT NULL constraint)
+      if (organizationId) {
+        activityInsert["organization_id"] = organizationId;
+      }
+
+      await supabase.from("lead_activity").insert(activityInsert);
     } catch (_e) {
       // best-effort
     }

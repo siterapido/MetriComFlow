@@ -180,35 +180,86 @@ Deno.serve(async (req) => {
 
     console.log("📧 Tentando enviar convite", { email, role, userType, requestedBy: user.id });
 
-    // Resolve organization context: if frontend provided an explicit organization_id,
-    // validate that the current user is the owner of that organization. Otherwise,
-    // fallback to the first active org owned by the user.
+    // Resolve organization context: verify user has owner or admin role
     let organization: { id: string; name: string; owner_id: string } | null = null;
     let organizationError: any = null;
+    let userOrgRole: "owner" | "admin" | "manager" | "member" | null = null;
 
     if (requestedOrganizationId) {
+      // Check if user has owner/admin role in requested org
+      const memberRes = await supabase
+        .from("organization_memberships")
+        .select("role")
+        .eq("organization_id", requestedOrganizationId)
+        .eq("profile_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (memberRes.error || !memberRes.data) {
+        throw new Error("Você não tem permissão para gerenciar esta organização.");
+      }
+
+      userOrgRole = memberRes.data.role as any;
+      if (!["owner", "admin"].includes(userOrgRole)) {
+        throw new Error("Apenas owners e admins podem enviar convites.");
+      }
+
+      // Fetch organization details
       const orgRes = await supabase
         .from("organizations")
         .select("id, name, owner_id")
         .eq("id", requestedOrganizationId)
-        .eq("owner_id", user.id)
         .eq("is_active", true)
         .maybeSingle();
+
       organization = orgRes.data as any;
       organizationError = orgRes.error;
     } else {
+      // Find first organization where user is owner or admin
+      const memberRes = await supabase
+        .from("organization_memberships")
+        .select("organization_id, role")
+        .eq("profile_id", user.id)
+        .eq("is_active", true);
+
+      if (memberRes.error) {
+        console.error("Erro ao buscar memberships:", memberRes.error);
+        throw new Error("Erro ao verificar permissões de organização.");
+      }
+
+      // Filter for owner or admin roles
+      const validMemberships = memberRes.data?.filter((m: any) => ["owner", "admin"].includes(m.role)) || [];
+
+      if (validMemberships.length === 0) {
+        throw new Error("Você não pertence a nenhuma organização como owner ou admin.");
+      }
+
+      const memberData = validMemberships[0];
+      userOrgRole = memberData.role as any;
+      const orgId = memberData.organization_id;
+
+      if (!orgId) {
+        throw new Error("Erro ao processar organização. ID inválido.");
+      }
+
+      // Fetch organization details
       const orgRes = await supabase
         .from("organizations")
         .select("id, name, owner_id")
-        .eq("owner_id", user.id)
+        .eq("id", orgId)
         .eq("is_active", true)
         .maybeSingle();
+
+      if (orgRes.error) {
+        console.error("Erro ao buscar organização:", orgRes.error);
+      }
+
       organization = orgRes.data as any;
       organizationError = orgRes.error;
     }
 
     if (organizationError || !organization) {
-      throw new Error("Somente owners podem enviar convites.");
+      throw new Error("Não foi possível encontrar a organização ou você não tem permissão.");
     }
 
     const rateWindow = new Date(Date.now() - 60 * 60 * 1000).toISOString();
@@ -264,6 +315,16 @@ Deno.serve(async (req) => {
       invited_by_name: (user.user_metadata as Record<string, string> | null)?.full_name ?? user.email,
     };
 
+    console.log("📝 Tentando inserir convite com dados:", {
+      email,
+      organization_id: organization.id,
+      invited_by: user.id,
+      role,
+      user_type: userType,
+      token: tokenValue.substring(0, 8) + "...",
+      expires_at: expiresAt.toISOString(),
+    });
+
     const { data: createdInvitation, error: invitationError } = await supabase
       .from("team_invitations")
       .insert({
@@ -281,7 +342,8 @@ Deno.serve(async (req) => {
 
     if (invitationError || !createdInvitation) {
       console.error("❌ Erro ao criar convite:", invitationError);
-      throw new Error("Não foi possível criar o convite.");
+      console.error("RLS bloqueou? Status:", invitationError?.code);
+      throw new Error(`Não foi possível criar o convite. Erro: ${invitationError?.message || "desconhecido"}`);
     }
 
     const APP_URL = Deno.env.get("APP_URL") ?? "http://localhost:5173";
@@ -296,7 +358,20 @@ Deno.serve(async (req) => {
       });
       console.log("✅ Convite enviado por email para", email);
     } catch (emailError) {
-      console.error("Falha no envio do email, mantendo convite criado:", emailError);
+      // ⚠️ Email failed - delete the invitation and throw error to inform user
+      console.error("❌ Falha ao enviar email de convite. Deletando registro...", emailError);
+
+      try {
+        await supabase
+          .from("team_invitations")
+          .delete()
+          .eq("id", createdInvitation.id);
+        console.log("🗑️  Convite deletado após falha de email");
+      } catch (deleteError) {
+        console.error("❌ Erro ao deletar convite:", deleteError);
+      }
+
+      throw new Error("Não foi possível enviar o email de convite. Tente novamente.");
     }
 
     return new Response(
@@ -305,7 +380,7 @@ Deno.serve(async (req) => {
         invitation_id: createdInvitation.id,
         invite_link: inviteLink,
         expires_at: createdInvitation.expires_at,
-        message: `Convite enviado para ${email}`,
+        message: `Convite enviado com sucesso para ${email}`,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

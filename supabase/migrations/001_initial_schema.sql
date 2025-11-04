@@ -3,7 +3,6 @@
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- =====================================================
 -- USERS & AUTHENTICATION
 -- =====================================================
@@ -18,19 +17,15 @@ CREATE TABLE public.profiles (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 -- Enable RLS on profiles
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-
 -- Profiles policies
 CREATE POLICY "Users can view all profiles"
   ON public.profiles FOR SELECT
   USING (true);
-
 CREATE POLICY "Users can update own profile"
   ON public.profiles FOR UPDATE
   USING (auth.uid() = id);
-
 -- =====================================================
 -- TEAM MEMBERS
 -- =====================================================
@@ -46,13 +41,10 @@ CREATE TABLE public.team_members (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 ALTER TABLE public.team_members ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Anyone can view team members"
   ON public.team_members FOR SELECT
   USING (true);
-
 CREATE POLICY "Admins can manage team members"
   ON public.team_members FOR ALL
   USING (
@@ -61,7 +53,6 @@ CREATE POLICY "Admins can manage team members"
       WHERE id = auth.uid() AND role IN ('admin', 'manager')
     )
   );
-
 -- =====================================================
 -- LEADS (KANBAN CARDS)
 -- =====================================================
@@ -82,21 +73,16 @@ CREATE TABLE public.leads (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Anyone can view leads"
   ON public.leads FOR SELECT
   USING (true);
-
 CREATE POLICY "Authenticated users can create leads"
   ON public.leads FOR INSERT
   WITH CHECK (auth.uid() IS NOT NULL);
-
 CREATE POLICY "Users can update leads"
   ON public.leads FOR UPDATE
   USING (auth.uid() IS NOT NULL);
-
 CREATE POLICY "Admins can delete leads"
   ON public.leads FOR DELETE
   USING (
@@ -105,12 +91,10 @@ CREATE POLICY "Admins can delete leads"
       WHERE id = auth.uid() AND role = 'admin'
     )
   );
-
 -- Index for better query performance
 CREATE INDEX idx_leads_status ON public.leads(status);
 CREATE INDEX idx_leads_assignee ON public.leads(assignee_id);
 CREATE INDEX idx_leads_due_date ON public.leads(due_date);
-
 -- =====================================================
 -- LEAD LABELS
 -- =====================================================
@@ -121,17 +105,13 @@ CREATE TABLE public.labels (
   color TEXT DEFAULT '#2DA7FF',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 ALTER TABLE public.labels ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Anyone can view labels"
   ON public.labels FOR SELECT
   USING (true);
-
 CREATE POLICY "Authenticated users can manage labels"
   ON public.labels FOR ALL
   USING (auth.uid() IS NOT NULL);
-
 -- Junction table for many-to-many relationship
 CREATE TABLE public.lead_labels (
   lead_id UUID REFERENCES public.leads(id) ON DELETE CASCADE,
@@ -139,17 +119,13 @@ CREATE TABLE public.lead_labels (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   PRIMARY KEY (lead_id, label_id)
 );
-
 ALTER TABLE public.lead_labels ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Anyone can view lead labels"
   ON public.lead_labels FOR SELECT
   USING (true);
-
 CREATE POLICY "Users can manage lead labels"
   ON public.lead_labels FOR ALL
   USING (auth.uid() IS NOT NULL);
-
 -- =====================================================
 -- LEAD CHECKLIST
 -- =====================================================
@@ -163,17 +139,13 @@ CREATE TABLE public.checklist_items (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 ALTER TABLE public.checklist_items ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Anyone can view checklist items"
   ON public.checklist_items FOR SELECT
   USING (true);
-
 CREATE POLICY "Users can manage checklist items"
   ON public.checklist_items FOR ALL
   USING (auth.uid() IS NOT NULL);
-
 -- =====================================================
 -- LEAD COMMENTS
 -- =====================================================
@@ -187,25 +159,19 @@ CREATE TABLE public.comments (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Anyone can view comments"
   ON public.comments FOR SELECT
   USING (true);
-
 CREATE POLICY "Authenticated users can create comments"
   ON public.comments FOR INSERT
   WITH CHECK (auth.uid() = user_id);
-
 CREATE POLICY "Users can update own comments"
   ON public.comments FOR UPDATE
   USING (auth.uid() = user_id);
-
 CREATE POLICY "Users can delete own comments"
   ON public.comments FOR DELETE
   USING (auth.uid() = user_id);
-
 -- =====================================================
 -- LEAD ATTACHMENTS
 -- =====================================================
@@ -220,21 +186,16 @@ CREATE TABLE public.attachments (
   uploaded_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 ALTER TABLE public.attachments ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Anyone can view attachments"
   ON public.attachments FOR SELECT
   USING (true);
-
 CREATE POLICY "Authenticated users can upload attachments"
   ON public.attachments FOR INSERT
   WITH CHECK (auth.uid() = uploaded_by);
-
 CREATE POLICY "Users can delete own attachments"
   ON public.attachments FOR DELETE
   USING (auth.uid() = uploaded_by);
-
 -- =====================================================
 -- LEAD ACTIVITY HISTORY
 -- =====================================================
@@ -251,21 +212,16 @@ CREATE TABLE public.lead_activity (
   description TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 ALTER TABLE public.lead_activity ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Anyone can view lead activity"
   ON public.lead_activity FOR SELECT
   USING (true);
-
 CREATE POLICY "System can insert activity"
   ON public.lead_activity FOR INSERT
   WITH CHECK (true);
-
 -- Index for activity queries
 CREATE INDEX idx_lead_activity_lead ON public.lead_activity(lead_id);
 CREATE INDEX idx_lead_activity_created ON public.lead_activity(created_at DESC);
-
 -- =====================================================
 -- CLIENT GOALS (METAS)
 -- =====================================================
@@ -295,25 +251,19 @@ CREATE TABLE public.client_goals (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 ALTER TABLE public.client_goals ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Anyone can view client goals"
   ON public.client_goals FOR SELECT
   USING (true);
-
 CREATE POLICY "Authenticated users can create goals"
   ON public.client_goals FOR INSERT
   WITH CHECK (auth.uid() IS NOT NULL);
-
 CREATE POLICY "Authenticated users can update goals"
   ON public.client_goals FOR UPDATE
   USING (auth.uid() IS NOT NULL);
-
 -- Index for goals
 CREATE INDEX idx_client_goals_company ON public.client_goals(company_name);
 CREATE INDEX idx_client_goals_period ON public.client_goals(period_start, period_end);
-
 -- =====================================================
 -- REVENUE TRACKING
 -- =====================================================
@@ -331,22 +281,17 @@ CREATE TABLE public.revenue_records (
   created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 ALTER TABLE public.revenue_records ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Anyone can view revenue records"
   ON public.revenue_records FOR SELECT
   USING (true);
-
 CREATE POLICY "Authenticated users can manage revenue"
   ON public.revenue_records FOR ALL
   USING (auth.uid() IS NOT NULL);
-
 -- Index for revenue queries
 CREATE INDEX idx_revenue_date ON public.revenue_records(date DESC);
 CREATE INDEX idx_revenue_category ON public.revenue_records(category);
 CREATE INDEX idx_revenue_year_month ON public.revenue_records(year, month);
-
 -- =====================================================
 -- STOPPED SALES TRACKING
 -- =====================================================
@@ -361,13 +306,10 @@ CREATE TABLE public.stopped_sales (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 ALTER TABLE public.stopped_sales ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Anyone can view stopped sales"
   ON public.stopped_sales FOR SELECT
   USING (true);
-
 -- =====================================================
 -- FUNCTIONS & TRIGGERS
 -- =====================================================
@@ -380,26 +322,19 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 -- Apply updated_at trigger to relevant tables
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_team_members_updated_at BEFORE UPDATE ON public.team_members
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_leads_updated_at BEFORE UPDATE ON public.leads
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_checklist_items_updated_at BEFORE UPDATE ON public.checklist_items
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_comments_updated_at BEFORE UPDATE ON public.comments
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_client_goals_updated_at BEFORE UPDATE ON public.client_goals
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 -- Function to track lead movements
 CREATE OR REPLACE FUNCTION log_lead_movement()
 RETURNS TRIGGER AS $$
@@ -424,12 +359,10 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 CREATE TRIGGER track_lead_movements
   AFTER UPDATE ON public.leads
   FOR EACH ROW
   EXECUTE FUNCTION log_lead_movement();
-
 -- Function to update comments count
 CREATE OR REPLACE FUNCTION update_lead_comments_count()
 RETURNS TRIGGER AS $$
@@ -446,12 +379,10 @@ BEGIN
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-
 CREATE TRIGGER update_comments_count
   AFTER INSERT OR DELETE ON public.comments
   FOR EACH ROW
   EXECUTE FUNCTION update_lead_comments_count();
-
 -- Function to update attachments count
 CREATE OR REPLACE FUNCTION update_lead_attachments_count()
 RETURNS TRIGGER AS $$
@@ -468,12 +399,10 @@ BEGIN
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-
 CREATE TRIGGER update_attachments_count
   AFTER INSERT OR DELETE ON public.attachments
   FOR EACH ROW
   EXECUTE FUNCTION update_lead_attachments_count();
-
 -- =====================================================
 -- VIEWS FOR ANALYTICS
 -- =====================================================
@@ -502,7 +431,6 @@ SELECT
    FROM public.leads
    WHERE status != 'done'
   ) as pipeline_value;
-
 -- View for monthly revenue
 CREATE OR REPLACE VIEW public.monthly_revenue AS
 SELECT
@@ -528,7 +456,6 @@ ORDER BY year DESC,
     WHEN 'Nov' THEN 11
     WHEN 'Dez' THEN 12
   END;
-
 -- =====================================================
 -- INITIAL DATA SEEDING
 -- =====================================================
@@ -547,7 +474,6 @@ INSERT INTO public.labels (name, color) VALUES
   ('Concluído', '#22C55E'),
   ('Faturado', '#94A3B8')
 ON CONFLICT (name) DO NOTHING;
-
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;

@@ -2,10 +2,8 @@
 -- Ensures each lead has a readable unique identifier (e.g., L-20251103-AB12CD)
 
 BEGIN;
-
 ALTER TABLE public.leads
   ADD COLUMN IF NOT EXISTS public_id TEXT;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -14,7 +12,6 @@ BEGIN
     CREATE UNIQUE INDEX ux_leads_public_id ON public.leads(public_id) WHERE public_id IS NOT NULL;
   END IF;
 END $$;
-
 -- Helper: generate a short random token using hex from gen_random_bytes
 CREATE OR REPLACE FUNCTION public._short_token(n_bytes integer DEFAULT 3)
 RETURNS text AS $$
@@ -25,7 +22,6 @@ BEGIN
   RETURN token;
 END;
 $$ LANGUAGE plpgsql VOLATILE;
-
 -- Generator: L-YYYYMMDD-XXXXXX pattern
 CREATE OR REPLACE FUNCTION public.generate_lead_public_id()
 RETURNS text AS $$
@@ -42,7 +38,6 @@ BEGIN
   RETURN candidate;
 END;
 $$ LANGUAGE plpgsql VOLATILE;
-
 -- Trigger: set public_id automatically on insert when missing
 CREATE OR REPLACE FUNCTION public.trg_set_lead_public_id()
 RETURNS trigger AS $$
@@ -53,7 +48,6 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -65,6 +59,4 @@ BEGIN
       EXECUTE FUNCTION public.trg_set_lead_public_id();
   END IF;
 END $$;
-
 COMMIT;
-

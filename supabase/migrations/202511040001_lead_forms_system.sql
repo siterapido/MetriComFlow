@@ -12,9 +12,7 @@ CREATE TABLE IF NOT EXISTS public.lead_forms (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 ALTER TABLE public.lead_forms ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -58,7 +56,6 @@ BEGIN
       USING (has_crm_access(auth.uid()));
   END IF;
 END $$;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -70,5 +67,4 @@ BEGIN
       EXECUTE FUNCTION update_updated_at_column();
   END IF;
 END $$;
-
 COMMENT ON TABLE public.lead_forms IS 'Public capture form definitions used to generate shareable URLs and webhooks';

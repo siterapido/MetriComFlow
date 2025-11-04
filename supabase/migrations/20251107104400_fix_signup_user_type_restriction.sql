@@ -9,11 +9,9 @@
 -- Drop the triggers that prevent user_type owner assignment
 DROP TRIGGER IF EXISTS enforce_profile_user_type_insert ON public.profiles;
 DROP TRIGGER IF EXISTS enforce_profile_user_type_change ON public.profiles;
-
 -- Drop the functions as well
 DROP FUNCTION IF EXISTS public.enforce_profile_user_type_on_insert();
 DROP FUNCTION IF EXISTS public.enforce_profile_user_type_change();
-
 -- =====================================================
 -- UPDATE: handle_new_user function
 -- =====================================================
@@ -36,9 +34,7 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 COMMENT ON FUNCTION public.handle_new_user IS 'Creates basic profile on auth.users insert; user_type and organization setup handled by Edge Function';
-
 -- =====================================================
 -- OPTIONAL: Add safer user_type policies
 -- =====================================================
@@ -54,13 +50,11 @@ CREATE POLICY "Users can update own profile basic info"
     -- Prevent users from changing their own user_type
     user_type IS NOT DISTINCT FROM (SELECT user_type FROM profiles WHERE id = auth.uid())
   );
-
 -- Only owners can modify user_type of any profile
 DROP POLICY IF EXISTS "Owners can update any profile user_type" ON profiles;
 CREATE POLICY "Owners can update any profile user_type"
   ON profiles FOR UPDATE
   USING (is_owner(auth.uid()));
-
 -- =====================================================
 -- NOTES
 -- =====================================================
@@ -70,4 +64,4 @@ CREATE POLICY "Owners can update any profile user_type"
 --    - Promote the user to 'owner' if needed
 --    - Create the organization
 --    - Set up organization membership
--- 3. This approach is more secure and flexible than triggers
+-- 3. This approach is more secure and flexible than triggers;

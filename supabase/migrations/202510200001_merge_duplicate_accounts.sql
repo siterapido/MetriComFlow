@@ -86,14 +86,12 @@ EXCEPTION WHEN OTHERS THEN
   RETURN QUERY SELECT 0, 0, 0, false, ('Erro ao mesclar contas: ' || SQLERRM)::TEXT;
 END;
 $$;
-
 -- Comentário da função
 COMMENT ON FUNCTION merge_ad_accounts IS
 'Mescla dados de uma conta publicitária duplicada (origem) para a conta correta (destino).
 Move todas as campanhas, insights e leads associados e desativa a conta origem.';
-
 -- Exemplo de uso:
 -- SELECT * FROM merge_ad_accounts(
 --   'id-da-conta-duplicada'::UUID,
 --   'id-da-conta-correta'::UUID
--- );
+-- );;

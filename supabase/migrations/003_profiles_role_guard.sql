@@ -18,13 +18,11 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 DROP TRIGGER IF EXISTS enforce_profile_role_change ON public.profiles;
 CREATE TRIGGER enforce_profile_role_change
 BEFORE UPDATE ON public.profiles
 FOR EACH ROW
 EXECUTE FUNCTION public.enforce_profile_role_change();
-
 -- Function: prevent non-service inserts from setting role other than default 'user'
 CREATE OR REPLACE FUNCTION public.enforce_profile_role_on_insert()
 RETURNS TRIGGER AS $$
@@ -40,7 +38,6 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 DROP TRIGGER IF EXISTS enforce_profile_role_insert ON public.profiles;
 CREATE TRIGGER enforce_profile_role_insert
 BEFORE INSERT ON public.profiles

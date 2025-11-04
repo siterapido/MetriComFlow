@@ -17,7 +17,6 @@ SET
   updated_at = NOW()
 FROM pro_plan
 WHERE target.slug IN ('teste', 'trial');
-
 DO $$
 BEGIN
   IF EXISTS (
@@ -27,4 +26,3 @@ BEGIN
     REFRESH MATERIALIZED VIEW public.organization_plan_limits;
   END IF;
 END $$;
-

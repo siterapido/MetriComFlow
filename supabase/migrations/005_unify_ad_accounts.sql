@@ -4,19 +4,16 @@
 -- Também adiciona políticas RLS para permitir que o próprio usuário visualize/insira/edite suas contas conectadas.
 
 BEGIN;
-
 -- 1) Adicionar novas colunas (se não existirem)
 ALTER TABLE public.ad_accounts
   ADD COLUMN IF NOT EXISTS provider TEXT,
   ADD COLUMN IF NOT EXISTS external_id TEXT,
   ADD COLUMN IF NOT EXISTS business_name TEXT,
   ADD COLUMN IF NOT EXISTS connected_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
-
 -- 2) Definir valores padrão e restrições básicas
 -- provider padrão = 'meta' e limitar aos provedores suportados (por ora apenas 'meta')
 ALTER TABLE public.ad_accounts
   ALTER COLUMN provider SET DEFAULT 'meta';
-
 -- Nota: CHECK não pode ser IF NOT EXISTS; então criamos apenas se não existir um constraint com esse nome
 DO $$
 BEGIN
@@ -29,7 +26,6 @@ BEGIN
       ADD CONSTRAINT ad_accounts_provider_check CHECK (provider IN ('meta'));
   END IF;
 END $$;
-
 -- 3) Backfill dos dados novos a partir das colunas legadas, se existirem
 DO $$
 DECLARE
@@ -77,14 +73,11 @@ BEGIN
     EXECUTE 'UPDATE public.ad_accounts SET business_name = COALESCE(business_name, name)';
   END IF;
 END $$;
-
 -- 4) Tornar external_id NOT NULL após o backfill
 ALTER TABLE public.ad_accounts
   ALTER COLUMN external_id SET NOT NULL;
-
 -- 5) Índice único para external_id (mantendo o índice/constraint único de ad_account_id por compatibilidade até atualizarmos meta-auth)
 CREATE UNIQUE INDEX IF NOT EXISTS ux_ad_accounts_external_id ON public.ad_accounts(external_id);
-
 -- 6) Trigger para compatibilidade futura:
 --    Se a função meta-auth continuar inserindo apenas colunas legadas, o trigger completa os campos novos.
 CREATE OR REPLACE FUNCTION public.unify_ad_accounts_defaults()
@@ -126,7 +119,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 -- Criar trigger BEFORE INSERT (e também BEFORE UPDATE para manter coerência se campos legados forem alterados)
 DO $$
 BEGIN
@@ -146,7 +138,6 @@ BEGIN
     FOR EACH ROW EXECUTE FUNCTION public.unify_ad_accounts_defaults();
   END IF;
 END $$;
-
 -- 7) Políticas RLS adicionais com base em connected_by (sem remover as políticas existentes baseadas em user_id para compatibilidade)
 -- Observação: CREATE POLICY não suporta IF NOT EXISTS; usamos guardas por nome via catálogo.
 DO $$
@@ -176,5 +167,4 @@ BEGIN
     WITH CHECK (connected_by = auth.uid());
   END IF;
 END $$;
-
 COMMIT;

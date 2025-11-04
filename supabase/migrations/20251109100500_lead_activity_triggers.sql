@@ -63,12 +63,9 @@ begin
   return null;
 end;
 $$;
-
 drop trigger if exists trg_leads_log_activity on public.leads;
 create trigger trg_leads_log_activity
 after insert or update or delete on public.leads
 for each row execute function public.log_lead_activity();
-
 -- Optional helpful index for ordering/filters
 create index if not exists idx_lead_activity_lead_created_at on public.lead_activity(lead_id, created_at desc);
-

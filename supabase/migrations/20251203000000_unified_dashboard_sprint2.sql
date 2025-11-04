@@ -110,14 +110,11 @@ FROM meta_ads_summary m
 LEFT JOIN crm_leads_summary c
   ON c.campaign_id = m.campaign_id
   AND c.organization_id = m.organization_id;
-
 COMMENT ON VIEW public.unified_dashboard_metrics IS
 'View unificada que combina métricas do Meta Ads (investimento, impressões, cliques) com métricas do CRM (leads, conversões, receita). Permite análise completa de ROI real por campanha.';
-
 -- Grant permissions
 GRANT SELECT ON public.unified_dashboard_metrics TO authenticated;
 GRANT SELECT ON public.unified_dashboard_metrics TO service_role;
-
 -- ============================================================================
 -- 2. FUNCTION: get_unified_metrics_summary
 -- ============================================================================
@@ -161,13 +158,12 @@ SET search_path = public
 AS $
 DECLARE
   v_start_date DATE;
-  v_end_date DATE;
+v_end_date DATE;
 BEGIN
   -- Default date range: últimos 90 dias
   v_start_date := COALESCE(p_start_date, CURRENT_DATE - INTERVAL '90 days');
-  v_end_date := COALESCE(p_end_date, CURRENT_DATE);
-
-  RETURN QUERY
+v_end_date := COALESCE(p_end_date, CURRENT_DATE);
+RETURN QUERY
   WITH filtered_insights AS (
     SELECT
       i.spend,
@@ -269,14 +265,11 @@ BEGIN
   FROM meta_agg m, crm_agg c;
 END;
 $;
-
 COMMENT ON FUNCTION public.get_unified_metrics_summary IS
 'Retorna métricas agregadas unificadas (Meta Ads + CRM) para o período especificado. Suporta filtros por conta, campanha e intervalo de datas. Calcula CPL real, ROAS real, taxa de conversão e ticket médio.';
-
 -- Grant permissions
 GRANT EXECUTE ON FUNCTION public.get_unified_metrics_summary TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_unified_metrics_summary TO service_role;
-
 -- ============================================================================
 -- 3. FUNCTION: get_unified_daily_breakdown
 -- ============================================================================
@@ -311,12 +304,11 @@ SET search_path = public
 AS $
 DECLARE
   v_start_date DATE;
-  v_end_date DATE;
+v_end_date DATE;
 BEGIN
   v_start_date := COALESCE(p_start_date, CURRENT_DATE - INTERVAL '30 days');
-  v_end_date := COALESCE(p_end_date, CURRENT_DATE);
-
-  RETURN QUERY
+v_end_date := COALESCE(p_end_date, CURRENT_DATE);
+RETURN QUERY
   WITH date_series AS (
     SELECT generate_series(v_start_date, v_end_date, '1 day'::INTERVAL)::DATE as day
   ),
@@ -386,14 +378,11 @@ BEGIN
   ORDER BY ds.day ASC;
 END;
 $;
-
 COMMENT ON FUNCTION public.get_unified_daily_breakdown IS
 'Retorna breakdown diário de métricas unificadas (Meta Ads + CRM) para gráficos de evolução temporal. Preenche lacunas com zeros para garantir série temporal contínua.';
-
 -- Grant permissions
 GRANT EXECUTE ON FUNCTION public.get_unified_daily_breakdown TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_unified_daily_breakdown TO service_role;
-
 -- ============================================================================
 -- 4. INDEXES para performance
 -- ============================================================================
@@ -401,16 +390,13 @@ GRANT EXECUTE ON FUNCTION public.get_unified_daily_breakdown TO service_role;
 -- Garantir índices existentes em campaign_daily_insights
 CREATE INDEX IF NOT EXISTS idx_campaign_insights_date_campaign
   ON public.campaign_daily_insights(date, campaign_id);
-
 -- Garantir índices existentes em leads
 CREATE INDEX IF NOT EXISTS idx_leads_created_at_campaign
   ON public.leads(created_at, campaign_id)
   WHERE campaign_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS idx_leads_closed_won_at
   ON public.leads(closed_won_at)
   WHERE status = 'fechado_ganho';
-
 -- ============================================================================
 -- 5. RLS Policies (herdam das tabelas base)
 -- ============================================================================
@@ -419,4 +405,4 @@ CREATE INDEX IF NOT EXISTS idx_leads_closed_won_at
 
 -- ============================================================================
 -- FIM DA MIGRATION - Sprint 2
--- ============================================================================
+-- ============================================================================;

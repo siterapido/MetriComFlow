@@ -8,10 +8,8 @@
 
 -- Habilitar extensão pg_cron (se ainda não estiver habilitada)
 CREATE EXTENSION IF NOT EXISTS pg_cron;
-
 -- Habilitar extensão http para fazer requisições HTTP
 CREATE EXTENSION IF NOT EXISTS http;
-
 -- ============================================================================
 -- TABELA: cron_job_logs
 -- Armazena logs de execução dos cron jobs para monitoramento
@@ -30,12 +28,10 @@ CREATE TABLE IF NOT EXISTS public.cron_job_logs (
   metadata JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 -- Índices para performance
 CREATE INDEX IF NOT EXISTS idx_cron_job_logs_job_name ON public.cron_job_logs(job_name);
 CREATE INDEX IF NOT EXISTS idx_cron_job_logs_started_at ON public.cron_job_logs(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cron_job_logs_status ON public.cron_job_logs(status);
-
 -- Trigger para calcular duration automaticamente
 CREATE OR REPLACE FUNCTION calculate_cron_job_duration()
 RETURNS TRIGGER AS $$
@@ -46,16 +42,13 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 DROP TRIGGER IF EXISTS trigger_calculate_cron_job_duration ON public.cron_job_logs;
 CREATE TRIGGER trigger_calculate_cron_job_duration
   BEFORE INSERT OR UPDATE ON public.cron_job_logs
   FOR EACH ROW
   EXECUTE FUNCTION calculate_cron_job_duration();
-
 -- RLS Policies
 ALTER TABLE public.cron_job_logs ENABLE ROW LEVEL SECURITY;
-
 -- Owners podem ver todos os logs
 CREATE POLICY "Owners can view all cron logs"
   ON public.cron_job_logs FOR SELECT
@@ -65,12 +58,10 @@ CREATE POLICY "Owners can view all cron logs"
       WHERE id = auth.uid() AND user_type = 'owner'
     )
   );
-
 -- Service role pode inserir/atualizar
 CREATE POLICY "Service role can manage cron logs"
   ON public.cron_job_logs FOR ALL
   USING (auth.jwt()->>'role' = 'service_role');
-
 -- ============================================================================
 -- FUNÇÃO: invoke_edge_function
 -- Função auxiliar para invocar Edge Functions via HTTP
@@ -162,7 +153,6 @@ BEGIN
   END;
 END;
 $$;
-
 -- ============================================================================
 -- FUNÇÃO: sync_meta_insights_cron
 -- Sincroniza métricas diárias do Meta Ads (últimos 7 dias)
@@ -196,7 +186,6 @@ BEGIN
   RAISE NOTICE 'sync-daily-insights result: %', v_result;
 END;
 $$;
-
 -- ============================================================================
 -- FUNÇÃO: dispatch_meta_conversions_cron
 -- Processa eventos de conversão pendentes e envia para Meta CAPI
@@ -236,7 +225,6 @@ BEGIN
   RAISE NOTICE 'meta-conversion-dispatch result: % (processed % events)', v_result, v_pending_count;
 END;
 $$;
-
 -- ============================================================================
 -- CONFIGURAÇÃO DOS CRON JOBS
 -- ============================================================================
@@ -248,14 +236,12 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   NULL; -- Ignora se não existir
 END $$;
-
 DO $$
 BEGIN
   PERFORM cron.unschedule('dispatch-meta-conversions-every-5min');
 EXCEPTION WHEN OTHERS THEN
   NULL; -- Ignora se não existir
 END $$;
-
 -- Job 1: Sincronizar métricas do Meta Ads a cada 3 horas
 -- Horários de execução: 00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00
 SELECT cron.schedule(
@@ -265,7 +251,6 @@ SELECT cron.schedule(
   SELECT public.sync_meta_insights_cron();
   $$
 );
-
 -- Job 2: Despachar eventos de conversão para Meta CAPI a cada 5 minutos
 SELECT cron.schedule(
   'dispatch-meta-conversions-every-5min',
@@ -274,7 +259,6 @@ SELECT cron.schedule(
   SELECT public.dispatch_meta_conversions_cron();
   $$
 );
-
 -- ============================================================================
 -- VIEW: cron_job_status
 -- View para monitoramento fácil do status dos cron jobs
@@ -296,10 +280,8 @@ SELECT
   metadata
 FROM public.cron_job_logs
 ORDER BY started_at DESC;
-
 -- Permitir que admins vejam o status dos cron jobs
 GRANT SELECT ON public.cron_job_status TO authenticated;
-
 -- ============================================================================
 -- FUNÇÃO: get_cron_job_summary
 -- Retorna resumo dos últimos cron jobs (últimas 24 horas)
@@ -333,7 +315,6 @@ BEGIN
   GROUP BY l.job_name;
 END;
 $$;
-
 -- ============================================================================
 -- LIMPEZA AUTOMÁTICA DE LOGS ANTIGOS
 -- Remove logs com mais de 30 dias para evitar crescimento excessivo
@@ -355,7 +336,6 @@ BEGIN
   RAISE NOTICE 'Cleaned up % old cron job logs', v_deleted_count;
 END;
 $$;
-
 -- Job 3: Limpar logs antigos (uma vez por dia às 02:00)
 DO $$
 BEGIN
@@ -363,7 +343,6 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   NULL; -- Ignora se não existir
 END $$;
-
 SELECT cron.schedule(
   'cleanup-old-cron-logs-daily',
   '0 2 * * *',  -- 02:00 todos os dias
@@ -371,7 +350,6 @@ SELECT cron.schedule(
   SELECT public.cleanup_old_cron_logs();
   $$
 );
-
 -- ============================================================================
 -- VERIFICAÇÃO FINAL
 -- ============================================================================
@@ -395,7 +373,6 @@ BEGIN
       v_job.jobid, v_job.jobname, v_job.schedule, v_job.active;
   END LOOP;
 END $$;
-
 -- ============================================================================
 -- COMENTÁRIOS E DOCUMENTAÇÃO
 -- ============================================================================

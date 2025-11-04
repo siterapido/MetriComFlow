@@ -25,24 +25,19 @@ BEGIN
       duplicate_record.external_id;
   END LOOP;
 END $$;
-
 -- 2. Add unique constraint on external_id
 -- This prevents the same Meta ad account from being connected twice
 ALTER TABLE ad_accounts
 DROP CONSTRAINT IF EXISTS ad_accounts_external_id_key;
-
 ALTER TABLE ad_accounts
 ADD CONSTRAINT ad_accounts_external_id_key
 UNIQUE (external_id);
-
 -- 3. Create index for performance (if not exists)
 CREATE INDEX IF NOT EXISTS idx_ad_accounts_external_id
 ON ad_accounts(external_id);
-
 -- 4. Add comment for documentation
 COMMENT ON CONSTRAINT ad_accounts_external_id_key ON ad_accounts IS
 'Ensures each Meta ad account (identified by external_id) can only be connected once across all organizations. This prevents duplicate connections and data conflicts.';
-
 -- 5. Create a function to check if an ad account is already connected
 CREATE OR REPLACE FUNCTION is_ad_account_connected(p_external_id TEXT)
 RETURNS TABLE (
@@ -73,9 +68,7 @@ BEGIN
   LIMIT 1;
 END;
 $$;
-
 COMMENT ON FUNCTION is_ad_account_connected IS
 'Check if a Meta ad account (by external_id) is already connected. Returns connection details if found.';
-
 -- 6. Grant execute permission
 GRANT EXECUTE ON FUNCTION is_ad_account_connected TO authenticated;

@@ -2,7 +2,6 @@
 -- Objetivo: Adicionar suporte completo para Meta Ads, atualizar status de leads e criar views de negócio
 
 BEGIN;
-
 -- ============================================================================
 -- 1. ATUALIZAR TABELA DE LEADS
 -- ============================================================================
@@ -10,33 +9,27 @@ BEGIN;
 -- 1.1 Atualizar enum de status para refletir funil de vendas
 ALTER TABLE public.leads
   DROP CONSTRAINT IF EXISTS leads_status_check;
-
 ALTER TABLE public.leads
   ADD CONSTRAINT leads_status_check
   CHECK (status IN ('novo_lead', 'qualificacao', 'proposta', 'negociacao', 'fechado_ganho', 'fechado_perdido'));
-
 -- 1.2 Adicionar campos para rastreamento de origem e fechamento
 ALTER TABLE public.leads
   ADD COLUMN IF NOT EXISTS source TEXT CHECK (source IN ('meta_ads', 'manual')) DEFAULT 'manual',
   ADD COLUMN IF NOT EXISTS closed_won_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS closed_lost_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS lost_reason TEXT;
-
 -- 1.3 Adicionar campos para integração Meta Ads (deduplicação e rastreio)
 ALTER TABLE public.leads
   ADD COLUMN IF NOT EXISTS external_lead_id TEXT,
   ADD COLUMN IF NOT EXISTS ad_id TEXT,
   ADD COLUMN IF NOT EXISTS adset_id TEXT,
   ADD COLUMN IF NOT EXISTS campaign_id UUID REFERENCES public.ad_campaigns(id) ON DELETE SET NULL;
-
 -- 1.4 Criar índices para performance
 CREATE UNIQUE INDEX IF NOT EXISTS ux_leads_external_lead_id_not_null
   ON public.leads(external_lead_id) WHERE external_lead_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS idx_leads_campaign ON public.leads(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_leads_source ON public.leads(source);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON public.leads(status);
-
 -- ============================================================================
 -- 2. CRIAR/VALIDAR TABELAS META ADS
 -- ============================================================================
@@ -53,10 +46,8 @@ CREATE TABLE IF NOT EXISTS public.campaign_daily_insights (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(campaign_id, date)
 );
-
 -- 2.2 Habilitar RLS
 ALTER TABLE public.campaign_daily_insights ENABLE ROW LEVEL SECURITY;
-
 -- 2.3 Criar políticas RLS
 DO $$
 BEGIN
@@ -71,11 +62,9 @@ BEGIN
     USING (auth.uid() IS NOT NULL);
   END IF;
 END $$;
-
 -- 2.4 Criar índices
 CREATE INDEX IF NOT EXISTS idx_campaign_insights_date
   ON public.campaign_daily_insights(campaign_id, date DESC);
-
 -- ============================================================================
 -- 3. CRIAR VIEWS DE NEGÓCIO
 -- ============================================================================
@@ -158,7 +147,6 @@ SELECT
     ELSE 0
   END AS taxa_conversao
 FROM kpis;
-
 -- 3.2 View para financeiros por campanha
 CREATE OR REPLACE VIEW public.campaign_financials AS
 SELECT
@@ -217,7 +205,6 @@ LEFT JOIN public.campaign_daily_insights ci ON ci.campaign_id = c.id
 LEFT JOIN public.leads l ON l.campaign_id = c.id
 GROUP BY c.id, c.name, c.status, c.objective, aa.business_name
 ORDER BY investimento DESC;
-
 -- ============================================================================
 -- 4. TRIGGERS E FUNÇÕES
 -- ============================================================================
@@ -249,7 +236,6 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 -- 4.2 Criar trigger para atualizar datas de fechamento
 DROP TRIGGER IF EXISTS trigger_update_lead_closed_dates ON public.leads;
 CREATE TRIGGER trigger_update_lead_closed_dates
@@ -257,7 +243,6 @@ CREATE TRIGGER trigger_update_lead_closed_dates
   FOR EACH ROW
   WHEN (OLD.status IS DISTINCT FROM NEW.status)
   EXECUTE FUNCTION public.update_lead_closed_dates();
-
 -- ============================================================================
 -- 5. COMENTÁRIOS E DOCUMENTAÇÃO
 -- ============================================================================
@@ -265,11 +250,9 @@ CREATE TRIGGER trigger_update_lead_closed_dates
 COMMENT ON VIEW public.business_kpis IS 'KPIs consolidados do negócio: investimento, leads, CPL, ROAS, conversão';
 COMMENT ON VIEW public.campaign_financials IS 'Métricas financeiras e de performance por campanha de Meta Ads';
 COMMENT ON TABLE public.campaign_daily_insights IS 'Insights diários das campanhas (gasto, impressões, cliques, leads)';
-
 COMMENT ON COLUMN public.leads.source IS 'Origem do lead: meta_ads (Facebook/Instagram) ou manual';
 COMMENT ON COLUMN public.leads.external_lead_id IS 'ID externo do lead no Meta (para deduplicação)';
 COMMENT ON COLUMN public.leads.campaign_id IS 'Campanha de origem (se source = meta_ads)';
 COMMENT ON COLUMN public.leads.closed_won_at IS 'Data de fechamento da venda (ganho)';
 COMMENT ON COLUMN public.leads.closed_lost_at IS 'Data de fechamento da venda (perdido)';
-
 COMMIT;

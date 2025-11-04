@@ -63,6 +63,5 @@ BEGIN
   );
 END;
 $$;
-
 COMMENT ON FUNCTION public.has_crm_access(UUID)
 IS 'Checks if the user can access CRM features based on their role and the organization''s active subscription plan.';

@@ -49,9 +49,7 @@ FROM
   LEFT JOIN organization_subscriptions os ON os.organization_id = o.id
     AND os.status IN ('active', 'trial', 'past_due')
   LEFT JOIN subscription_plans sp ON sp.id = os.plan_id;
-
 -- Grant access to authenticated users
 GRANT SELECT ON organization_plan_limits TO authenticated;
-
 -- Add comment
 COMMENT ON VIEW organization_plan_limits IS 'Provides real-time organization plan limits and current usage statistics';

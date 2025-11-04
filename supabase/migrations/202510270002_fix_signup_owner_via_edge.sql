@@ -18,5 +18,4 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 COMMENT ON FUNCTION public.handle_new_user IS 'Creates basic profile on auth.users insert; owner promotion & org creation is handled by Edge Function promote-owner';

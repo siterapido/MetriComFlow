@@ -47,9 +47,7 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 COMMENT ON FUNCTION public.handle_new_user IS 'Creates profile, organization, and owner membership for new users';
-
 -- =====================================================
 -- BACKFILL: Fix existing users without organizations
 -- =====================================================

@@ -5,7 +5,6 @@
 -- 1) Permitir owner_id NULL em organizations (idempotente)
 ALTER TABLE public.organizations
   ALTER COLUMN owner_id DROP NOT NULL;
-
 -- 2) Ajustar função ensure_owner_membership para ignorar owner_id nulo
 CREATE OR REPLACE FUNCTION public.ensure_owner_membership()
 RETURNS TRIGGER AS $$
@@ -27,7 +26,6 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- 3) Garantir que, quando o owner_id for definido posteriormente, o membership seja criado/reativado
 DROP TRIGGER IF EXISTS trg_ensure_owner_membership_on_update ON public.organizations;
 CREATE TRIGGER trg_ensure_owner_membership_on_update
@@ -35,7 +33,5 @@ CREATE TRIGGER trg_ensure_owner_membership_on_update
   FOR EACH ROW
   WHEN (OLD.owner_id IS DISTINCT FROM NEW.owner_id AND NEW.owner_id IS NOT NULL)
   EXECUTE FUNCTION public.ensure_owner_membership();
-
 -- Nota: O trigger existente AFTER INSERT (trg_ensure_owner_membership) permanece válido e continuará funcionando
--- quando owner_id já estiver definido no momento da criação.
-
+-- quando owner_id já estiver definido no momento da criação.;

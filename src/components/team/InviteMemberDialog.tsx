@@ -27,6 +27,9 @@ import { useOrganizationPlanLimits } from "@/hooks/useSubscription";
 const inviteSchema = z.object({
   email: z.string().email("Informe um email válido"),
   user_type: z.enum(["sales", "traffic_manager", "owner"]),
+  role: z.enum(["owner", "admin", "manager", "member"], {
+    errorMap: () => ({ message: "Selecione um nível de acesso válido" }),
+  }),
 });
 
 export type InviteFormValues = z.infer<typeof inviteSchema>;
@@ -44,12 +47,14 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
   const canAddUser = permissions?.canAddUser ?? true;
   const usersLimitReached = limits?.users_limit_reached ?? false;
   const subscriptionRestricted = !canAddUser && !usersLimitReached;
+  const isOwner = permissions?.isOwner ?? false;
 
   const form = useForm<InviteFormValues>({
     resolver: zodResolver(inviteSchema),
     defaultValues: {
       email: "",
       user_type: "sales",
+      role: "member",
     },
   });
 
@@ -132,7 +137,7 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
               )}
             />
 
-            <div className="grid gap-4 sm:grid-cols-1">
+            <div className="grid gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="user_type"
@@ -155,6 +160,51 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
                         <SelectItem value="owner">Owner (Acesso total)</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nível de acesso</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={isSending || subscriptionRestricted}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {isOwner && (
+                          <SelectItem value="owner">
+                            <span className="font-semibold">Owner</span> - Controle total
+                          </SelectItem>
+                        )}
+                        {isOwner && (
+                          <SelectItem value="admin">
+                            <span className="font-semibold">Admin</span> - Pode gerenciar equipe
+                          </SelectItem>
+                        )}
+                        <SelectItem value="manager">
+                          <span className="font-semibold">Manager</span> - Pode gerenciar conteúdo
+                        </SelectItem>
+                        <SelectItem value="member">
+                          <span className="font-semibold">Member</span> - Acesso básico
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {!isOwner && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Apenas owners podem criar admin e owner roles
+                      </p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

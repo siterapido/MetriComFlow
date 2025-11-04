@@ -17,9 +17,7 @@ CREATE TABLE IF NOT EXISTS public.organizations (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
-
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -75,10 +73,8 @@ BEGIN
       WITH CHECK (owner_id = auth.uid());
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_organizations_owner ON public.organizations(owner_id);
 CREATE INDEX IF NOT EXISTS idx_organizations_slug ON public.organizations(slug);
-
 -- =====================================================
 -- ORGANIZATION MEMBERSHIPS
 -- =====================================================
@@ -96,9 +92,7 @@ CREATE TABLE IF NOT EXISTS public.organization_memberships (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   UNIQUE (organization_id, profile_id)
 );
-
 ALTER TABLE public.organization_memberships ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -146,14 +140,11 @@ BEGIN
       );
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_org_membership_org ON public.organization_memberships(organization_id);
 CREATE INDEX IF NOT EXISTS idx_org_membership_profile ON public.organization_memberships(profile_id);
 CREATE INDEX IF NOT EXISTS idx_org_membership_active ON public.organization_memberships(is_active);
-
 DROP TRIGGER IF EXISTS trg_ensure_owner_membership ON public.organizations;
 DROP FUNCTION IF EXISTS public.ensure_owner_membership();
-
 CREATE OR REPLACE FUNCTION public.ensure_owner_membership()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -169,16 +160,13 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 CREATE TRIGGER trg_ensure_owner_membership
   AFTER INSERT ON public.organizations
   FOR EACH ROW
   EXECUTE FUNCTION public.ensure_owner_membership();
-
 DROP TRIGGER IF EXISTS trg_org_memberships_updated_at ON public.organization_memberships;
 DROP TRIGGER IF EXISTS trg_organizations_updated_at ON public.organizations;
 DROP FUNCTION IF EXISTS public.set_timestamp_updated_at();
-
 CREATE OR REPLACE FUNCTION public.set_timestamp_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -186,17 +174,14 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 CREATE TRIGGER trg_org_memberships_updated_at
   BEFORE UPDATE ON public.organization_memberships
   FOR EACH ROW
   EXECUTE FUNCTION public.set_timestamp_updated_at();
-
 CREATE TRIGGER trg_organizations_updated_at
   BEFORE UPDATE ON public.organizations
   FOR EACH ROW
   EXECUTE FUNCTION public.set_timestamp_updated_at();
-
 -- =====================================================
 -- TEAM INVITATIONS
 -- =====================================================
@@ -221,13 +206,10 @@ BEGIN
     );
   END IF;
 END $$;
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_team_invitations_pending_unique
   ON public.team_invitations (email, organization_id)
   WHERE status = 'pending';
-
 ALTER TABLE public.team_invitations ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -274,14 +256,11 @@ BEGIN
       );
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_team_invitations_token ON public.team_invitations(token);
 CREATE INDEX IF NOT EXISTS idx_team_invitations_email ON public.team_invitations(email);
 CREATE INDEX IF NOT EXISTS idx_team_invitations_org ON public.team_invitations(organization_id);
 CREATE INDEX IF NOT EXISTS idx_team_invitations_status ON public.team_invitations(status);
-
 DROP FUNCTION IF EXISTS public.expire_old_team_invitations();
-
 CREATE OR REPLACE FUNCTION public.expire_old_team_invitations()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -291,15 +270,12 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 DROP TRIGGER IF EXISTS trg_expire_team_invitation ON public.team_invitations;
 CREATE TRIGGER trg_expire_team_invitation
   BEFORE INSERT OR UPDATE ON public.team_invitations
   FOR EACH ROW
   EXECUTE FUNCTION public.expire_old_team_invitations();
-
 DROP FUNCTION IF EXISTS public.get_invitation_by_token(TEXT);
-
 CREATE OR REPLACE FUNCTION public.get_invitation_by_token(invitation_token TEXT)
 RETURNS TABLE (
   id UUID,
@@ -335,9 +311,7 @@ BEGIN
   WHERE ti.token = invitation_token;
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
-
 COMMENT ON FUNCTION public.get_invitation_by_token IS 'Returns invitation details with organization metadata based on a unique token';
-
 -- =====================================================
 -- DATA BACKFILL HELPERS
 -- =====================================================

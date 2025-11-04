@@ -11,11 +11,9 @@ ALTER TABLE public.organization_subscriptions
   ADD COLUMN IF NOT EXISTS claim_email TEXT,
   ADD COLUMN IF NOT EXISTS claim_status TEXT DEFAULT 'pending',
   ADD COLUMN IF NOT EXISTS claim_completed_at TIMESTAMP WITH TIME ZONE;
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_org_subscriptions_claim_token
   ON public.organization_subscriptions(claim_token)
   WHERE claim_token IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS idx_org_subscriptions_checkout_session
   ON public.organization_subscriptions(stripe_checkout_session_id)
   WHERE stripe_checkout_session_id IS NOT NULL;

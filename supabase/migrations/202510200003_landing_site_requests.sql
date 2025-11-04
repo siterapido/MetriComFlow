@@ -17,10 +17,8 @@ CREATE TABLE IF NOT EXISTS public.site_requests (
   user_agent TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- Enable RLS and restrict read access by default
 ALTER TABLE public.site_requests ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -35,7 +33,6 @@ BEGIN
       WITH CHECK (true);
   END IF;
 END $$;
-
 -- Optional: only admins/managers can select
 DO $$
 BEGIN
@@ -56,7 +53,6 @@ BEGIN
       );
   END IF;
 END $$;
-
 -- Helpful indexes
 CREATE INDEX IF NOT EXISTS idx_site_requests_created_at ON public.site_requests(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_site_requests_email ON public.site_requests(email);

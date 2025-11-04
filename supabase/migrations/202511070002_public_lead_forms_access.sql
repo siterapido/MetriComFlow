@@ -3,7 +3,6 @@
 -- Created: 2025-11-07
 
 BEGIN;
-
 -- Lead forms: allow anon to read active forms
 DO $$
 BEGIN
@@ -19,7 +18,6 @@ BEGIN
       USING (is_active = TRUE);
   END IF;
 END $$;
-
 -- Lead form fields: allow anon to read fields when parent form is active
 DO $$
 BEGIN
@@ -46,7 +44,6 @@ BEGIN
     END IF;
   END IF;
 END $$;
-
 -- Lead form variants: allow anon to read variants when parent form is active
 DO $$
 BEGIN
@@ -73,6 +70,4 @@ BEGIN
     END IF;
   END IF;
 END $$;
-
 COMMIT;
-

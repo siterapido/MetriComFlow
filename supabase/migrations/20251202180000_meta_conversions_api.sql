@@ -2,7 +2,6 @@
 -- Enables sending conversion events back to Meta Ads for campaign optimization
 
 BEGIN;
-
 -- Table to log all conversion events sent to Meta CAPI
 CREATE TABLE IF NOT EXISTS public.meta_conversion_events (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -50,23 +49,17 @@ CREATE TABLE IF NOT EXISTS public.meta_conversion_events (
   CONSTRAINT valid_status CHECK (status IN ('pending', 'sent', 'failed')),
   CONSTRAINT valid_event_name CHECK (event_name IN ('Lead', 'Purchase', 'CompleteRegistration', 'AddToCart', 'InitiateCheckout'))
 );
-
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_meta_conversion_events_lead_id
   ON public.meta_conversion_events(lead_id);
-
 CREATE INDEX IF NOT EXISTS idx_meta_conversion_events_campaign_id
   ON public.meta_conversion_events(campaign_id);
-
 CREATE INDEX IF NOT EXISTS idx_meta_conversion_events_status
   ON public.meta_conversion_events(status);
-
 CREATE INDEX IF NOT EXISTS idx_meta_conversion_events_created_at
   ON public.meta_conversion_events(created_at DESC);
-
 CREATE INDEX IF NOT EXISTS idx_meta_conversion_events_organization_id
   ON public.meta_conversion_events(organization_id);
-
 -- Auto-update updated_at
 CREATE OR REPLACE FUNCTION update_meta_conversion_events_updated_at()
 RETURNS TRIGGER AS $$
@@ -75,15 +68,12 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 CREATE TRIGGER meta_conversion_events_updated_at
   BEFORE UPDATE ON public.meta_conversion_events
   FOR EACH ROW
   EXECUTE FUNCTION update_meta_conversion_events_updated_at();
-
 -- RLS Policies
 ALTER TABLE public.meta_conversion_events ENABLE ROW LEVEL SECURITY;
-
 -- Users can view their organization's conversion events
 CREATE POLICY "Users can view their org's conversion events"
   ON public.meta_conversion_events FOR SELECT
@@ -93,12 +83,10 @@ CREATE POLICY "Users can view their org's conversion events"
       WHERE profile_id = auth.uid() AND is_active = TRUE
     )
   );
-
 -- Service role can insert/update (for Edge Functions)
 CREATE POLICY "Service role can manage conversion events"
   ON public.meta_conversion_events FOR ALL
   USING (auth.jwt()->>'role' = 'service_role');
-
 -- Trigger function to create conversion event when lead is qualified or won
 CREATE OR REPLACE FUNCTION create_meta_conversion_event()
 RETURNS TRIGGER AS $$
@@ -173,7 +161,6 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- Trigger on leads table
 DROP TRIGGER IF EXISTS trigger_create_meta_conversion_event ON public.leads;
 CREATE TRIGGER trigger_create_meta_conversion_event
@@ -181,11 +168,9 @@ CREATE TRIGGER trigger_create_meta_conversion_event
   FOR EACH ROW
   WHEN (OLD.status IS DISTINCT FROM NEW.status OR OLD.value IS DISTINCT FROM NEW.value)
   EXECUTE FUNCTION create_meta_conversion_event();
-
 -- Comment
 COMMENT ON TABLE public.meta_conversion_events IS 'Stores Meta Conversions API events for tracking lead conversions back to Meta Ads';
 COMMENT ON COLUMN public.meta_conversion_events.event_name IS 'Type of conversion event: Lead (qualified), Purchase (closed won)';
 COMMENT ON COLUMN public.meta_conversion_events.status IS 'Dispatch status: pending (not sent), sent (successfully sent), failed (error)';
 COMMENT ON COLUMN public.meta_conversion_events.retry_count IS 'Number of retry attempts for failed events';
-
 COMMIT;

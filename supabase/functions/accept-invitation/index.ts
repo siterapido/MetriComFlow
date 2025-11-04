@@ -74,136 +74,198 @@ Deno.serve(async (req) => {
 
     let userId: string;
     let isNewUser = false;
+    const compensations: (() => Promise<void>)[] = [];
 
-    if (existingProfile) {
-      console.log("✅ Perfil já existe:", existingProfile.email);
-      userId = existingProfile.id;
-
-      if (existingProfile.user_type !== invitation.user_type) {
-        const { error: userTypeUpdateError } = await supabase
-          .from("profiles")
-          .update({ user_type: invitation.user_type })
-          .eq("id", userId);
-
-        if (userTypeUpdateError) {
-          console.error("Erro ao atualizar user_type:", userTypeUpdateError);
-        }
-      }
-    } else {
-      if (!password) {
-        throw new Error("Senha é obrigatória para novos usuários.");
-      }
-
-      if (!full_name) {
-        throw new Error("Nome completo é obrigatório para novos usuários.");
-      }
-
-      console.log("👤 Criando novo usuário para:", invitation.email);
-
-      const { data: newUser, error: signUpError } = await supabase.auth.admin.createUser({
-        email: invitation.email,
-        password,
-        email_confirm: true,
-        user_metadata: {
-          full_name,
-        },
-      });
-
-      if (signUpError) {
-        console.error("❌ Erro ao criar usuário:", signUpError);
-        throw new Error("Não foi possível criar a conta.");
-      }
-
-      userId = newUser.user.id;
-      isNewUser = true;
-
-      const { error: profileError } = await supabase.from("profiles").insert({
-        id: userId,
-        email: invitation.email,
-        full_name,
-        user_type: invitation.user_type,
-        role: "user",
-      });
-
-      if (profileError) {
-        console.error("❌ Erro ao criar profile:", profileError);
-      }
-    }
-
-    const { data: membership } = await supabase
-      .from("organization_memberships")
-      .select("id, is_active")
-      .eq("organization_id", invitation.organization_id)
-      .eq("profile_id", userId)
-      .maybeSingle();
-
-    if (membership?.is_active) {
-      throw new Error("Você já faz parte desta organização.");
-    }
-
-    const nowIso = new Date().toISOString();
-
-    if (membership && !membership.is_active) {
-      const { error: reactivateError } = await supabase
-        .from("organization_memberships")
-        .update({
-          is_active: true,
-          role: invitation.role,
-          joined_at: nowIso,
-          left_at: null,
-          invited_by: invitation.invited_by,
-        })
-        .eq("id", membership.id);
-
-      if (reactivateError) {
-        console.error("Erro ao reativar membership:", reactivateError);
-        throw new Error("Não foi possível reativar o acesso.");
-      }
-    } else {
-      const { error: membershipError } = await supabase.from("organization_memberships").insert({
-        organization_id: invitation.organization_id,
-        profile_id: userId,
-        role: invitation.role,
-        is_active: true,
-        joined_at: nowIso,
-        invited_by: invitation.invited_by,
-      });
-
-      if (membershipError) {
-        console.error("❌ Erro ao criar membership:", membershipError);
-        throw new Error("Não foi possível adicionar o usuário à organização.");
-      }
-    }
-
-    const { error: updateInvitationError } = await supabase
-      .from("team_invitations")
-      .update({
-        status: "accepted",
-        accepted_at: nowIso,
-        accepted_by: userId,
-      })
-      .eq("id", invitation.id);
-
-    if (updateInvitationError) {
-      console.error("Erro ao atualizar convite:", updateInvitationError);
-    }
-
-    // Definir organização ativa no perfil se estiver vazio ou se for novo usuário
     try {
-      const { data: profilePref } = await supabase
-        .from('profiles')
-        .select('active_organization_id')
-        .eq('id', userId)
+      // STEP 1: Criar ou recuperar usuário
+      if (existingProfile) {
+        console.log("✅ Perfil já existe:", existingProfile.email);
+        userId = existingProfile.id;
+
+        if (existingProfile.user_type !== invitation.user_type) {
+          const { error: userTypeUpdateError } = await supabase
+            .from("profiles")
+            .update({ user_type: invitation.user_type })
+            .eq("id", userId);
+
+          if (userTypeUpdateError) {
+            throw new Error(`Erro ao atualizar user_type: ${userTypeUpdateError.message}`);
+          }
+        }
+      } else {
+        if (!password) {
+          throw new Error("Senha é obrigatória para novos usuários.");
+        }
+
+        if (!full_name) {
+          throw new Error("Nome completo é obrigatório para novos usuários.");
+        }
+
+        console.log("👤 Criando novo usuário para:", invitation.email);
+
+        const { data: newUser, error: signUpError } = await supabase.auth.admin.createUser({
+          email: invitation.email,
+          password,
+          user_metadata: {
+            full_name,
+          },
+        });
+
+        if (signUpError) {
+          throw new Error(`Erro ao criar usuário: ${signUpError.message}`);
+        }
+
+        userId = newUser.user.id;
+        isNewUser = true;
+
+        // Compensação: Deletar usuário se o perfil falhar
+        compensations.push(async () => {
+          console.log("↩️  Compensando: Deletando usuário criado");
+          await supabase.auth.admin.deleteUser(userId);
+        });
+
+        const { error: profileError } = await supabase.from("profiles").insert({
+          id: userId,
+          email: invitation.email,
+          full_name,
+          user_type: invitation.user_type,
+          role: "user",
+        });
+
+        if (profileError) {
+          throw new Error(`Erro ao criar profile: ${profileError.message}`);
+        }
+
+        // Remover compensação se tudo OK (não precisa mais deletar usuário)
+        compensations.pop();
+      }
+
+      // STEP 2: Verificar membership existente
+      const { data: membership } = await supabase
+        .from("organization_memberships")
+        .select("id, is_active")
+        .eq("organization_id", invitation.organization_id)
+        .eq("profile_id", userId)
         .maybeSingle();
+
+      if (membership?.is_active) {
+        throw new Error("Você já faz parte desta organização.");
+      }
+
+      const nowIso = new Date().toISOString();
+
+      // STEP 3: Criar ou reativar membership
+      if (membership && !membership.is_active) {
+        const { error: reactivateError } = await supabase
+          .from("organization_memberships")
+          .update({
+            is_active: true,
+            role: invitation.role,
+            joined_at: nowIso,
+            left_at: null,
+            invited_by: invitation.invited_by,
+          })
+          .eq("id", membership.id);
+
+        if (reactivateError) {
+          throw new Error(`Erro ao reativar membership: ${reactivateError.message}`);
+        }
+
+        // Compensação: Desativar membership se posterior falhar
+        compensations.push(async () => {
+          console.log("↩️  Compensando: Desativando membership");
+          await supabase
+            .from("organization_memberships")
+            .update({ is_active: false, left_at: nowIso })
+            .eq("id", membership.id);
+        });
+      } else {
+        const { data: newMembership, error: membershipError } = await supabase
+          .from("organization_memberships")
+          .insert({
+            organization_id: invitation.organization_id,
+            profile_id: userId,
+            role: invitation.role,
+            is_active: true,
+            joined_at: nowIso,
+            invited_by: invitation.invited_by,
+          })
+          .select("id");
+
+        if (membershipError) {
+          throw new Error(`Erro ao criar membership: ${membershipError.message}`);
+        }
+
+        const membershipId = newMembership?.[0]?.id;
+
+        // Compensação: Deletar membership se posterior falhar
+        compensations.push(async () => {
+          console.log("↩️  Compensando: Deletando membership");
+          if (membershipId) {
+            await supabase
+              .from("organization_memberships")
+              .delete()
+              .eq("id", membershipId);
+          }
+        });
+      }
+
+      // STEP 4: Atualizar invitation status
+      const { error: updateInvitationError } = await supabase
+        .from("team_invitations")
+        .update({
+          status: "accepted",
+          accepted_at: nowIso,
+          accepted_by: userId,
+        })
+        .eq("id", invitation.id);
+
+      if (updateInvitationError) {
+        throw new Error(`Erro ao atualizar convite: ${updateInvitationError.message}`);
+      }
+
+      // Compensação: Reverter status do convite
+      compensations.push(async () => {
+        console.log("↩️  Compensando: Revertendo status do convite");
+        await supabase
+          .from("team_invitations")
+          .update({ status: "pending", accepted_at: null, accepted_by: null })
+          .eq("id", invitation.id);
+      });
+
+      // STEP 5: Definir organização ativa no perfil
+      const { data: profilePref } = await supabase
+        .from("profiles")
+        .select("active_organization_id")
+        .eq("id", userId)
+        .maybeSingle();
+
       if (isNewUser || !profilePref?.active_organization_id) {
         const { error: prefErr } = await supabase
-          .from('profiles')
+          .from("profiles")
           .update({ active_organization_id: invitation.organization_id })
-          .eq('id', userId);
-        if (prefErr) console.error('Erro ao salvar org ativa no perfil:', prefErr)
+          .eq("id", userId);
+
+        if (prefErr) {
+          throw new Error(`Erro ao salvar org ativa no perfil: ${prefErr.message}`);
+        }
       }
-    } catch (e) {
-      console.error('Falha ao definir organização ativa no perfil:', e)
+
+      // Limpar compensações se tudo deu certo
+      compensations.length = 0;
+    } catch (error) {
+      console.error("❌ Erro durante processamento, executando compensações...");
+
+      // Executar compensações em ordem reversa (LIFO)
+      for (let i = compensations.length - 1; i >= 0; i--) {
+        try {
+          await compensations[i]();
+        } catch (compError) {
+          console.error(`❌ Falha na compensação ${i}:`, compError);
+        }
+      }
+
+      throw error;
     }
 
     return new Response(

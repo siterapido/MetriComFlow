@@ -3,7 +3,6 @@
 -- para permitir análise granular de performance por conjunto e criativo
 
 BEGIN;
-
 -- ============================================================================
 -- 1. TABELA DE CONJUNTOS DE ANÚNCIOS (AD SETS)
 -- ============================================================================
@@ -33,15 +32,12 @@ CREATE TABLE IF NOT EXISTS public.ad_sets (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 -- Índices para performance
 CREATE INDEX IF NOT EXISTS idx_ad_sets_campaign_id ON public.ad_sets(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_ad_sets_status ON public.ad_sets(status);
 CREATE INDEX IF NOT EXISTS idx_ad_sets_external_id ON public.ad_sets(external_id);
-
 -- RLS Policies
 ALTER TABLE public.ad_sets ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Users can view ad sets from their org campaigns"
   ON public.ad_sets FOR SELECT
   USING (
@@ -55,15 +51,12 @@ CREATE POLICY "Users can view ad sets from their org campaigns"
       )
     )
   );
-
 CREATE POLICY "Service role can insert ad sets"
   ON public.ad_sets FOR INSERT
   WITH CHECK (auth.jwt() ->> 'role' = 'service_role' OR auth.uid() IS NOT NULL);
-
 CREATE POLICY "Service role can update ad sets"
   ON public.ad_sets FOR UPDATE
   USING (auth.jwt() ->> 'role' = 'service_role' OR auth.uid() IS NOT NULL);
-
 -- ============================================================================
 -- 2. TABELA DE ANÚNCIOS/CRIATIVOS (ADS)
 -- ============================================================================
@@ -100,17 +93,14 @@ CREATE TABLE IF NOT EXISTS public.ads (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 -- Índices para performance
 CREATE INDEX IF NOT EXISTS idx_ads_ad_set_id ON public.ads(ad_set_id);
 CREATE INDEX IF NOT EXISTS idx_ads_campaign_id ON public.ads(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_ads_status ON public.ads(status);
 CREATE INDEX IF NOT EXISTS idx_ads_external_id ON public.ads(external_id);
 CREATE INDEX IF NOT EXISTS idx_ads_creative_type ON public.ads(creative_type);
-
 -- RLS Policies
 ALTER TABLE public.ads ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Users can view ads from their org ad sets"
   ON public.ads FOR SELECT
   USING (
@@ -125,15 +115,12 @@ CREATE POLICY "Users can view ads from their org ad sets"
       )
     )
   );
-
 CREATE POLICY "Service role can insert ads"
   ON public.ads FOR INSERT
   WITH CHECK (auth.jwt() ->> 'role' = 'service_role' OR auth.uid() IS NOT NULL);
-
 CREATE POLICY "Service role can update ads"
   ON public.ads FOR UPDATE
   USING (auth.jwt() ->> 'role' = 'service_role' OR auth.uid() IS NOT NULL);
-
 -- ============================================================================
 -- 3. MÉTRICAS DIÁRIAS DE AD SETS
 -- ============================================================================
@@ -169,14 +156,11 @@ CREATE TABLE IF NOT EXISTS public.ad_set_daily_insights (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(ad_set_id, date)
 );
-
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_ad_set_insights_date ON public.ad_set_daily_insights(ad_set_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_ad_set_insights_campaign ON public.ad_set_daily_insights(campaign_id, date DESC);
-
 -- RLS
 ALTER TABLE public.ad_set_daily_insights ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Users can view ad set insights from their org"
   ON public.ad_set_daily_insights FOR SELECT
   USING (
@@ -191,11 +175,9 @@ CREATE POLICY "Users can view ad set insights from their org"
       )
     )
   );
-
 CREATE POLICY "Service role can manage ad set insights"
   ON public.ad_set_daily_insights FOR ALL
   USING (auth.jwt() ->> 'role' = 'service_role' OR auth.uid() IS NOT NULL);
-
 -- ============================================================================
 -- 4. MÉTRICAS DIÁRIAS DE ADS (CRIATIVOS)
 -- ============================================================================
@@ -239,15 +221,12 @@ CREATE TABLE IF NOT EXISTS public.ad_daily_insights (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(ad_id, date)
 );
-
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_ad_insights_date ON public.ad_daily_insights(ad_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_ad_insights_ad_set ON public.ad_daily_insights(ad_set_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_ad_insights_campaign ON public.ad_daily_insights(campaign_id, date DESC);
-
 -- RLS
 ALTER TABLE public.ad_daily_insights ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Users can view ad insights from their org"
   ON public.ad_daily_insights FOR SELECT
   USING (
@@ -263,11 +242,9 @@ CREATE POLICY "Users can view ad insights from their org"
       )
     )
   );
-
 CREATE POLICY "Service role can manage ad insights"
   ON public.ad_daily_insights FOR ALL
   USING (auth.jwt() ->> 'role' = 'service_role' OR auth.uid() IS NOT NULL);
-
 -- ============================================================================
 -- 5. TRIGGERS PARA UPDATED_AT
 -- ============================================================================
@@ -279,17 +256,14 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 CREATE TRIGGER update_ad_sets_updated_at
   BEFORE UPDATE ON public.ad_sets
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at_column();
-
 CREATE TRIGGER update_ads_updated_at
   BEFORE UPDATE ON public.ads
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at_column();
-
 -- ============================================================================
 -- 6. COMENTÁRIOS
 -- ============================================================================
@@ -298,8 +272,6 @@ COMMENT ON TABLE public.ad_sets IS 'Conjuntos de anúncios (Ad Sets) do Meta Ads
 COMMENT ON TABLE public.ads IS 'Anúncios individuais (criativos) do Meta Ads - nível mais granular de análise';
 COMMENT ON TABLE public.ad_set_daily_insights IS 'Métricas diárias por conjunto de anúncios';
 COMMENT ON TABLE public.ad_daily_insights IS 'Métricas diárias por anúncio/criativo individual';
-
 COMMENT ON COLUMN public.ads.creative_type IS 'Tipo de criativo: IMAGE, VIDEO, CAROUSEL, COLLECTION, etc.';
 COMMENT ON COLUMN public.ad_daily_insights.quality_ranking IS 'Meta Quality Ranking: ABOVE_AVERAGE, AVERAGE, BELOW_AVERAGE';
-
 COMMIT;

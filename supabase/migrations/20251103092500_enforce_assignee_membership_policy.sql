@@ -3,7 +3,6 @@
 -- Created: 2025-11-03
 
 BEGIN;
-
 -- Recreate INSERT/UPDATE policies for leads with a WITH CHECK guard on assignee_id
 DO $$
 BEGIN
@@ -48,6 +47,4 @@ BEGIN
       )
     );
 END $$;
-
 COMMIT;
-

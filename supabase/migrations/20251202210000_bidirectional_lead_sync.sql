@@ -38,9 +38,7 @@ BEGIN
   RAISE NOTICE 'fetch-meta-leads result: %', v_result;
 END;
 $$;
-
 COMMENT ON FUNCTION public.fetch_meta_leads_cron IS 'Sincroniza leads do Meta Ads API para o CRM (últimos 3 dias) - executa a cada 6 horas';
-
 -- ============================================================================
 -- CONFIGURAÇÃO DO CRON JOB
 -- ============================================================================
@@ -52,7 +50,6 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   NULL; -- Ignora se não existir
 END $$;
-
 -- Job 4: Buscar leads do Meta Ads API a cada 6 horas
 -- Horários de execução: 00:00, 06:00, 12:00, 18:00
 SELECT cron.schedule(
@@ -62,7 +59,6 @@ SELECT cron.schedule(
   SELECT public.fetch_meta_leads_cron();
   $$
 );
-
 -- ============================================================================
 -- TABELA: meta_lead_sync_log
 -- Rastreia sincronizações de leads do Meta para análise e debug
@@ -81,15 +77,12 @@ CREATE TABLE IF NOT EXISTS public.meta_lead_sync_log (
   sync_params JSONB,  -- Store since, until, limit
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_meta_lead_sync_log_account ON public.meta_lead_sync_log(ad_account_id);
 CREATE INDEX IF NOT EXISTS idx_meta_lead_sync_log_started_at ON public.meta_lead_sync_log(sync_started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_meta_lead_sync_log_status ON public.meta_lead_sync_log(status);
-
 -- RLS Policies
 ALTER TABLE public.meta_lead_sync_log ENABLE ROW LEVEL SECURITY;
-
 -- Owners podem ver todos os logs
 CREATE POLICY "Owners can view all sync logs"
   ON public.meta_lead_sync_log FOR SELECT
@@ -99,14 +92,11 @@ CREATE POLICY "Owners can view all sync logs"
       WHERE id = auth.uid() AND user_type = 'owner'
     )
   );
-
 -- Service role pode inserir/atualizar
 CREATE POLICY "Service role can manage sync logs"
   ON public.meta_lead_sync_log FOR ALL
   USING (auth.jwt()->>'role' = 'service_role');
-
 COMMENT ON TABLE public.meta_lead_sync_log IS 'Rastreia sincronizações de leads do Meta Ads API para o CRM';
-
 -- ============================================================================
 -- VIEW: meta_lead_sync_summary
 -- Resumo das sincronizações de leads (últimas 24 horas)
@@ -126,9 +116,7 @@ FROM public.meta_lead_sync_log
 WHERE sync_started_at >= NOW() - INTERVAL '24 hours'
 GROUP BY sync_hour
 ORDER BY sync_hour DESC;
-
 GRANT SELECT ON public.meta_lead_sync_summary TO authenticated;
-
 -- ============================================================================
 -- FUNÇÃO: get_lead_sync_stats
 -- Retorna estatísticas de sincronização de leads por conta
@@ -172,19 +160,15 @@ BEGIN
   GROUP BY l.ad_account_id, a.business_name;
 END;
 $$;
-
 COMMENT ON FUNCTION public.get_lead_sync_stats IS 'Retorna estatísticas de sincronização de leads por conta (últimas N horas)';
-
 -- ============================================================================
 -- ÍNDICE: leads.external_lead_id (para deduplicação rápida)
 -- ============================================================================
 
 CREATE INDEX IF NOT EXISTS idx_leads_external_lead_id ON public.leads(external_lead_id)
 WHERE external_lead_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS idx_leads_source_organization ON public.leads(source, organization_id)
 WHERE source = 'meta_ads';
-
 -- ============================================================================
 -- FUNÇÃO DE LIMPEZA: cleanup_old_lead_sync_logs
 -- Remove logs com mais de 90 dias
@@ -206,7 +190,6 @@ BEGIN
   RAISE NOTICE 'Cleaned up % old lead sync logs', v_deleted_count;
 END;
 $$;
-
 -- Agendar limpeza semanal (domingos às 03:00)
 DO $$
 BEGIN
@@ -214,7 +197,6 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   NULL; -- Ignora se não existir
 END $$;
-
 SELECT cron.schedule(
   'cleanup-old-lead-sync-logs-weekly',
   '0 3 * * 0',  -- Domingos às 03:00
@@ -222,7 +204,6 @@ SELECT cron.schedule(
   SELECT public.cleanup_old_lead_sync_logs();
   $$
 );
-
 -- ============================================================================
 -- VERIFICAÇÃO FINAL
 -- ============================================================================
@@ -247,14 +228,12 @@ BEGIN
       v_job.jobid, v_job.jobname, v_job.schedule, v_job.active;
   END LOOP;
 END $$;
-
 -- ============================================================================
 -- DOCUMENTAÇÃO
 -- ============================================================================
 
 COMMENT ON FUNCTION public.fetch_meta_leads_cron IS
 'Busca leads do Meta Ads API dos últimos 3 dias e insere no CRM. Executa a cada 6 horas (00:00, 06:00, 12:00, 18:00). Deduplicação automática via external_lead_id. Garante que leads que chegam fora do webhook também sejam sincronizados.';
-
 -- ============================================================================
 -- QUERY DE TESTE (comentada)
 -- ============================================================================
@@ -290,4 +269,4 @@ WHERE l.source = 'meta_ads'
   AND l.created_at >= NOW() - INTERVAL '30 days'
 GROUP BY c.name
 ORDER BY lead_count DESC;
-*/
+*/;

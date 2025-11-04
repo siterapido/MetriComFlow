@@ -16,22 +16,18 @@ ADD COLUMN IF NOT EXISTS last_contact_date TIMESTAMP WITH TIME ZONE,
 ADD COLUMN IF NOT EXISTS next_follow_up_date TIMESTAMP WITH TIME ZONE,
 ADD COLUMN IF NOT EXISTS lead_score INTEGER DEFAULT 0 CHECK (lead_score >= 0 AND lead_score <= 100),
 ADD COLUMN IF NOT EXISTS conversion_probability DECIMAL(5,2) DEFAULT 0 CHECK (conversion_probability >= 0 AND conversion_probability <= 100);
-
 -- Update lead status to include more CRM-specific statuses
 ALTER TABLE public.leads 
 DROP CONSTRAINT IF EXISTS leads_status_check;
-
 ALTER TABLE public.leads
 ADD CONSTRAINT leads_status_check 
 CHECK (status IN ('novo_lead', 'qualificacao', 'proposta', 'negociacao', 'fechado_ganho', 'fechado_perdido', 'follow_up', 'aguardando_resposta'));
-
 -- Add indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_leads_priority ON public.leads(priority);
 CREATE INDEX IF NOT EXISTS idx_leads_expected_close_date ON public.leads(expected_close_date);
 CREATE INDEX IF NOT EXISTS idx_leads_last_contact_date ON public.leads(last_contact_date);
 CREATE INDEX IF NOT EXISTS idx_leads_next_follow_up_date ON public.leads(next_follow_up_date);
 CREATE INDEX IF NOT EXISTS idx_leads_lead_score ON public.leads(lead_score);
-
 -- =====================================================
 -- TASKS TABLE
 -- =====================================================
@@ -62,27 +58,21 @@ CREATE TABLE public.tasks (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 -- Enable RLS
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
-
 -- RLS Policies for tasks
 CREATE POLICY "Users with CRM access can view tasks"
   ON public.tasks FOR SELECT
   USING (has_crm_access(auth.uid()));
-
 CREATE POLICY "Users with CRM access can create tasks"
   ON public.tasks FOR INSERT
   WITH CHECK (has_crm_access(auth.uid()));
-
 CREATE POLICY "Users can update their assigned tasks"
   ON public.tasks FOR UPDATE
   USING (has_crm_access(auth.uid()) AND (assigned_to = auth.uid() OR created_by = auth.uid() OR is_owner(auth.uid())));
-
 CREATE POLICY "Users can delete their created tasks"
   ON public.tasks FOR DELETE
   USING (has_crm_access(auth.uid()) AND (created_by = auth.uid() OR is_owner(auth.uid())));
-
 -- Indexes for tasks
 CREATE INDEX idx_tasks_lead_id ON public.tasks(lead_id);
 CREATE INDEX idx_tasks_assigned_to ON public.tasks(assigned_to);
@@ -90,7 +80,6 @@ CREATE INDEX idx_tasks_status ON public.tasks(status);
 CREATE INDEX idx_tasks_due_date ON public.tasks(due_date);
 CREATE INDEX idx_tasks_reminder_date ON public.tasks(reminder_date);
 CREATE INDEX idx_tasks_priority ON public.tasks(priority);
-
 -- =====================================================
 -- INTERACTIONS TABLE
 -- =====================================================
@@ -126,27 +115,21 @@ CREATE TABLE public.interactions (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
 -- Enable RLS
 ALTER TABLE public.interactions ENABLE ROW LEVEL SECURITY;
-
 -- RLS Policies for interactions
 CREATE POLICY "Users with CRM access can view interactions"
   ON public.interactions FOR SELECT
   USING (has_crm_access(auth.uid()));
-
 CREATE POLICY "Users with CRM access can create interactions"
   ON public.interactions FOR INSERT
   WITH CHECK (has_crm_access(auth.uid()) AND user_id = auth.uid());
-
 CREATE POLICY "Users can update their interactions"
   ON public.interactions FOR UPDATE
   USING (has_crm_access(auth.uid()) AND user_id = auth.uid());
-
 CREATE POLICY "Users can delete their interactions"
   ON public.interactions FOR DELETE
   USING (has_crm_access(auth.uid()) AND (user_id = auth.uid() OR is_owner(auth.uid())));
-
 -- Indexes for interactions
 CREATE INDEX idx_interactions_lead_id ON public.interactions(lead_id);
 CREATE INDEX idx_interactions_task_id ON public.interactions(task_id);
@@ -154,7 +137,6 @@ CREATE INDEX idx_interactions_user_id ON public.interactions(user_id);
 CREATE INDEX idx_interactions_type ON public.interactions(interaction_type);
 CREATE INDEX idx_interactions_date ON public.interactions(interaction_date);
 CREATE INDEX idx_interactions_follow_up_date ON public.interactions(follow_up_date);
-
 -- =====================================================
 -- SALES METRICS VIEW
 -- =====================================================
@@ -217,10 +199,8 @@ SELECT
 
 FROM public.leads l
 WHERE l.created_at >= DATE_TRUNC('year', NOW()) - INTERVAL '1 year';
-
 -- Grant access to the view
 GRANT SELECT ON public.sales_metrics TO authenticated;
-
 -- =====================================================
 -- TRIGGERS AND FUNCTIONS
 -- =====================================================
@@ -238,13 +218,11 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 -- Trigger to update last_contact_date
 CREATE TRIGGER trigger_update_lead_last_contact
   AFTER INSERT ON public.interactions
   FOR EACH ROW
   EXECUTE FUNCTION update_lead_last_contact();
-
 -- Function to auto-complete task when interaction is logged
 CREATE OR REPLACE FUNCTION auto_complete_task()
 RETURNS TRIGGER AS $$
@@ -263,13 +241,11 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 -- Trigger to auto-complete tasks
 CREATE TRIGGER trigger_auto_complete_task
   AFTER INSERT ON public.interactions
   FOR EACH ROW
   EXECUTE FUNCTION auto_complete_task();
-
 -- Function to create follow-up task if needed
 CREATE OR REPLACE FUNCTION create_follow_up_task()
 RETURNS TRIGGER AS $$
@@ -300,13 +276,11 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
 -- Trigger to create follow-up tasks
 CREATE TRIGGER trigger_create_follow_up_task
   AFTER INSERT ON public.interactions
   FOR EACH ROW
   EXECUTE FUNCTION create_follow_up_task();
-
 -- =====================================================
 -- INITIAL DATA
 -- =====================================================
@@ -320,7 +294,6 @@ INSERT INTO public.labels (name, color) VALUES
   ('Demo Agendada', '#8B5CF6'),
   ('Contrato Enviado', '#06B6D4')
 ON CONFLICT (name) DO NOTHING;
-
 -- Update existing leads to have better default values
 UPDATE public.leads 
 SET 
@@ -328,7 +301,6 @@ SET
   lead_score = 50,
   conversion_probability = 25.0
 WHERE priority IS NULL OR lead_score IS NULL OR conversion_probability IS NULL;
-
 -- =====================================================
 -- COMMENTS
 -- =====================================================
@@ -336,7 +308,6 @@ WHERE priority IS NULL OR lead_score IS NULL OR conversion_probability IS NULL;
 COMMENT ON TABLE public.tasks IS 'CRM tasks and reminders assigned to team members';
 COMMENT ON TABLE public.interactions IS 'Record of all interactions with leads (calls, emails, meetings, etc.)';
 COMMENT ON VIEW public.sales_metrics IS 'Aggregated sales metrics for reporting and analytics';
-
 COMMENT ON COLUMN public.leads.product_interest IS 'Product or service the lead is interested in';
 COMMENT ON COLUMN public.leads.lead_source_detail IS 'Detailed source information (campaign name, referrer, etc.)';
 COMMENT ON COLUMN public.leads.priority IS 'Lead priority level for sales team';

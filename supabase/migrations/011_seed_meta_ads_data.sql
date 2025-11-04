@@ -11,7 +11,6 @@ SELECT
   true,
   (SELECT id FROM profiles LIMIT 1)
 WHERE NOT EXISTS (SELECT 1 FROM ad_accounts LIMIT 1);
-
 -- Inserir campanhas de teste (apenas se não existirem)
 WITH test_account AS (
   SELECT id FROM ad_accounts LIMIT 1
@@ -27,7 +26,6 @@ SELECT
   CURRENT_DATE - INTERVAL '90 days'
 FROM generate_series(1, 3)
 WHERE NOT EXISTS (SELECT 1 FROM ad_campaigns LIMIT 1);
-
 -- Inserir dados diários de insights (últimos 90 dias)
 WITH
   test_campaigns AS (
@@ -67,6 +65,5 @@ WHERE NOT EXISTS (
   SELECT 1 FROM campaign_daily_insights
   WHERE campaign_daily_insights.date = ds.date
 );
-
 -- Comentário informativo
 COMMENT ON TABLE campaign_daily_insights IS 'Dados de teste gerados automaticamente para desenvolvimento. Em produção, estes dados virão da API do Meta.';

@@ -1,0 +1,179 @@
+═══════════════════════════════════════════════════════════════════════════════
+                    ANÁLISE SISTEMA DE CONVITES - SUMÁRIO
+═══════════════════════════════════════════════════════════════════════════════
+
+Data: 2025-11-04
+Analista: Claude Code
+Status: COMPLETO
+
+───────────────────────────────────────────────────────────────────────────────
+ARQUIVOS ANALISADOS (10 principais)
+───────────────────────────────────────────────────────────────────────────────
+
+FRONTEND:
+  ✓ /src/hooks/useInvitations.ts (237 linhas)
+  ✓ /src/hooks/useTeamManagement.ts (222 linhas)
+  ✓ /src/hooks/useTeam.ts (100+ linhas)
+  ✓ /src/components/team/InviteMemberDialog.tsx (181 linhas)
+  ✓ /src/components/team/InvitationCard.tsx (169 linhas)
+  ✓ /src/pages/TeamManagement.tsx (341 linhas)
+  ✓ /src/pages/AcceptInvitation.tsx (196 linhas)
+
+BACKEND:
+  ✓ /supabase/functions/send-team-invitation/index.ts (329 linhas)
+  ✓ /supabase/functions/accept-invitation/index.ts (237 linhas)
+  ✓ /supabase/migrations/20251023_team_invitations_system.sql (344 linhas)
+
+═══════════════════════════════════════════════════════════════════════════════
+FLUXO IDENTIFICADO
+═══════════════════════════════════════════════════════════════════════════════
+
+ENVIO:
+  1. Owner acessa página /equipe (TeamManagement)
+  2. Clica "Convidar membro" → abre InviteMemberDialog
+  3. Preencha email + user_type (sales/traffic_manager/owner)
+  4. Submit → useInvitations.sendInvitation()
+  5. Edge Function send-team-invitation:
+     - Valida JWT e verifica se é owner
+     - Valida email (bloqueia domínios suspeitos)
+     - Verifica rate limit (10 convites/hora por org)
+     - Verifica duplicatas (membro ativo ou convite pendente)
+     - Cria registro em team_invitations com token único
+     - Envia email via Resend (ou Supabase Auth)
+  6. Retorna success + invite_link
+
+ACEITAÇÃO:
+  1. Usuário recebe email com link /accept-invitation?token=xxx
+  2. AcceptInvitation page carrega e valida token (RPC)
+  3. Se não autenticado: exibe form de criar conta (nome + senha)
+  4. Se autenticado: mostra info do convite
+  5. Clica "Aceitar" → Edge Function accept-invitation:
+     - Valida token via RPC
+     - Verifica status 'pending' e não expirou
+     - Se novo usuário: cria auth.users + profiles
+     - Se existente: atualiza user_type se diferente
+     - Verifica/cria membership em organization_memberships
+     - Marca convite como 'accepted'
+     - Define org como active_organization_id
+  6. Redireciona para /login
+
+═══════════════════════════════════════════════════════════════════════════════
+PROBLEMAS ENCONTRADOS: 15 ISSUES
+═══════════════════════════════════════════════════════════════════════════════
+
+CRÍTICA (3):
+  #5  RLS Policy Muito Restritiva - Admin não pode enviar convites
+  #7  Sem Confirmação de Email - Takeover risk
+  #8  Sincronização de Dados - Múltiplas tabelas sem transação
+
+ALTA (2):
+  #2  Dialog sem Campo Role - Sempre cria com role='member'
+  #15 Sem Feedback de Email Falho - Retorna sucesso mesmo que email falhe
+
+MÉDIA (2-3):
+  #1  Role vs User Type Confuso - Conceitos misturados
+  #3  Sem Validação de Senha - Aceita senhas fracas
+  #6  Rate Limit por Org - Não por usuário
+
+BAIXA (8):
+  #4, #9, #10, #11, #12, #13, #14 (ver detalhes nos relatórios)
+
+═══════════════════════════════════════════════════════════════════════════════
+RECOMENDAÇÕES PRIORITÁRIAS
+═══════════════════════════════════════════════════════════════════════════════
+
+PRIORIDADE 1 (Segurança Crítica):
+  □ Corrigir RLS para permitir admin enviar convites (#5)
+    Arquivo: 20251023_team_invitations_system.sql
+    Ação: Trocar política de 'owner_id = auth.uid()' para 'role IN (owner, admin)'
+
+  □ Remover email_confirm automático (#7)
+    Arquivo: accept-invitation/index.ts
+    Ação: Remover 'email_confirm: true' do createUser
+
+PRIORIDADE 2 (Funcionalidade):
+  □ Adicionar campo Role ao dialog (#2)
+    Arquivo: InviteMemberDialog.tsx
+    Ação: Adicionar select para role (owner/admin/manager/member)
+
+  □ Melhorar feedback de email (#15)
+    Arquivo: send-team-invitation/index.ts
+    Ação: Lançar erro se email falhar, não continuar como sucesso
+
+PRIORIDADE 3 (Integridade):
+  □ Adicionar transação/compensação (#8)
+    Arquivo: accept-invitation/index.ts
+    Ação: Envolver 5 operações em try/catch com rollback
+
+═══════════════════════════════════════════════════════════════════════════════
+O QUE FUNCIONA BEM
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ Fluxo base de envio de convite (validações, email, armazenamento)
+✓ Fluxo base de aceitação (validação token, criação usuário, membership)
+✓ Reenvio e revogação de convites
+✓ UI moderna e bem desenhada (cards, diálogos, filtros)
+✓ Validações básicas (email, domínios suspeitos, duplicatas)
+✓ Rate limiting por organização
+✓ Prevenção de membros duplicados (índice pendente)
+✓ Filtragem e busca de membros funcionam
+
+═══════════════════════════════════════════════════════════════════════════════
+DOCUMENTAÇÃO GERADA
+═══════════════════════════════════════════════════════════════════════════════
+
+Três arquivos foram criados neste diretório para consulta:
+
+1. INVITATION_SYSTEM_ANALYSIS.md (COMPLETO)
+   - Análise detalhada de cada issue
+   - Código problemático com explicações
+   - RLS policies
+   - Recomendações
+
+2. QUICK_REFERENCE.md (PRÁTICO)
+   - Linhas específicas por arquivo
+   - Code snippets de antes/depois
+   - Tabelas de ação por issue
+   - Resumo de arquivos para modificar
+
+3. ANALYSIS_SUMMARY.txt (ESTE ARQUIVO)
+   - Visão geral executiva
+   - Lista de arquivos analisados
+   - Fluxo resumido
+   - Próximos passos
+
+═══════════════════════════════════════════════════════════════════════════════
+PRÓXIMOS PASSOS RECOMENDADOS
+═══════════════════════════════════════════════════════════════════════════════
+
+IMEDIATO:
+  1. Ler QUICK_REFERENCE.md para identificar linhas exatas
+  2. Clonar issues #5, #7, #8, #2, #15 para seu sistema de rastreamento
+  3. Começar com fix de #5 (mais simples, alto impacto)
+
+CURTO PRAZO (1-2 sprints):
+  - Fix #7 (email_confirm)
+  - Fix #2 (role field)
+  - Fix #8 (transação/compensação)
+  - Fix #15 (email feedback)
+
+MÉDIO PRAZO (2-4 sprints):
+  - Fix #3, #6, #1
+  - Adicionar auditoria (#11)
+  - Implementar cron cleanup (#12, #13)
+
+═══════════════════════════════════════════════════════════════════════════════
+RESUMO
+═══════════════════════════════════════════════════════════════════════════════
+
+O sistema de convites está FUNCIONALMENTE OPERACIONAL mas com 15 issues
+identificados, sendo 3 críticos que precisam correção prioritária.
+
+Maioria dos issues são de segurança (RLS, email confirm) e UX (feedback, role).
+
+Fluxo base funciona bem, problemas aparecem em edge cases e falhas parciais.
+
+Recomenda-se começar pelas 3 issues críticas (#5, #7, #8) antes de adicionar
+novas features.
+
+═══════════════════════════════════════════════════════════════════════════════

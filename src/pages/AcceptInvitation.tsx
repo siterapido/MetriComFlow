@@ -4,9 +4,11 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { AlertTriangle, CheckCircle, AlertCircle } from "lucide-react";
 
 interface InvitationDetails {
   id: string;
@@ -25,6 +27,46 @@ function useQueryParam(key: string) {
   return useMemo(() => new URLSearchParams(location.search).get(key), [location.search, key]);
 }
 
+interface PasswordStrength {
+  score: number; // 0-4
+  label: "muito fraca" | "fraca" | "média" | "forte" | "muito forte";
+  color: "text-destructive" | "text-orange-500" | "text-yellow-500" | "text-blue-500" | "text-success";
+  bgColor: "bg-destructive/10" | "bg-orange-500/10" | "bg-yellow-500/10" | "bg-blue-500/10" | "bg-success/10";
+}
+
+function validatePassword(password: string): PasswordStrength {
+  let score = 0;
+
+  // Comprimento
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+
+  // Maiúsculas
+  if (/[A-Z]/.test(password)) score++;
+
+  // Minúsculas
+  if (/[a-z]/.test(password)) score++;
+
+  // Números
+  if (/[0-9]/.test(password)) score++;
+
+  // Caracteres especiais
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+
+  // Normalizar para 0-4
+  const normalizedScore = Math.min(Math.floor(score / 1.5), 4);
+
+  const strengths: PasswordStrength[] = [
+    { score: 0, label: "muito fraca", color: "text-destructive", bgColor: "bg-destructive/10" },
+    { score: 1, label: "fraca", color: "text-orange-500", bgColor: "bg-orange-500/10" },
+    { score: 2, label: "média", color: "text-yellow-500", bgColor: "bg-yellow-500/10" },
+    { score: 3, label: "forte", color: "text-blue-500", bgColor: "bg-blue-500/10" },
+    { score: 4, label: "muito forte", color: "text-success", bgColor: "bg-success/10" },
+  ];
+
+  return strengths[normalizedScore] || strengths[0];
+}
+
 export default function AcceptInvitation() {
   const token = useQueryParam("token");
   const navigate = useNavigate();
@@ -36,6 +78,10 @@ export default function AcceptInvitation() {
   const [error, setError] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
+
+  // Password strength validation
+  const passwordStrength = validatePassword(password);
+  const isPasswordValid = passwordStrength.score >= 2; // "média" ou melhor
 
   useEffect(() => {
     const fetchInvitation = async () => {
@@ -92,6 +138,14 @@ export default function AcceptInvitation() {
     if (!session && (!fullName || !password)) {
       setError("Preencha nome completo e senha para criar sua conta.");
       return;
+    }
+
+    // Validar força de senha para novos usuários
+    if (!session && password) {
+      if (!isPasswordValid) {
+        setError(`Senha muito fraca (${passwordStrength.label}). Use pelo menos 8 caracteres com maiúsculas, minúsculas e números.`);
+        return;
+      }
     }
 
     setAccepting(true);
@@ -176,7 +230,46 @@ export default function AcceptInvitation() {
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
                       disabled={accepting}
+                      className={password ? (isPasswordValid ? "border-success" : "border-destructive") : ""}
                     />
+
+                    {/* Password strength indicator */}
+                    {password && (
+                      <div className={`rounded-md p-3 ${passwordStrength.bgColor}`}>
+                        <div className="flex items-center gap-2">
+                          {isPasswordValid ? (
+                            <CheckCircle className={`h-4 w-4 ${passwordStrength.color}`} />
+                          ) : (
+                            <AlertCircle className={`h-4 w-4 ${passwordStrength.color}`} />
+                          )}
+                          <span className={`text-sm font-medium ${passwordStrength.color}`}>
+                            Força: {passwordStrength.label}
+                          </span>
+                        </div>
+
+                        {/* Password requirements */}
+                        <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                          <div className={password.length >= 8 ? "text-success" : ""}>
+                            • Mínimo 8 caracteres {password.length >= 8 && "✓"}
+                          </div>
+                          <div className={/[A-Z]/.test(password) ? "text-success" : ""}>
+                            • Pelo menos uma maiúscula {/[A-Z]/.test(password) && "✓"}
+                          </div>
+                          <div className={/[a-z]/.test(password) ? "text-success" : ""}>
+                            • Pelo menos uma minúscula {/[a-z]/.test(password) && "✓"}
+                          </div>
+                          <div className={/[0-9]/.test(password) ? "text-success" : ""}>
+                            • Pelo menos um número {/[0-9]/.test(password) && "✓"}
+                          </div>
+                        </div>
+
+                        {!isPasswordValid && (
+                          <p className="mt-2 text-xs text-destructive font-medium">
+                            ⚠️ Sua senha é muito fraca. Adicione mais complexidade.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -185,7 +278,16 @@ export default function AcceptInvitation() {
         </CardContent>
         <CardFooter className="flex flex-col gap-3 sm:flex-row sm:justify-between">
           <Button variant="outline" onClick={() => navigate("/login")}>Voltar ao login</Button>
-          <Button onClick={handleAccept} disabled={loading || accepting || !!error || !invitation}>
+          <Button
+            onClick={handleAccept}
+            disabled={
+              loading ||
+              accepting ||
+              !!error ||
+              !invitation ||
+              (!session && (!fullName || !password || !isPasswordValid))
+            }
+          >
             {accepting ? "Processando..." : session ? "Aceitar convite" : "Criar conta e entrar"}
           </Button>
         </CardFooter>
