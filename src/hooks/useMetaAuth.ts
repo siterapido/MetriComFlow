@@ -722,6 +722,25 @@ export function useMetaAuth() {
         throw new Error(errorMessage);
       }
 
+      // Refresh local caches so the UI reflects newly synced campaigns without a reload
+      await fetchData();
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['ad-accounts'] }),
+        queryClient.invalidateQueries({ queryKey: ['ad-campaigns'] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-financials'] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-financials-filtered'] }),
+        queryClient.invalidateQueries({ queryKey: ['metrics-summary'] }),
+        queryClient.invalidateQueries({ queryKey: ['filtered-insights'] }),
+        queryClient.invalidateQueries({ queryKey: ['conversion-funnel'] }),
+        queryClient.invalidateQueries({ queryKey: ['conversion-time-funnel'] }),
+        queryClient.invalidateQueries({ queryKey: ['ad-sets'] }),
+        queryClient.invalidateQueries({ queryKey: ['ad-set-metrics'] }),
+        queryClient.invalidateQueries({ queryKey: ['ads'] }),
+        queryClient.invalidateQueries({ queryKey: ['ad-metrics'] }),
+        queryClient.invalidateQueries({ queryKey: ['creative-performance'] }),
+      ]);
+
       return {
         success: true,
         message: data?.message || 'Campanhas sincronizadas com sucesso',

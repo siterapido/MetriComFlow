@@ -1,0 +1,224 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                  GUIA DE LEITURA - DOCUMENTAÇÃO META ADS                   ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📚 DOCUMENTAÇÃO CRIADA (4 arquivos)
+
+1. META_ADS_RESUMO_EXECUTIVO.md (11 KB)
+   ├─ Visão geral executiva
+   ├─ Checklist do que está implementado vs faltando
+   ├─ Hierarquia de tabelas
+   ├─ Fluxo de sincronização (7 etapas)
+   ├─ Métricas disponíveis por nível
+   ├─ Como usar os hooks
+   └─ Próximos passos recomendados
+   
+   ⏱ Tempo de leitura: 10 minutos
+   👥 Para: Gerentes, product owners, quem quer visão rápida
+
+2. META_ADS_QUICK_REFERENCE.md (9.7 KB)
+   ├─ Tabelas de dados (visual tree)
+   ├─ Fluxo de sincronização (diagrama)
+   ├─ Edge Functions (tabela)
+   ├─ Hooks (resumo)
+   ├─ Views de agregação
+   ├─ Multi-tenancy
+   ├─ Meta API endpoints
+   ├─ Troubleshooting
+   └─ Referência de arquivos
+   
+   ⏱ Tempo de leitura: 15 minutos
+   👥 Para: Desenvolvedores que precisam de referência rápida
+
+3. META_ADS_ARCHITECTURE.md (21 KB) - COMPLETO
+   ├─ Tabelas detalhadas (com comentários de cada coluna)
+   ├─ Hooks com interfaces TypeScript
+   ├─ Edge Functions com descrição de funcionamento
+   ├─ Views de agregação (SQL)
+   ├─ Dados sincronizados (o que tem e falta)
+   ├─ Fluxo completo de sincronização
+   ├─ Arquitetura multi-tenancy
+   ├─ Endpoints do Meta API usados
+   └─ Status da implementação
+   
+   ⏱ Tempo de leitura: 30 minutos
+   👥 Para: Arquitetos, desenvolvedores backend, código review
+
+4. META_ADS_CODE_EXAMPLES.md (17 KB)
+   ├─ 9 exemplos práticos de código
+   ├─ Conectar OAuth
+   ├─ Adicionar contas
+   ├─ Sincronizar dados
+   ├─ Listar campanhas
+   ├─ Exibir criativos com imagens
+   ├─ Dashboard de performance
+   ├─ Queries diretas ao banco
+   ├─ Integração com dashboard
+   └─ Boas práticas
+   
+   ⏱ Tempo de leitura: 20 minutos (referência)
+   👥 Para: Desenvolvedores implementando features
+
+════════════════════════════════════════════════════════════════════════════
+
+📊 O QUE VOCÊ VAI APRENDER
+
+✅ IMPLEMENTADO (9 de 10 recursos)
+  ✓ OAuth com Meta Business Manager
+  ✓ Gerenciamento de contas publicitárias
+  ✓ Sincronização de campanhas
+  ✓ Métricas diárias de campanha
+  ✓ Ad sets com targeting completo (NOVO)
+  ✓ Anúncios/criativos com conteúdo (NOVO)
+  ✓ Métricas por ad set (NOVO)
+  ✓ Métricas por criativo + Meta Quality Ranking (NOVO)
+  ✓ KPIs consolidados
+  ✓ Financeiros por campanha
+
+❌ NÃO IMPLEMENTADO (8 features para futuro)
+  ✗ Audience performance
+  ✗ Budget pacing/forecasting
+  ✗ A/B testing results
+  ✗ Attribution modeling
+  ✗ Creative fatigue detection
+  ✗ Cross-campaign comparison
+  ✗ Meta Conversion API (table criada, sem hooks)
+  ✗ Lead form field mapping
+
+════════════════════════════════════════════════════════════════════════════
+
+🏗️ ESTRUTURA DE DADOS (9 Tabelas)
+
+meta_business_connections → ad_accounts → ad_campaigns
+                                              ↓
+                                    campaign_daily_insights
+                                              ↓
+                                          ad_sets
+                                              ↓
+                                    ad_set_daily_insights
+                                              ↓
+                                            ads
+                                              ↓
+                                      ad_daily_insights
+
+════════════════════════════════════════════════════════════════════════════
+
+🔄 FLUXO DE SINCRONIZAÇÃO (7 etapas)
+
+1. OAuth → Meta authorization code → access token
+2. Add Account → ad_accounts table
+3. Sync Campaigns → connect-ad-account function → ad_campaigns table
+4. Sync Daily Insights → sync-daily-insights function → campaign_daily_insights
+5. Sync Ad Sets → sync-ad-sets function → ad_sets table
+6. Sync Ads/Creatives → sync-ads function → ads table
+7. Sync Metrics → sync-adset-insights + sync-ad-insights → insights tables
+
+════════════════════════════════════════════════════════════════════════════
+
+🪝 HOOKS (3 principais)
+
+useMetaAuth() → OAuth + account management + sync
+useMetaMetrics() → Fetch campaigns + KPIs
+useAdSetsAndAds() → Fetch ad sets + ads + metrics
+
+════════════════════════════════════════════════════════════════════════════
+
+📈 MÉTRICAS DISPONÍVEIS
+
+Por Campanha:
+  spend, impressions, clicks, leads_count, cpl, roas, taxa_conversao
+
+Por Ad Set (NOVO):
+  + reach, frequency, cpm, cpc, cpl
+
+Por Criativo (NOVO):
+  + quality_ranking, engagement_ranking, conversion_ranking, video_views
+
+════════════════════════════════════════════════════════════════════════════
+
+🎯 RECOMENDAÇÃO DE LEITURA
+
+PRIMEIRA VEZ NO PROJETO?
+  1. META_ADS_RESUMO_EXECUTIVO.md (10 min)
+  2. META_ADS_QUICK_REFERENCE.md (15 min)
+  3. META_ADS_CODE_EXAMPLES.md (20 min como referência)
+
+DESENVOLVEDOR NOVO NA FEATURE?
+  1. META_ADS_QUICK_REFERENCE.md (visão rápida)
+  2. META_ADS_CODE_EXAMPLES.md (exemplos de código)
+  3. META_ADS_ARCHITECTURE.md (detalhes conforme necessário)
+
+CÓDIGO REVIEW?
+  → META_ADS_ARCHITECTURE.md (seção "Views e Queries")
+  → Verificar RLS policies
+
+IMPLEMENTANDO NOVA FEATURE?
+  → META_ADS_CODE_EXAMPLES.md (copiar padrões)
+  → META_ADS_ARCHITECTURE.md (entender estrutura)
+
+TROUBLESHOOTING?
+  → META_ADS_QUICK_REFERENCE.md (seção "Troubleshooting")
+  → META_ADS_RESUMO_EXECUTIVO.md (seção "Limitações")
+
+════════════════════════════════════════════════════════════════════════════
+
+📝 NOTAS IMPORTANTES
+
+1. MULTI-TENANCY
+   Todos os dados são filtrados por organization_id
+   Sempre use useActiveOrganization() para pegar a org atual
+
+2. SINCRONIZAÇÃO
+   Tudo é MANUAL (não há cron automático)
+   Use sync-daily-insights com date range para full-year support
+
+3. RATE LIMITING
+   Meta API: máx 200 calls/hora por ad account
+   Implementado: backoff automático em sync-daily-insights
+
+4. TOKENS
+   Armazenados em meta_business_connections
+   Expiração: 60 dias (fallback: META_ACCESS_TOKEN env var)
+
+5. PERFORMANCE
+   Use maxDaysPerChunk (default 30) para evitar timeouts
+   Optimize com índices em campaign_id, date, ad_set_id
+
+════════════════════════════════════════════════════════════════════════════
+
+🚀 PRÓXIMOS PASSOS RECOMENDADOS
+
+1. Cron jobs para sincronização automática (diária)
+2. Dashboard de performance de criativo (top performers)
+3. Budget monitoring com alertas (80% threshold)
+4. Attribution modeling (first-touch vs last-touch)
+5. A/B test result sync com Meta
+6. Audience performance analysis
+
+════════════════════════════════════════════════════════════════════════════
+
+📂 ARQUIVO LOCALIZAÇÃO
+
+/Users/marcosalexandre/metricom-flow/docs/
+
+├── META_ADS_RESUMO_EXECUTIVO.md ← Comece por aqui
+├── META_ADS_QUICK_REFERENCE.md ← Consulte frequentemente
+├── META_ADS_ARCHITECTURE.md ← Referência completa
+└── META_ADS_CODE_EXAMPLES.md ← Exemplos práticos
+
+════════════════════════════════════════════════════════════════════════════
+
+✅ CONCLUSÃO
+
+A documentação fornece uma visão completa da integração Meta Ads:
+  • 9 tabelas de dados estruturadas
+  • 7 edge functions de sincronização
+  • 3 hooks principais
+  • 9 de 10 recursos implementados
+  • Suporte a full-year data range
+  • Multi-tenancy segura com RLS
+  • Meta Quality Ranking integrado
+
+Pronto para desenvolvimento!
+
+════════════════════════════════════════════════════════════════════════════
