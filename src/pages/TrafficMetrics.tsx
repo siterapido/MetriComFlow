@@ -27,6 +27,7 @@ import { DateRangeFilter } from '@/components/meta-ads/DateRangeFilter';
 import { MetaAdsKPICards } from '@/components/meta-ads/MetaAdsKPICards';
 import { CreativeGrid } from '@/components/metrics/CreativeCard';
 import { CampaignPerformanceTable } from '@/components/metrics/CampaignPerformanceTable';
+import { MetaAdsConnectionCard } from '@/components/metrics/MetaAdsConnectionCard';
 import { useMetaConnectionStatus } from '@/hooks/useMetaConnectionStatus';
 import { useMetricsSummary, useAdAccounts, useAdCampaigns } from '@/hooks/useMetaMetrics';
 import { useMetaAuth } from '@/hooks/useMetaAuth';
@@ -42,11 +43,13 @@ import {
   useSyncAdInsights,
 } from '@/hooks/useAdSetsAndAds';
 import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
 import { formatCurrency, formatNumber } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 
 export default function TrafficMetrics() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [dateRange, setDateRange] = useState({
     start: '2020-01-01',
     end: new Date().toISOString().split('T')[0],
@@ -59,6 +62,18 @@ export default function TrafficMetrics() {
 
   // Meta auth utilities (to ensure campaigns are present)
   const { syncCampaigns } = useMetaAuth();
+
+  // Handle successful connection
+  const handleConnectionSuccess = () => {
+    // Invalidate related queries to refresh connection status
+    queryClient.invalidateQueries({ queryKey: ['metaConnectionStatus'] });
+    queryClient.invalidateQueries({ queryKey: ['adAccounts'] });
+    queryClient.invalidateQueries({ queryKey: ['adCampaigns'] });
+    toast({
+      title: 'Conexão Estabelecida',
+      description: 'Meta Business conectado com sucesso! Clique em Sincronizar para atualizar os dados.',
+    });
+  };
 
   // Meta Connection Status
   const { hasActiveConnection, isLoading: statusLoading } = useMetaConnectionStatus();
@@ -195,15 +210,7 @@ export default function TrafficMetrics() {
           </div>
         </div>
 
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>Conecte-se ao Meta Business Manager para visualizar métricas detalhadas.</span>
-            <Button variant="outline" size="sm" asChild>
-              <a href="/meta-ads-config">Configurar Meta Ads</a>
-            </Button>
-          </AlertDescription>
-        </Alert>
+        <MetaAdsConnectionCard onConnectionSuccess={handleConnectionSuccess} />
       </div>
     );
   }
