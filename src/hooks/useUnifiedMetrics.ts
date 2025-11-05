@@ -36,7 +36,7 @@ export interface UnifiedMetrics {
   // Métricas Unificadas (Real ROI)
   real_cpl: number | null // Investimento Meta / Leads CRM
   real_roas: number | null // Receita CRM / Investimento Meta
-  conversion_rate: number // Taxa de conversão real (ganho / total fechado)
+  conversion_rate: number // Taxa de conversão real (fechados_ganho ÷ total de leads)
   avg_deal_size: number // Ticket médio
 
   // Metadados
@@ -75,9 +75,9 @@ export function useUnifiedMetrics(
         endDate.setDate(endDate.getDate() + 1) // Incluir todo o dia final
         endStr = endDate.toISOString().split('T')[0]
       } else {
-        // Default: últimos 90 dias
+        // Default: últimos 30 dias (padronização de filtros)
         const now = new Date()
-        const start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+        const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
         startStr = start.toISOString().split('T')[0]
         now.setDate(now.getDate() + 1)
         endStr = now.toISOString().split('T')[0]
@@ -181,8 +181,9 @@ export function useUnifiedMetrics(
       const real_cpl = crm_total_leads > 0 ? meta_spend / crm_total_leads : null
       const real_roas = meta_spend > 0 ? crm_revenue / meta_spend : null
 
-      const total_fechados = crm_fechados_ganho + crm_fechados_perdido
-      const conversion_rate = total_fechados > 0 ? (crm_fechados_ganho / total_fechados) * 100 : 0
+      // Conversão sobre o total de leads no pipeline
+      // Definição: percentual de leads que fecharam como ganho em relação ao total de leads do período
+      const conversion_rate = crm_total_leads > 0 ? (crm_fechados_ganho / crm_total_leads) * 100 : 0
 
       const avg_deal_size = crm_fechados_ganho > 0 ? crm_revenue / crm_fechados_ganho : 0
 

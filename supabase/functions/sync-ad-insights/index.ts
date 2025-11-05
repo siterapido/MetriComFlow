@@ -88,9 +88,13 @@ serve(async (req) => {
 
     const body: SyncBody = await req.json().catch(() => ({} as SyncBody));
     const todayIso = new Date().toISOString().split("T")[0];
-    const defaultSince = addDays(todayIso, -7);
-    const since = normalizeIsoDate(body.since, defaultSince);
-    const until = normalizeIsoDate(body.until, todayIso);
+
+    // Força o filtro de 30 dias, ignorando o que vier no body
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const since = thirtyDaysAgo.toISOString().split("T")[0];
+    const until = todayIso;
+
     const maxDays = Math.min(Math.max(body.maxDaysPerChunk ?? 30, 1), 90);
 
     // Resolver contas

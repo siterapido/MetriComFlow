@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 import { CalendarIcon } from 'lucide-react'
-import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths } from 'date-fns'
+import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, isValid } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { DateRange } from 'react-day-picker'
@@ -29,13 +29,19 @@ type PresetOption =
   | 'last_month'
   | 'custom'
 
+type DateRange = {
+  from: Date
+  to: Date
+}
+
 type DateRangeFilterProps = {
-  value?: { start: string; end: string } | null
-  onChange: (range: { start: string; end: string }) => void
+  value?: DateRange | null
+  onChange: (range: DateRange) => void
 }
 
 const PRESET_OPTIONS: { value: PresetOption; label: string }[] = [
-  { value: 'all_time', label: 'Todo o período' },
+  // Conforme limite oficial da Ads Insights API da Meta, o lookback máximo é 37 meses
+  { value: 'all_time', label: 'Máximo permitido (37 meses)' },
   { value: 'last_365_days', label: 'Último ano (365 dias)' },
   { value: 'last_180_days', label: 'Últimos 6 meses (180 dias)' },
   { value: 'last_90_days', label: 'Últimos 90 dias' },
@@ -54,74 +60,75 @@ const PRESET_OPTIONS: { value: PresetOption; label: string }[] = [
   { value: 'custom', label: 'Personalizado' },
 ]
 
-function getDateRangeFromPreset(preset: PresetOption): { start: Date; end: Date } {
+function getDateRangeFromPreset(preset: PresetOption): { from: Date; to: Date } {
   const today = new Date()
   const yesterday = subDays(today, 1)
+  const maxLookbackStart = subMonths(today, 37) // Limite da API: início não pode ser além de 37 meses
 
   switch (preset) {
     case 'all_time':
-      // Data inicial: 1º de janeiro de 2020 (ou 5 anos atrás, o que for mais recente)
-      return { start: new Date('2020-01-01'), end: today }
+      // Agora 'all_time' significa o máximo permitido pela API: últimos 37 meses
+      return { from: maxLookbackStart, to: today }
 
     case 'last_365_days':
-      return { start: subDays(today, 365), end: today }
+      return { from: subDays(today, 365), to: today }
 
     case 'last_180_days':
-      return { start: subDays(today, 180), end: today }
+      return { from: subDays(today, 180), to: today }
 
     case 'last_90_days':
-      return { start: subDays(today, 90), end: today }
+      return { from: subDays(today, 90), to: today }
 
     case 'last_60_days':
-      return { start: subDays(today, 60), end: today }
+      return { from: subDays(today, 60), to: today }
 
     case 'last_30_days':
-      return { start: subDays(today, 30), end: today }
+      return { from: subDays(today, 30), to: today }
 
     case 'today':
-      return { start: today, end: today }
+      return { from: today, to: today }
 
     case 'yesterday':
-      return { start: yesterday, end: yesterday }
+      return { from: yesterday, to: yesterday }
 
     case 'yesterday_today':
-      return { start: yesterday, end: today }
+      return { from: yesterday, to: today }
 
     case 'last_7_days':
-      return { start: subDays(today, 7), end: today }
+      return { from: subDays(today, 7), to: today }
 
     case 'last_14_days':
-      return { start: subDays(today, 14), end: today }
+      return { from: subDays(today, 14), to: today }
 
     case 'last_28_days':
-      return { start: subDays(today, 28), end: today }
+      return { from: subDays(today, 28), to: today }
 
     case 'this_week':
-      return { start: startOfWeek(today, { weekStartsOn: 0 }), end: endOfWeek(today, { weekStartsOn: 0 }) }
+      return { from: startOfWeek(today, { weekStartsOn: 0 }), to: endOfWeek(today, { weekStartsOn: 0 }) }
 
     case 'last_week':
       {
         const lastWeekDate = subDays(today, 7)
         return {
-          start: startOfWeek(lastWeekDate, { weekStartsOn: 0 }),
-          end: endOfWeek(lastWeekDate, { weekStartsOn: 0 })
+          from: startOfWeek(lastWeekDate, { weekStartsOn: 0 }),
+          to: endOfWeek(lastWeekDate, { weekStartsOn: 0 })
         }
       }
 
     case 'this_month':
-      return { start: startOfMonth(today), end: endOfMonth(today) }
+      return { from: startOfMonth(today), to: endOfMonth(today) }
 
     case 'last_month':
       {
         const lastMonth = subMonths(today, 1)
-        return { start: startOfMonth(lastMonth), end: endOfMonth(lastMonth) }
+        return { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) }
       }
 
     case 'custom':
-      return { start: subDays(today, 30), end: today }
+      return { from: subDays(today, 30), to: today }
 
     default:
-      return { start: subDays(today, 90), end: today }
+      return { from: subDays(today, 90), to: today }
   }
 }
 
@@ -129,16 +136,28 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
   const [open, setOpen] = useState(false)
   const [selectedPreset, setSelectedPreset] = useState<PresetOption>('all_time')
   const [customRange, setCustomRange] = useState<DateRange | undefined>()
+  const maxLookbackStart = subMonths(new Date(), 37)
+
+  // Garante que o intervalo respeita o limite de 37 meses a partir de hoje
+  const clampToMaxLookback = (range: { from: Date; to: Date }) => {
+    const from = range.from < maxLookbackStart ? maxLookbackStart : range.from
+    // Evita datas futuras
+    const today = new Date()
+    const to = range.to > today ? today : range.to
+    
+    // Garante que as datas são válidas
+    return { 
+      from: isValid(from) ? from : maxLookbackStart, 
+      to: isValid(to) ? to : today 
+    }
+  }
 
   const handlePresetChange = (preset: PresetOption) => {
     setSelectedPreset(preset)
 
     if (preset !== 'custom') {
-      const range = getDateRangeFromPreset(preset)
-      onChange({
-        start: format(range.start, 'yyyy-MM-dd'),
-        end: format(range.end, 'yyyy-MM-dd'),
-      })
+      const range = clampToMaxLookback(getDateRangeFromPreset(preset))
+      onChange(range)
     }
   }
 
@@ -146,39 +165,42 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
     setCustomRange(range)
 
     if (range?.from && range?.to) {
-      onChange({
-        start: format(range.from, 'yyyy-MM-dd'),
-        end: format(range.to, 'yyyy-MM-dd'),
-      })
+      const clamped = clampToMaxLookback({ from: range.from, to: range.to })
+      onChange(clamped)
     }
   }
 
   const handleApply = () => {
     if (selectedPreset === 'custom' && customRange?.from && customRange?.to) {
-      onChange({
-        start: format(customRange.from, 'yyyy-MM-dd'),
-        end: format(customRange.to, 'yyyy-MM-dd'),
-      })
+      const clamped = clampToMaxLookback({ from: customRange.from, to: customRange.to })
+      onChange(clamped)
     }
     setOpen(false)
   }
 
   const getDisplayText = () => {
-    if (!value) return 'Todo o período'
+    if (!value || !value.from || !value.to) return 'Todo o período'
+
+    // Verifica se as datas são válidas antes de formatar
+    if (!isValid(value.from) || !isValid(value.to)) {
+      return 'Todo o período'
+    }
 
     const preset = PRESET_OPTIONS.find(opt => {
       if (opt.value === 'custom') return false
       const range = getDateRangeFromPreset(opt.value)
-      const rangeStart = format(range.start, 'yyyy-MM-dd')
-      const rangeEnd = format(range.end, 'yyyy-MM-dd')
-      return rangeStart === value.start && rangeEnd === value.end
+      const rangeStart = isValid(range.from) ? format(range.from, 'yyyy-MM-dd') : ''
+      const rangeEnd = isValid(range.to) ? format(range.to, 'yyyy-MM-dd') : ''
+      const valueStart = isValid(value.from) ? format(value.from, 'yyyy-MM-dd') : ''
+      const valueEnd = isValid(value.to) ? format(value.to, 'yyyy-MM-dd') : ''
+      return rangeStart === valueStart && rangeEnd === valueEnd
     })
 
     if (preset) {
       return preset.label
     }
 
-    return `${format(new Date(value.start), 'dd/MM/yyyy', { locale: ptBR })} - ${format(new Date(value.end), 'dd/MM/yyyy', { locale: ptBR })}`
+    return `${isValid(value.from) ? format(value.from, 'dd/MM/yyyy', { locale: ptBR }) : 'Data inválida'} - ${isValid(value.to) ? format(value.to, 'dd/MM/yyyy', { locale: ptBR }) : 'Data inválida'}`
   }
 
   return (
@@ -226,13 +248,14 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
                 onSelect={handleCustomRangeChange}
                 numberOfMonths={2}
                 locale={ptBR}
-                disabled={(date) => date > new Date()}
+                // Bloqueia datas fora do limite da API (antes de 37 meses) e futuras
+                disabled={(date) => date > new Date() || date < maxLookbackStart}
               />
 
               {customRange?.from && customRange?.to && (
                 <div className="mt-4 pt-4 border-t border-border">
                   <p className="text-sm text-muted-foreground mb-2">
-                    {format(customRange.from, 'dd/MM/yyyy', { locale: ptBR })} - {format(customRange.to, 'dd/MM/yyyy', { locale: ptBR })}
+                    {isValid(customRange.from) ? format(customRange.from, 'dd/MM/yyyy', { locale: ptBR }) : 'Data inválida'} - {isValid(customRange.to) ? format(customRange.to, 'dd/MM/yyyy', { locale: ptBR }) : 'Data inválida'}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Fuso horário das datas: Horário de São Paulo
@@ -263,9 +286,9 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
                 </p>
                 {value ? (
                   <>
-                    <p>{format(new Date(value.start), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
+                    <p>{isValid(value.from) ? format(value.from, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : 'Data inválida'}</p>
                     <p className="mb-2">até</p>
-                    <p>{format(new Date(value.end), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
+                    <p>{isValid(value.to) ? format(value.to, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : 'Data inválida'}</p>
                     <p className="text-xs mt-4">Fuso horário das datas: Horário de São Paulo</p>
                   </>
                 ) : null}

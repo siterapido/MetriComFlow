@@ -34,27 +34,26 @@ import { useMetricsSummary, useAdAccounts, useAdCampaigns } from '@/hooks/useMet
 import { useMetaAuth } from '@/hooks/useMetaAuth';
 import {
   useAdSets,
-  useAds,
+  useSyncAdSets,
+  useSyncAdSetInsights,
   useAdSetMetrics,
+  useAds,
+  useSyncAds,
+  useSyncAdInsights,
   useAdMetrics,
   useCreativePerformance,
-  useSyncAdSets,
-  useSyncAds,
-  useSyncAdSetInsights,
-  useSyncAdInsights,
-} from '@/hooks/useAdSetsAndAds';
-import { useToast } from '@/hooks/use-toast';
-import { useQueryClient } from '@tanstack/react-query';
-import { formatCurrency, formatNumber } from '@/lib/formatters';
-import { cn } from '@/lib/utils';
+  getLastNDays,
+} from "@/hooks/useAdSetsAndAds";
+import { AdPerformanceTableV2 } from "@/components/metrics/AdPerformanceTableV2";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/components/ui/use-toast";
+import { formatCurrency, formatNumber } from "@/lib/formatters";
 
 export default function TrafficMetrics() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [dateRange, setDateRange] = useState({
-    start: '2020-01-01',
-    end: new Date().toISOString().split('T')[0],
-  });
+  // Limite oficial da Meta Ads Insights API: máximo de 37 meses de histórico
+  const [dateRange, setDateRange] = useState(getLastNDays(30));
   const [selectedAccount, setSelectedAccount] = useState<string>('all');
   const [selectedCampaign, setSelectedCampaign] = useState<string>('all');
   const [selectedAdSet, setSelectedAdSet] = useState<string>('all');
@@ -63,7 +62,7 @@ export default function TrafficMetrics() {
   const [showConnectionDialog, setShowConnectionDialog] = useState(false);
 
   // Meta auth utilities (to ensure campaigns are present)
-  const { syncCampaigns } = useMetaAuth();
+  const { syncCampaigns, syncDailyInsights } = useMetaAuth();
 
   const invalidateMetaQueries = () => {
     queryClient.invalidateQueries({ queryKey: ['metaConnectionStatus'] });
@@ -103,8 +102,12 @@ export default function TrafficMetrics() {
   );
 
   const { data: adSetMetrics, isLoading: adSetMetricsLoading } = useAdSetMetrics(
-    selectedAdSet === 'all' ? undefined : selectedAdSet,
-    dateRange,
+    {
+      accountId: selectedAccount === 'all' ? undefined : selectedAccount,
+      campaignId: selectedCampaign === 'all' ? undefined : selectedCampaign,
+      adSetId: selectedAdSet === 'all' ? undefined : selectedAdSet,
+      dateRange,
+    },
     { enabled: hasActiveConnection && activeTab === 'adsets' }
   );
 
@@ -119,8 +122,9 @@ export default function TrafficMetrics() {
 
   const { data: adMetrics, isLoading: adMetricsLoading } = useAdMetrics(
     {
-      campaign_id: selectedCampaign === 'all' ? undefined : selectedCampaign,
-      ad_set_id: selectedAdSet === 'all' ? undefined : selectedAdSet,
+      accountId: selectedAccount === 'all' ? undefined : selectedAccount,
+      campaignId: selectedCampaign === 'all' ? undefined : selectedCampaign,
+      adSetId: selectedAdSet === 'all' ? undefined : selectedAdSet,
       dateRange,
     },
     { enabled: hasActiveConnection && activeTab === 'creatives' }
@@ -140,51 +144,45 @@ export default function TrafficMetrics() {
   const handleSyncAll = async () => {
     setIsSyncing(true);
     try {
-      // Step 0: Ensure campaigns are synced for selected scope
       const accountsToSync = selectedAccount === 'all'
         ? (accounts || []).map(a => a.id)
         : [selectedAccount];
 
       for (const accId of accountsToSync) {
         try {
+          // A função syncCampaigns agora lida com a sincronização completa
+          // de campanhas, conjuntos de anúncios e anúncios.
           await syncCampaigns(accId);
         } catch (err) {
-          console.warn('⚠️ Error syncing campaigns for account', accId, err);
+          console.warn('⚠️ Error syncing account', accId, err);
         }
       }
 
-      // Step 1: Sync ad sets
-      await syncAdSets.mutateAsync({
-        campaign_ids: selectedCampaign === 'all' ? undefined : [selectedCampaign],
-      });
-
-      // Step 2: Sync ads
-      await syncAds.mutateAsync({
-        campaign_ids: selectedCampaign === 'all' ? undefined : [selectedCampaign],
-      });
-
-      // Step 3: Sync ad set insights (metrics)
-      await syncAdSetInsights.mutateAsync({
-        since: dateRange.start,
-        until: dateRange.end,
-        ad_account_ids: selectedAccount === 'all' ? undefined : [selectedAccount],
-        campaign_ids: selectedCampaign === 'all' ? undefined : [selectedCampaign],
-      });
-
-      // Step 4: Sync ad insights (metrics)
-      await syncAdInsights.mutateAsync({
-        since: dateRange.start,
-        until: dateRange.end,
-        ad_account_ids: selectedAccount === 'all' ? undefined : [selectedAccount],
-        campaign_ids: selectedCampaign === 'all' ? undefined : [selectedCampaign],
-      });
+      // Sincronizar métricas diárias para o período e contas selecionadas
+      try {
+        await syncDailyInsights({
+          since: dateRange.start,
+          until: dateRange.end,
+          accountIds: accountsToSync,
+        });
+        // Invalidar todas as queries relevantes para forçar a atualização dos dados
+        await queryClient.invalidateQueries();
+      } catch (err) {
+        console.warn('⚠️ Error syncing daily insights', err);
+      }
 
       toast({
-        title: 'Sincronização Completa',
-        description: 'Campanhas, conjuntos, criativos e métricas sincronizados com sucesso!',
+        title: 'Sincronização Concluída',
+        description: 'Os dados do Meta Ads foram atualizados com sucesso.',
+        variant: 'default',
       });
     } catch (error) {
-      console.error('Sync error:', error);
+      console.error('❌ Falha geral na sincronização:', error);
+      toast({
+        title: 'Erro na Sincronização',
+        description: 'Ocorreu um erro ao sincronizar os dados. Verifique o console para mais detalhes.',
+        variant: 'destructive',
+      });
     } finally {
       setIsSyncing(false);
     }
@@ -545,21 +543,20 @@ export default function TrafficMetrics() {
 
         {/* Tab: Criativos */}
         <TabsContent value="creatives">
-          {adMetricsLoading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-          ) : adMetrics && adMetrics.length > 0 ? (
-            <CreativeGrid ads={adMetrics} showFullMetrics={true} />
-          ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <ImageIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p>Nenhum criativo encontrado</p>
-              <Button variant="outline" className="mt-4" onClick={handleSyncAll}>
-                Sincronizar Agora
-              </Button>
-            </div>
-          )}
+          <Card className="border-border bg-card">
+            <CardHeader>
+              <CardTitle>Performance por Criativo</CardTitle>
+              <CardDescription>Métricas detalhadas de todos os criativos no período selecionado</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AdPerformanceTableV2
+                accountId={selectedAccount === 'all' ? undefined : selectedAccount}
+                campaignId={selectedCampaign === 'all' ? undefined : selectedCampaign}
+                adSetId={selectedAdSet === 'all' ? undefined : selectedAdSet}
+                dateRange={dateRange}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
       </div>

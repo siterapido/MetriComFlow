@@ -67,6 +67,7 @@ export function MetaAdsConnectionDialog({
     activateAdAccount,
     refreshData,
     syncCampaigns,
+    syncDailyInsights,
   } = useMetaAuth();
 
   const { toast } = useToast();
@@ -177,25 +178,10 @@ export function MetaAdsConnectionDialog({
 
   const connectAccountHierarchy = async (accountId: string) => {
     await syncCampaigns(accountId);
-
-    await invokeMetaSync("sync-ad-sets", {
-      ad_account_ids: [accountId],
-    });
-
-    await invokeMetaSync("sync-ads", {
-      ad_account_ids: [accountId],
-    });
-
-    await invokeMetaSync("sync-adset-insights", {
+    await syncDailyInsights({
       since: syncRange.since,
       until: syncRange.until,
-      ad_account_ids: [accountId],
-    });
-
-    await invokeMetaSync("sync-ad-insights", {
-      since: syncRange.since,
-      until: syncRange.until,
-      ad_account_ids: [accountId],
+      accountIds: [accountId],
     });
   };
 

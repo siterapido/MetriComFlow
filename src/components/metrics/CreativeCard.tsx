@@ -17,7 +17,7 @@ interface CreativeCardProps {
 }
 
 export function CreativeCard({ ad, showFullMetrics = false, onClick }: CreativeCardProps) {
-  const hasImage = !!ad.image_url;
+  const hasImage = !!(ad.thumbnail_url || ad.image_url);
   const hasVideo = !!ad.video_url;
   const creativeType = ad.creative_type || 'UNKNOWN';
 
@@ -40,7 +40,7 @@ export function CreativeCard({ ad, showFullMetrics = false, onClick }: CreativeC
       <div className="relative w-full h-48 bg-muted flex items-center justify-center overflow-hidden">
         {hasImage && (
           <img
-            src={ad.image_url}
+            src={ad.thumbnail_url || ad.image_url}
             alt={ad.ad_name}
             className="w-full h-full object-cover"
             onError={(e) => {

@@ -39,6 +39,10 @@ const LEAD_ACTION_TYPES = new Set([
   "leadgen.other",
   "onsite_conversion.lead_grouped",
   "onsite_conversion.lead_form.submit",
+  // Common pixel-based lead event
+  "offsite_conversion.fb_pixel_lead",
+  // Some accounts report 'onsite_conversion.lead' without suffix
+  "onsite_conversion.lead",
 ]);
 
 function normalizeIsoDate(input: string | undefined, fallbackIso: string): string {
@@ -121,9 +125,19 @@ Deno.serve(async (req: Request) => {
     // Body and params
     const body: SyncRequestBody = await req.json().catch(() => ({} as SyncRequestBody));
     const todayIso = new Date().toISOString().split('T')[0];
-    const defaultSince = addDays(todayIso, -1);
-    const since = normalizeIsoDate(body.since, defaultSince);
-    const until = normalizeIsoDate(body.until, defaultSince);
+
+    // Respeitar período enviado no body; padrão para últimos 30 dias se ausente
+    const defaultSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const defaultUntil = todayIso;
+    let since = normalizeIsoDate(body.since, defaultSince);
+    let until = normalizeIsoDate(body.until, defaultUntil);
+    // Garantir since <= until; se invertido, fazer swap
+    if (new Date(since + "T00:00:00Z").getTime() > new Date(until + "T00:00:00Z").getTime()) {
+      const tmp = since;
+      since = until;
+      until = tmp;
+    }
+
     const dryRun = !!body.dryRun;
     const logResponseSample = !!body.logResponseSample;
     const maxDaysPerChunk = Math.min(Math.max(body.maxDaysPerChunk ?? 30, 1), 90);
@@ -155,6 +169,53 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // N+1 Optimization: Fetch connections and campaigns upfront
+    const userConnectionIds = [...new Set(adAccounts.map(a => a.connected_by).filter(Boolean))] as string[];
+    const { data: connectionsData, error: connectionsError } = await supabase
+      .from('meta_business_connections')
+      .select('user_id, access_token, token_expires_at, connected_at')
+      .in('user_id', userConnectionIds)
+      .eq('is_active', true);
+
+    if (connectionsError) {
+      throw new Error(`Error fetching meta connections: ${connectionsError.message}`);
+    }
+
+    // Group connections by user_id and find the latest for each to replicate original logic
+    const latestConnectionsByUser = (connectionsData || []).reduce((acc, conn) => {
+      const existing = acc[conn.user_id];
+      if (!existing || new Date(conn.connected_at) > new Date(existing.connected_at)) {
+        acc[conn.user_id] = conn;
+      }
+      return acc;
+    }, {} as Record<string, { user_id: string; access_token: string; token_expires_at: string | null; connected_at: string; }>);
+
+    const connectionsMap = new Map(Object.values(latestConnectionsByUser).map(conn => [conn.user_id, { access_token: conn.access_token, token_expires_at: conn.token_expires_at }]));
+
+    const accountIds = adAccounts.map(a => a.id);
+    let allCampaignsQuery = supabase
+      .from('ad_campaigns')
+      .select('id, external_id, ad_account_id')
+      .in('ad_account_id', accountIds);
+
+    if (filterCampaignExternalIds) {
+      allCampaignsQuery = allCampaignsQuery.in('external_id', filterCampaignExternalIds);
+    }
+
+    const { data: allCampaigns, error: allCampaignsError } = await allCampaignsQuery;
+    if (allCampaignsError) {
+      throw new Error(`Error fetching campaigns: ${allCampaignsError.message}`);
+    }
+
+    const campaignsByAccount = (allCampaigns || []).reduce((acc, campaign) => {
+      const accountId = campaign.ad_account_id;
+      if (!acc[accountId]) {
+        acc[accountId] = [];
+      }
+      acc[accountId].push(campaign);
+      return acc;
+    }, {} as Record<string, typeof allCampaigns>);
+
     const summary: any = {
       accountsProcessed: 0,
       accountsSkipped: 0,
@@ -177,14 +238,7 @@ Deno.serve(async (req: Request) => {
         // Resolve access token (prefer user-connected token; fallback to env)
         let accessToken: string | null = null;
         if (account.connected_by) {
-          const { data: conn } = await supabase
-            .from('meta_business_connections')
-            .select('access_token, token_expires_at')
-            .eq('user_id', account.connected_by)
-            .eq('is_active', true)
-            .order('connected_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          const conn = connectionsMap.get(account.connected_by);
           if (conn?.access_token) {
             if (conn.token_expires_at) {
               const exp = new Date(conn.token_expires_at);
@@ -220,19 +274,8 @@ Deno.serve(async (req: Request) => {
         }
 
         // Campaigns for this account
-        let campaignsQuery = supabase
-          .from('ad_campaigns')
-          .select('id, external_id')
-          .eq('ad_account_id', account.id);
-        if (filterCampaignExternalIds) {
-          campaignsQuery = campaignsQuery.in('external_id', filterCampaignExternalIds);
-        }
-        const { data: campaigns, error: campaignsError } = await campaignsQuery;
-        if (campaignsError) {
-          console.error(`Error fetching campaigns for account ${account.external_id}:`, campaignsError);
-          continue;
-        }
-        if (!campaigns || campaigns.length === 0) {
+        const campaigns = campaignsByAccount[account.id] || [];
+        if (campaigns.length === 0) {
           summary.notes.push(`No campaigns for account ${account.external_id}`);
           continue;
         }

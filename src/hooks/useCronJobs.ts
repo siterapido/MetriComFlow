@@ -310,6 +310,10 @@ export function getJobDisplayName(jobName: string): string {
     'meta-conversion-dispatch': 'Dispatch de Conversões',
     'fetch-meta-leads': 'Sincronização de Leads',
     'cleanup-old-cron-logs-daily': 'Limpeza de Logs',
+    'sync_ad_sets_cron': 'Sincronização de Ad Sets',
+    'sync_ads_cron': 'Sincronização de Ads',
+    'sync_adset_insights_cron': 'Sincronização de Insights de Ad Sets',
+    'sync_ad_insights_cron': 'Sincronização de Insights de Ads',
   }
 
   return names[jobName] || jobName
@@ -324,6 +328,10 @@ export function getJobDescription(jobName: string): string {
     'meta-conversion-dispatch': 'Processa eventos de conversão pendentes e envia para Meta CAPI a cada 5 minutos',
     'fetch-meta-leads': 'Busca leads do Meta Ads API e sincroniza com CRM (últimos 3 dias) a cada 6 horas',
     'cleanup-old-cron-logs-daily': 'Remove logs de cron jobs com mais de 30 dias (executa às 02:00)',
+    'sync_ad_sets_cron': 'Sincroniza Ad Sets do Meta Ads com base no plano da organização a cada 6 horas',
+    'sync_ads_cron': 'Sincroniza Ads do Meta Ads com base no plano da organização a cada 6 horas',
+    'sync_adset_insights_cron': 'Sincroniza insights de Ad Sets dos últimos 7 dias a cada 6 horas',
+    'sync_ad_insights_cron': 'Sincroniza insights de Ads dos últimos 7 dias a cada 6 horas',
   }
 
   return descriptions[jobName] || 'Job automático'
@@ -339,6 +347,10 @@ export function getScheduleDisplay(schedule: string): string {
     '0 */6 * * *': 'A cada 6 horas',
     '0 2 * * *': 'Diariamente às 02:00',
     '0 3 * * 0': 'Domingos às 03:00',
+    '5 0 */6 * *': 'A cada 6 horas (com 5min delay)',
+    '10 0 */6 * *': 'A cada 6 horas (com 10min delay)',
+    '15 0 */6 * *': 'A cada 6 horas (com 15min delay)',
+    '20 0 */6 * *': 'A cada 6 horas (com 20min delay)',
   }
 
   return schedules[schedule] || schedule

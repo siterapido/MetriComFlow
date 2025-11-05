@@ -9,12 +9,18 @@ import {
   type MetaMetricsFilters,
 } from "@/lib/metaMetrics";
 
+// Helper: último N dias
+const getLastNDaysDateRange = (days: number): { start: string; end: string } => {
+  const now = new Date()
+  const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
+  const startStr = start.toISOString().split('T')[0]
+  const endStr = now.toISOString().split('T')[0]
+  return { start: startStr, end: endStr }
+}
+
 const DEFAULT_FILTERS: Required<Pick<MetaMetricsFilters, "dateRange" | "period">> = {
-  period: "90",
-  dateRange: {
-    start: "2025-02-27",
-    end: "2025-05-27",
-  },
+  period: "30",
+  dateRange: getLastNDaysDateRange(30),
 };
 
 const buildFilters = (filters?: MetaMetricsFilters): MetaMetricsFilters => {

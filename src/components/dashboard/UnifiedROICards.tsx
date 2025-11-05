@@ -154,6 +154,10 @@ export function UnifiedROICards({ metrics, isLoading }: UnifiedROICardsProps) {
             <p className="text-xs text-orange-500 mt-1">
               {metrics.crm_fechados_ganho} fechamentos
             </p>
+            {/* Taxa de perda baseada no total de leads */}
+            <p className="text-xs text-muted-foreground">
+              Perda: {metrics.crm_total_leads > 0 ? ((metrics.crm_fechados_perdido / metrics.crm_total_leads) * 100).toFixed(1) : '0.0'}% ({metrics.crm_fechados_perdido} perdidos)
+            </p>
             <p className="text-xs text-muted-foreground">
               Ticket médio: {formatCurrency(metrics.avg_deal_size)}
             </p>
@@ -181,7 +185,11 @@ export function UnifiedROICards({ metrics, isLoading }: UnifiedROICardsProps) {
                 </li>
                 <li>
                   <strong>Taxa de Conversão:</strong> Percentual de leads que fecharam negócio
-                  (Fechados Ganho ÷ Total Fechados).
+                  (Fechados Ganho ÷ Total de Leads).
+                </li>
+                <li>
+                  <strong>Taxa de Perda:</strong> Percentual de leads perdidos
+                  (Fechados Perdido ÷ Total de Leads).
                 </li>
               </ul>
             </div>

@@ -7,6 +7,35 @@
 -- - Revenue tracking
 -- - Custom KPIs
 
+-- Table for custom goal metrics
+CREATE TABLE IF NOT EXISTS goal_metrics (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    metric_name TEXT NOT NULL,
+    metric_value NUMERIC NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(goal_id, metric_name)
+);
+
+-- RLS for goal_metrics
+ALTER TABLE goal_metrics ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own goal metrics" ON goal_metrics
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM goals g
+      WHERE g.id = goal_metrics.goal_id AND g.created_by = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can manage their own goal metrics" ON goal_metrics
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM goals g
+      WHERE g.id = goal_metrics.goal_id AND g.created_by = auth.uid()
+    )
+  );
+
 -- Create enum for goal types
 CREATE TYPE goal_type AS ENUM (
   'crm_revenue',          -- Faturamento do CRM

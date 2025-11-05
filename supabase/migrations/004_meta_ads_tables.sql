@@ -28,15 +28,35 @@ CREATE TABLE IF NOT EXISTS ad_accounts (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Create ad campaigns table
+CREATE TABLE IF NOT EXISTS ad_campaigns (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    external_id TEXT UNIQUE,
+    name TEXT NOT NULL,
+    objective TEXT,
+    status TEXT,
+    ad_account_id UUID NOT NULL REFERENCES ad_accounts(id) ON DELETE CASCADE,
+    start_time TIMESTAMPTZ,
+    end_time TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_meta_business_connections_user_id ON meta_business_connections(user_id);
 CREATE INDEX IF NOT EXISTS idx_meta_business_connections_is_active ON meta_business_connections(is_active);
 CREATE INDEX IF NOT EXISTS idx_ad_accounts_user_id ON ad_accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_ad_accounts_platform ON ad_accounts(platform);
 CREATE INDEX IF NOT EXISTS idx_ad_accounts_is_active ON ad_accounts(is_active);
+CREATE INDEX IF NOT EXISTS idx_ad_campaigns_ad_account_id ON ad_campaigns(ad_account_id);
+
+
 -- Enable Row Level Security
 ALTER TABLE meta_business_connections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ad_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ad_campaigns ENABLE ROW LEVEL SECURITY;
+
 -- RLS Policies for meta_business_connections
 CREATE POLICY "Users can view their own Meta connections"
   ON meta_business_connections FOR SELECT
@@ -51,6 +71,7 @@ CREATE POLICY "Users can update their own Meta connections"
 CREATE POLICY "Users can delete their own Meta connections"
   ON meta_business_connections FOR DELETE
   USING (auth.uid() = user_id);
+
 -- RLS Policies for ad_accounts
 CREATE POLICY "Users can view their own ad accounts"
   ON ad_accounts FOR SELECT
@@ -65,6 +86,45 @@ CREATE POLICY "Users can update their own ad accounts"
 CREATE POLICY "Users can delete their own ad accounts"
   ON ad_accounts FOR DELETE
   USING (auth.uid() = user_id);
+
+-- RLS Policies for ad_campaigns
+CREATE POLICY "Users can view their own ad campaigns"
+  ON ad_campaigns FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM ad_accounts
+      WHERE ad_accounts.id = ad_campaigns.ad_account_id
+      AND ad_accounts.user_id = auth.uid()
+    )
+  );
+CREATE POLICY "Users can insert their own ad campaigns"
+  ON ad_campaigns FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM ad_accounts
+      WHERE ad_accounts.id = ad_campaigns.ad_account_id
+      AND ad_accounts.user_id = auth.uid()
+    )
+  );
+CREATE POLICY "Users can update their own ad campaigns"
+  ON ad_campaigns FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM ad_accounts
+      WHERE ad_accounts.id = ad_campaigns.ad_account_id
+      AND ad_accounts.user_id = auth.uid()
+    )
+  );
+CREATE POLICY "Users can delete their own ad campaigns"
+  ON ad_campaigns FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1 FROM ad_accounts
+      WHERE ad_accounts.id = ad_campaigns.ad_account_id
+      AND ad_accounts.user_id = auth.uid()
+    )
+  );
+
 -- Create trigger to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -73,6 +133,7 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
 CREATE TRIGGER update_meta_business_connections_updated_at
   BEFORE UPDATE ON meta_business_connections
   FOR EACH ROW
@@ -81,6 +142,12 @@ CREATE TRIGGER update_ad_accounts_updated_at
   BEFORE UPDATE ON ad_accounts
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_ad_campaigns_updated_at
+    BEFORE UPDATE ON ad_campaigns
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- Comment on tables
 COMMENT ON TABLE meta_business_connections IS 'Stores Meta (Facebook) Business Manager OAuth connections';
 COMMENT ON TABLE ad_accounts IS 'Stores advertising accounts from various platforms (Meta Ads, Google Ads, etc.)';
+COMMENT ON TABLE ad_campaigns IS 'Stores advertising campaigns from various platforms';

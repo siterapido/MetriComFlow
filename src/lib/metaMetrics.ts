@@ -44,6 +44,8 @@ export type MetaCreativePerformance = {
   uniqueCtr: number;
   impressions: number;
   spend?: number;
+  image_url?: string;
+  thumbnail_url?: string;
 };
 
 export type MetaCampaignOverviewRow = {
@@ -142,36 +144,48 @@ const mockCreatives: MetaCreativePerformance[] = [
     name: "Estático 02 - entrada lacrados",
     uniqueCtr: 77.08,
     impressions: 105_469,
+    image_url: "https://via.placeholder.com/400x400.png?text=Creative+1",
+    thumbnail_url: "https://via.placeholder.com/150x150.png?text=Creative+1",
   },
   {
     id: "creative-02",
     name: "video story - Vídeo novo",
     uniqueCtr: 109.66,
     impressions: 98_897,
+    image_url: "https://via.placeholder.com/400x400.png?text=Creative+2",
+    thumbnail_url: "https://via.placeholder.com/150x150.png?text=Creative+2",
   },
   {
     id: "creative-03",
     name: "[Estático 01][Iphone 15]",
     uniqueCtr: 167.61,
     impressions: 89_890,
+    image_url: "https://via.placeholder.com/400x400.png?text=Creative+3",
+    thumbnail_url: "https://via.placeholder.com/150x150.png?text=Creative+3",
   },
   {
     id: "creative-04",
     name: "[video ipad]",
     uniqueCtr: 94.35,
     impressions: 58_150,
+    image_url: "https://via.placeholder.com/400x400.png?text=Creative+4",
+    thumbnail_url: "https://via.placeholder.com/150x150.png?text=Creative+4",
   },
   {
     id: "creative-05",
     name: "Novo anúncio de Engajamento",
     uniqueCtr: 12.60,
     impressions: 23_150,
+    image_url: "https://via.placeholder.com/400x400.png?text=Creative+5",
+    thumbnail_url: "https://via.placeholder.com/150x150.png?text=Creative+5",
   },
   {
     id: "creative-06",
     name: "Novo anúncio de Integração",
     uniqueCtr: 65.58,
     impressions: 17_492,
+    image_url: "https://via.placeholder.com/400x400.png?text=Creative+6",
+    thumbnail_url: "https://via.placeholder.com/150x150.png?text=Creative+6",
   },
 ];
 
@@ -237,13 +251,204 @@ export async function fetchMetaSummary(filters: MetaMetricsFilters = {}): Promis
   return mockSummary;
 }
 
-export async function fetchCreativeRanking(
-  filters: MetaMetricsFilters = {},
-): Promise<MetaCreativePerformance[]> {
-  await delay(120);
-  void filters;
-  return mockCreatives;
-}
+// Mock data (será substituído pela busca real no Supabase)
+const mockCreatives: MetaCreativePerformance[] = [
+  {
+    id: '1',
+    name: 'Criativo 1: Imagem de um consultório moderno',
+    uniqueCtr: 1.8,
+    impressions: 15000,
+    image_url: 'https://via.placeholder.com/400x400.png?text=Criativo+1',
+    thumbnail_url: 'https://via.placeholder.com/150x150.png?text=Criativo+1',
+  },
+  {
+    id: '2',
+    name: 'Criativo 2: Vídeo de depoimento de paciente',
+    uniqueCtr: 2.5,
+    impressions: 25000,
+    image_url: 'https://via.placeholder.com/400x400.png?text=Criativo+2',
+    thumbnail_url: 'https://via.placeholder.com/150x150.png?text=Criativo+2',
+  },
+  {
+    id: '3',
+    name: 'Criativo 3: Carrossel de antes e depois',
+    uniqueCtr: 3.1,
+    impressions: 18000,
+    image_url: 'https://via.placeholder.com/400x400.png?text=Criativo+3',
+    thumbnail_url: 'https://via.placeholder.com/150x150.png?text=Criativo+3',
+  },
+  {
+    id: '4',
+    name: 'Criativo 4: Oferta especial de clareamento',
+    uniqueCtr: 1.5,
+    impressions: 32000,
+    image_url: 'https://via.placeholder.com/400x400.png?text=Criativo+4',
+    thumbnail_url: 'https://via.placeholder.com/150x150.png?text=Criativo+4',
+  },
+];
+
+/**
+ * Busca o ranking de performance de criativos de uma conta de anúncios.
+ * @param {string} adAccountId - O ID da conta de anúncios.
+ * @param {string} dateRange - O período de análise (ex: 'last_30_days').
+ * @returns {Promise<MetaCreativePerformance[]>}
+ */
+export const fetchCreativeRanking = async (
+  adAccountId: string,
+  dateRange: string,
+): Promise<MetaCreativePerformance[]> => {
+  console.log(
+    `Buscando ranking de criativos para a conta ${adAccountId} no período ${dateRange}...`,
+  );
+
+  const { startDate, endDate } = (() => {
+    const now = new Date();
+    if (dateRange === 'last_7_days') {
+      const startDate = new Date();
+      startDate.setDate(now.getDate() - 7);
+      return { startDate, endDate: now };
+    }
+    const startDate = new Date();
+    startDate.setDate(now.getDate() - 30);
+    return { startDate, endDate: now };
+  })();
+
+  // Etapa 1: Buscar campanhas da conta
+  const { data: campaignsData, error: campaignsError } = await supabase
+    .from('ad_campaigns')
+    .select('id')
+    .eq('ad_account_id', adAccountId);
+
+  if (campaignsError) {
+    console.error('Erro ao buscar campanhas:', campaignsError);
+    throw new Error(`Falha ao buscar campanhas: ${campaignsError.message}`);
+  }
+
+  const campaignIds = campaignsData.map((c: any) => c.id);
+
+  if (campaignIds.length === 0) {
+    return [];
+  }
+
+  // Etapa 2: Buscar conjuntos de anúncios das campanhas
+  const { data: adSetsData, error: adSetsError } = await supabase
+    .from('ad_sets')
+    .select('id')
+    .in('campaign_id', campaignIds);
+
+  if (adSetsError) {
+    console.error('Erro ao buscar conjuntos de anúncios:', adSetsError);
+    throw new Error(
+      `Falha ao buscar conjuntos de anúncios: ${adSetsError.message}`,
+    );
+  }
+
+  const adSetIds = adSetsData.map((as: any) => as.id);
+
+  if (adSetIds.length === 0) {
+    return [];
+  }
+
+  // Etapa 3: Buscar anúncios dos conjuntos de anúncios
+  const { data: adsData, error: adsError } = await supabase
+    .from('ads')
+    .select('id')
+    .in('ad_set_id', adSetIds);
+
+  if (adsError) {
+    console.error('Erro ao buscar anúncios:', adsError);
+    throw new Error(`Falha ao buscar anúncios: ${adsError.message}`);
+  }
+
+  const adIds = adsData.map((ad: any) => ad.id);
+
+  if (adIds.length === 0) {
+    return [];
+  }
+
+  // Etapa 4: Buscar os insights diários para os ad_ids encontrados
+  const { data, error } = await supabase
+    .from('ad_daily_insights')
+    .select(
+      `
+      date,
+      spend,
+      impressions,
+      clicks,
+      ads (
+        id,
+        name,
+        status,
+        creative_type,
+        thumbnail_url,
+        image_url
+      )
+    `,
+    )
+    .in('ad_id', adIds)
+    .gte('date', startDate.toISOString().split('T')[0])
+    .lte('date', endDate.toISOString().split('T')[0])
+    .order('date', { ascending: false })
+    .limit(1000);
+
+  if (error) {
+    console.error('Erro ao buscar insights de criativos:', error);
+    throw new Error(`Falha ao buscar dados de criativos: ${error.message}`);
+  }
+
+  if (!data) {
+    return [];
+  }
+
+  const creativeMetrics = data.reduce(
+    (acc, insight) => {
+      const ad = insight.ads;
+      if (!ad) return acc;
+
+      if (!acc[ad.id]) {
+        acc[ad.id] = {
+          id: ad.id,
+          name: ad.name,
+          impressions: 0,
+          clicks: 0,
+          spend: 0,
+          image_url: ad.image_url,
+          thumbnail_url: ad.thumbnail_url,
+        };
+      }
+
+      acc[ad.id].impressions += insight.impressions || 0;
+      acc[ad.id].clicks += insight.clicks || 0;
+      acc[ad.id].spend += parseFloat(insight.spend || '0');
+
+      return acc;
+    },
+    {} as Record<
+      string,
+      {
+        id: string;
+        name: string;
+        impressions: number;
+        clicks: number;
+        spend: number;
+        image_url: string | null;
+        thumbnail_url: string | null;
+      }
+    >,
+  );
+
+  const creativeRanking: MetaCreativePerformance[] = Object.values(
+    creativeMetrics,
+  ).map(metric => ({
+    ...metric,
+    uniqueCtr:
+      metric.impressions > 0
+        ? (metric.clicks / metric.impressions) * 100
+        : 0,
+  }));
+
+  return creativeRanking.sort((a, b) => b.impressions - a.impressions);
+};
 
 export async function fetchCampaignOverview(
   filters: MetaMetricsFilters = {},

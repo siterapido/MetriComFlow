@@ -527,7 +527,7 @@ export function useConversionTimeFunnel(filters?: {
   dateRange?: { start: string; end: string }
 }, options?: { enabled?: boolean }) {
   const { accountId, campaignId, dateRange } = filters || {}
-  const range = dateRange || getLastNDaysDateRange(90)
+  const range = dateRange || getLastNDaysDateRange(30)
   const { data: activeOrg } = useActiveOrganization()
 
   return useQuery({
@@ -671,7 +671,7 @@ export function useConversionFunnel(filters?: {
   dateRange?: { start: string; end: string }
 }, options?: { enabled?: boolean }) {
   const { accountId, campaignId, dateRange } = filters || {}
-  const range = dateRange || getLastNDaysDateRange(90)
+  const range = dateRange || getLastNDaysDateRange(30)
   const { data: activeOrg } = useActiveOrganization()
 
   return useQuery({
@@ -751,7 +751,7 @@ export function useCampaignFinancialsFiltered(filters?: {
   dateRange?: { start: string; end: string }
 }, options?: { enabled?: boolean }) {
   const { accountId, campaignId, dateRange } = filters || {}
-  const range = dateRange || getLastNDaysDateRange(90)
+  const range = dateRange || getLastNDaysDateRange(30)
   const { data: activeOrg } = useActiveOrganization()
 
   return useQuery({

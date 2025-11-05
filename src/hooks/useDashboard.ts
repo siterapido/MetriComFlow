@@ -450,9 +450,9 @@ export function usePipelineMetrics(filters?: { dateRange?: { start: string; end:
       })
 
       const total_leads = leads?.length || 0
-      const total_closed = stages.fechado_ganho.count + stages.fechado_perdido.count
-      const conversion_rate = total_closed > 0
-        ? (stages.fechado_ganho.count / total_closed) * 100
+      // Conversão do pipeline: fechados_ganho sobre TOTAL de leads
+      const conversion_rate = total_leads > 0
+        ? (stages.fechado_ganho.count / total_leads) * 100
         : 0
 
       const average_deal_size = stages.fechado_ganho.count > 0

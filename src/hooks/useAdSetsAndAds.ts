@@ -74,6 +74,7 @@ export interface AdMetrics {
   creative_type?: string;
   image_url?: string;
   video_url?: string;
+  thumbnail_url?: string;
   spend: number;
   impressions: number;
   clicks: number;
@@ -88,8 +89,15 @@ export interface AdMetrics {
 }
 
 interface DateRange {
-  start: string;
-  end: string;
+  from: Date;
+  to: Date;
+}
+
+export function getLastNDays(days: number): DateRange {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - days);
+  return { from, to };
 }
 
 // ============================================================================
@@ -258,87 +266,39 @@ export const useSyncAdInsights = () => {
  * Get ad set metrics aggregated by date range
  */
 export const useAdSetMetrics = (
-  adSetId?: string,
-  dateRange?: DateRange,
+  {
+    accountId,
+    campaignId,
+    adSetId,
+    dateRange,
+  }: {
+    accountId?: string;
+    campaignId?: string;
+    adSetId?: string;
+    dateRange: DateRange;
+  },
   options: { enabled?: boolean } = {}
 ) => {
-  const { data: org } = useActiveOrganization();
-
-  return useQuery({
-    queryKey: ['ad-set-metrics', adSetId, dateRange, org?.id],
+  return useQuery<AdSetMetrics[]>({
+    queryKey: ["adSetMetrics", accountId, campaignId, adSetId, dateRange],
     queryFn: async () => {
-      let query = supabase
-        .from('ad_set_daily_insights')
-        .select(`
-          *,
-          ad_sets!inner(
-            name,
-            ad_campaigns!inner(
-              ad_accounts!inner(organization_id)
-            )
-          )
-        `);
+      if (!dateRange?.from || !dateRange?.to) return [];
 
-      if (adSetId) {
-        query = query.eq('ad_set_id', adSetId);
-      }
-
-      if (dateRange) {
-        query = query.gte('date', dateRange.start).lte('date', dateRange.end);
-      }
-
-      // Filter by organization
-      if (org?.id) {
-        query = query.eq('ad_sets.ad_campaigns.ad_accounts.organization_id', org.id);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      // Aggregate metrics by ad set
-      const metricsMap = new Map<string, AdSetMetrics>();
-
-      data?.forEach((insight: any) => {
-        const adSetId = insight.ad_set_id;
-        const existing = metricsMap.get(adSetId);
-
-        if (existing) {
-          existing.spend += insight.spend || 0;
-          existing.impressions += insight.impressions || 0;
-          existing.clicks += insight.clicks || 0;
-          existing.leads_count += insight.leads_count || 0;
-          existing.reach = (existing.reach || 0) + (insight.reach || 0);
-        } else {
-          metricsMap.set(adSetId, {
-            ad_set_id: adSetId,
-            ad_set_name: insight.ad_sets?.name || 'Unknown',
-            spend: insight.spend || 0,
-            impressions: insight.impressions || 0,
-            clicks: insight.clicks || 0,
-            leads_count: insight.leads_count || 0,
-            reach: insight.reach || 0,
-            frequency: insight.frequency || 0,
-            cpl: 0,
-            cpm: 0,
-            cpc: 0,
-            ctr: 0,
-          });
-        }
+      const { data, error } = await supabase.rpc("get_ad_set_metrics", {
+        p_account_id: accountId,
+        p_campaign_id: campaignId,
+        p_ad_set_id: adSetId,
+        p_start_date: dateRange.from.toISOString().split("T")[0],
+        p_end_date: dateRange.to.toISOString().split("T")[0],
       });
 
-      // Calculate derived metrics
-      const metrics = Array.from(metricsMap.values()).map((m) => ({
-        ...m,
-        cpl: m.leads_count > 0 ? m.spend / m.leads_count : 0,
-        cpm: m.impressions > 0 ? (m.spend / m.impressions) * 1000 : 0,
-        cpc: m.clicks > 0 ? m.spend / m.clicks : 0,
-        ctr: m.impressions > 0 ? (m.clicks / m.impressions) * 100 : 0,
-      }));
-
-      return metrics;
+      if (error) {
+        console.error("Error fetching ad set metrics:", error);
+        throw new Error(error.message);
+      }
+      return data || [];
     },
-    enabled: !!org?.id && (options.enabled !== false),
+    enabled: options.enabled,
   });
 };
 
@@ -362,6 +322,7 @@ export const useAds = (
         .from('ads')
         .select(`
           *,
+          creative_data,
           ad_sets!inner(
             name,
             ad_campaigns!inner(
@@ -440,110 +401,123 @@ export const useSyncAds = () => {
  * Get ad (creative) metrics aggregated by date range
  */
 export const useAdMetrics = (
-  filters?: {
-    ad_id?: string;
-    ad_set_id?: string;
-    campaign_id?: string;
-    dateRange?: DateRange;
+  {
+    accountId,
+    campaignId,
+    adSetId,
+    dateRange,
+  }: {
+    accountId?: string;
+    campaignId?: string;
+    adSetId?: string;
+    dateRange: DateRange;
   },
   options: { enabled?: boolean } = {}
 ) => {
-  const { data: org } = useActiveOrganization();
-
-  return useQuery({
-    queryKey: ['ad-metrics', filters, org?.id],
+  return useQuery<AdMetrics[]>({
+    queryKey: ["adMetrics", accountId, campaignId, adSetId, dateRange],
     queryFn: async () => {
-      let query = supabase
-        .from('ad_daily_insights')
-        .select(`
-          *,
-          ads!inner(
-            name,
-            creative_type,
-            image_url,
-            video_url,
-            ad_sets!inner(
-              ad_campaigns!inner(
-                ad_accounts!inner(organization_id)
-              )
-            )
-          )
-        `);
+      if (!dateRange?.from || !dateRange?.to) return [];
 
-      if (filters?.ad_id) {
-        query = query.eq('ad_id', filters.ad_id);
-      }
-
-      if (filters?.ad_set_id) {
-        query = query.eq('ad_set_id', filters.ad_set_id);
-      }
-
-      if (filters?.campaign_id) {
-        query = query.eq('campaign_id', filters.campaign_id);
-      }
-
-      if (filters?.dateRange) {
-        query = query
-          .gte('date', filters.dateRange.start)
-          .lte('date', filters.dateRange.end);
-      }
-
-      // Filter by organization
-      if (org?.id) {
-        query = query.eq('ads.ad_sets.ad_campaigns.ad_accounts.organization_id', org.id);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      // Aggregate metrics by ad
-      const metricsMap = new Map<string, AdMetrics>();
-
-      data?.forEach((insight: any) => {
-        const adId = insight.ad_id;
-        const existing = metricsMap.get(adId);
-
-        if (existing) {
-          existing.spend += insight.spend || 0;
-          existing.impressions += insight.impressions || 0;
-          existing.clicks += insight.clicks || 0;
-          existing.leads_count += insight.leads_count || 0;
-        } else {
-          metricsMap.set(adId, {
-            ad_id: adId,
-            ad_name: insight.ads?.name || 'Unknown',
-            creative_type: insight.ads?.creative_type,
-            image_url: insight.ads?.image_url,
-            video_url: insight.ads?.video_url,
-            spend: insight.spend || 0,
-            impressions: insight.impressions || 0,
-            clicks: insight.clicks || 0,
-            leads_count: insight.leads_count || 0,
-            quality_ranking: insight.quality_ranking,
-            engagement_ranking: insight.engagement_ranking,
-            conversion_ranking: insight.conversion_ranking,
-            cpl: 0,
-            cpm: 0,
-            cpc: 0,
-            ctr: 0,
-          });
-        }
+      const { data, error } = await supabase.rpc("get_ad_metrics", {
+        p_account_id: accountId,
+        p_campaign_id: campaignId,
+        p_ad_set_id: adSetId,
+        p_start_date: dateRange.from.toISOString().split("T")[0],
+        p_end_date: dateRange.to.toISOString().split("T")[0],
       });
 
-      // Calculate derived metrics
-      const metrics = Array.from(metricsMap.values()).map((m) => ({
-        ...m,
-        cpl: m.leads_count > 0 ? m.spend / m.leads_count : 0,
-        cpm: m.impressions > 0 ? (m.spend / m.impressions) * 1000 : 0,
-        cpc: m.clicks > 0 ? m.spend / m.clicks : 0,
-        ctr: m.impressions > 0 ? (m.clicks / m.impressions) * 100 : 0,
-      }));
+      if (error) {
+        console.warn("get_ad_metrics indisponível, aplicando fallback via ad_daily_insights.", error);
+        // Fallback: agrega métricas diretamente de ad_daily_insights com join em ads
+        const startStr = dateRange.from.toISOString().split("T")[0];
+        const endStr = dateRange.to.toISOString().split("T")[0];
 
-      // Sort by spend (highest first)
-      return metrics.sort((a, b) => b.spend - a.spend);
+        let query = supabase
+          .from("ad_daily_insights")
+          .select(
+            `
+            ad_id,
+            date,
+            spend,
+            impressions,
+            clicks,
+            leads_count,
+            ads!inner(
+              id,
+              name,
+              creative_type,
+              image_url,
+              thumbnail_url,
+              campaign_id,
+              ad_set_id
+            )
+          `
+          )
+          .gte("date", startStr)
+          .lte("date", endStr)
+          .order("date", { ascending: false })
+          .limit(2000);
+
+        // Aplica filtros quando possível nas tabelas relacionadas
+        if (adSetId) {
+          query = query.eq("ads.ad_set_id", adSetId);
+        }
+        if (campaignId) {
+          query = query.eq("ads.campaign_id", campaignId);
+        }
+        // Nota: accountId exige join adicional em ad_campaigns/ad_accounts; se não houver campaignId, filtramos por campanha quando disponível
+
+        const { data: rows, error: fbError } = await query;
+        if (fbError) {
+          console.error("Erro no fallback de ad_daily_insights:", fbError);
+          // Evita quebrar a UI; retorna vazio
+          return [];
+        }
+        if (!rows || rows.length === 0) return [];
+
+        const aggregated: Record<string, AdMetrics> = {};
+        for (const r of rows as any[]) {
+          const ad = r.ads;
+          if (!ad) continue;
+          const key = ad.id;
+          if (!aggregated[key]) {
+            aggregated[key] = {
+              ad_id: ad.id,
+              ad_name: ad.name,
+              creative_type: ad.creative_type,
+              image_url: ad.image_url,
+              thumbnail_url: ad.thumbnail_url,
+              spend: 0,
+              impressions: 0,
+              clicks: 0,
+              leads_count: 0,
+              cpl: 0,
+              cpm: 0,
+              cpc: 0,
+              ctr: 0,
+            };
+          }
+          aggregated[key].spend += Number(r.spend ?? 0);
+          aggregated[key].impressions += Number(r.impressions ?? 0);
+          aggregated[key].clicks += Number(r.clicks ?? 0);
+          aggregated[key].leads_count += Number(r.leads_count ?? 0);
+        }
+
+        // Calcula métricas derivadas
+        for (const key of Object.keys(aggregated)) {
+          const m = aggregated[key];
+          m.cpl = m.leads_count > 0 ? m.spend / m.leads_count : 0;
+          m.cpm = m.impressions > 0 ? (m.spend / m.impressions) * 1000 : 0;
+          m.cpc = m.clicks > 0 ? m.spend / m.clicks : 0;
+          m.ctr = m.impressions > 0 ? (m.clicks / m.impressions) * 100 : 0;
+        }
+
+        return Object.values(aggregated).sort((a, b) => b.spend - a.spend);
+      }
+      return data || [];
     },
-    enabled: !!org?.id && (options.enabled !== false),
+    enabled: options.enabled,
   });
 };
 

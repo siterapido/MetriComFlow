@@ -4,30 +4,32 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TrendingUp, DollarSign, Target, Loader2, Users, BarChart3, GitBranch, Award, TrendingDown, RefreshCw } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, FunnelChart, Funnel, LabelList } from "recharts";
-import { useDashboardSummary, useRevenueRecords, useMetaKPIs, usePipelineMetrics, usePipelineEvolution, useCombinedFunnelData } from "@/hooks/useDashboard";
+import { useDashboardSummary, useRevenueRecords, useMetaKPIs, usePipelineMetrics, usePipelineEvolution } from "@/hooks/useDashboard";
 import { formatCurrency } from "@/lib/formatters";
 import { useMemo, useState } from "react";
 import { type FilterValues } from "@/components/meta-ads/MetaAdsFiltersV2";
 import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
 import { MetaAdsChart } from "@/components/meta-ads/MetaAdsChart";
 import { useFilteredInsights, getLastNDaysDateRange, useAdAccounts, useAdCampaigns } from "@/hooks/useMetaMetrics";
-import { ConversionFunnel } from "@/components/dashboard/ConversionFunnel";
+// Removed ConversionFunnel per request
 import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
 import { useMetaAuth } from "@/hooks/useMetaAuth";
 import { useToast } from "@/hooks/use-toast";
 import { UnifiedROICards } from "@/components/dashboard/UnifiedROICards";
-import { MetaToRevenueFunnel } from "@/components/dashboard/MetaToRevenueFunnel";
+import { IntegratedConversionUnified } from "@/components/dashboard/IntegratedConversionUnified";
 import { UnifiedMetricsChart } from "@/components/dashboard/UnifiedMetricsChart";
 import { useUnifiedMetrics, useUnifiedDailyBreakdown } from "@/hooks/useUnifiedMetrics";
+import { AutoSyncStatus } from "@/components/meta-ads/AutoSyncStatus";
+import { OrganizationSyncStatus } from "@/components/meta-ads/OrganizationSyncStatus";
 
 export default function Dashboard() {
   const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
   const { data: revenueRecords, isLoading: revenueLoading } = useRevenueRecords(undefined, new Date().getFullYear());
   const { toast } = useToast();
 
-  // Meta Ads filters state - Default to "All Time" (desde 2020)
+  // Meta Ads filters state - Padrão: últimos 30 dias
   const [metaFilters, setMetaFilters] = useState<FilterValues>({
-    dateRange: { start: '2020-01-01', end: new Date().toISOString().split('T')[0] },
+    dateRange: getLastNDaysDateRange(30),
   });
 
   const [isSyncing, setIsSyncing] = useState(false);
@@ -55,6 +57,8 @@ export default function Dashboard() {
     },
     { enabled: metaQueriesEnabled }
   );
+
+  // Conversion Funnel removed
 
   // CRM pipeline evolution over time (some views may reference this)
   // Defining it here prevents ReferenceError if JSX references exist.
@@ -155,7 +159,7 @@ export default function Dashboard() {
       const result = await syncDailyInsights({
         since: metaFilters.dateRange.start,
         until: metaFilters.dateRange.end,
-        ad_account_ids: accountsToSync,
+        accountIds: accountsToSync,
       });
 
       console.log('✅ Sync result:', result);
@@ -165,7 +169,7 @@ export default function Dashboard() {
 
       toast({
         title: "Dados sincronizados!",
-        description: `${totalCampaigns} campanhas e ${result.summary.totalDbUpserts} registros de métricas atualizados.`,
+        description: `${totalCampaigns} campanhas e ${(result?.recordsProcessed ?? 0)} registros de métricas atualizados.`,
       });
     } catch (error) {
       console.error('❌ Error syncing insights:', error);
@@ -337,9 +341,19 @@ export default function Dashboard() {
         <UnifiedMetricsChart data={dailyBreakdown} isLoading={dailyLoading} />
       )}
 
-      {/* Sprint 2: Funil Completo Meta → Receita */}
+      {/* Funil de Conversão Integrado (Simplificado) */}
       {hasMetaConnection && (
-        <MetaToRevenueFunnel metrics={unifiedMetrics} isLoading={unifiedLoading} />
+          <IntegratedConversionUnified metrics={unifiedMetrics} isLoading={unifiedLoading} />
+      )}
+
+      {/* Visão unificada já inclui o funil completo + KPI principal */}
+
+      {/* Status de Sincronização Automática */}
+      {hasMetaConnection && (
+        <div className="space-y-6">
+          <AutoSyncStatus />
+          <OrganizationSyncStatus />
+        </div>
       )}
     </div>
   );
