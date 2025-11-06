@@ -1,302 +1,160 @@
-import { useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+/**
+ * Página de Métricas - Foco em Conjuntos de Anúncios e Criativos
+ * Design: shadcn-ui com design system InsightFy
+ */
+
+import { useState, useMemo } from "react";
+import { Loader2, RefreshCw, TrendingUp, TrendingDown, AlertCircle, BarChart3, Layers, Image as ImageIcon, Target } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
 import { AdSetPerformanceTable } from "@/components/metrics/AdSetPerformanceTable";
 import { AdPerformanceTableV2 } from "@/components/metrics/AdPerformanceTableV2";
-import { EngagementFunnel } from "@/components/metrics/meta/EngagementFunnel";
-// import { CreativeInvestmentChart } from "@/components/metrics/meta/CreativeInvestmentChart";
-import { CampaignOverviewTable } from "@/components/metrics/meta/CampaignOverviewTable";
-// import { InvestmentByDayPie } from "@/components/metrics/meta/InvestmentByDayPie";
-import { MetricsCardGroup } from "@/components/metrics/meta/MetricsCardGroup";
-import { InvestmentTrendChart } from "@/components/metrics/meta/InvestmentTrendChart";
-// import { CreativeGrid } from "@/components/metrics/meta/CreativeGrid";
-import {
-  useMetaCampaignOverview,
-  // useMetaCreativeRanking,
-  // useMetaInvestmentSlices,
-  // useMetaInvestmentTimeline,
-  // useMetaSummary,
-} from "@/hooks/useMetaMetricsV2";
+import { MetaAdsConnectionDialog } from "@/components/metrics/MetaAdsConnectionDialog";
 import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
-import { useAdAccounts, useAdCampaigns, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
+import { useAdAccounts, useAdCampaigns } from "@/hooks/useMetaMetrics";
 import { useMetaAuth } from "@/hooks/useMetaAuth";
 import { useToast } from "@/hooks/use-toast";
-import { useUnifiedMetrics, useUnifiedDailyBreakdown } from "@/hooks/useUnifiedMetrics";
-import { useMetaCampaignOverviewMetrics } from "@/hooks/useMetaCampaignMetrics";
-import type { MetaCampaignOverviewRow, MetaPrimaryMetric, MetaEngagementStage, MetaInvestmentTimelinePoint } from "@/lib/metaMetrics";
-import { formatDateTime, formatCurrency } from "@/lib/formatters";
-import { DateRange } from "react-day-picker";
-import { format } from "date-fns";
-import { type FilterValues } from "@/components/meta-ads/MetaAdsFiltersV2";
-import { RefreshCw } from "lucide-react";
+import {
+  useAdSets,
+  useAdSetMetrics,
+  useAdMetrics,
+  useCreativePerformance,
+  getLastNDays,
+} from "@/hooks/useAdSetsAndAds";
+import { formatCurrency, formatNumber } from "@/lib/formatters";
+import { useQueryClient } from "@tanstack/react-query";
 
-type CampaignFilter = "all" | string;
-
-export default function MetricsPage() {
-  const [filters, setFilters] = useState<FilterValues>({
-    dateRange: getLastNDaysDateRange(30),
-  });
-  const dateRangeDayPicker: DateRange | undefined = filters.dateRange
-    ? { from: new Date(filters.dateRange.start), to: new Date(filters.dateRange.end) }
-    : undefined;
-  const [isSyncing, setIsSyncing] = useState(false);
+export default function MetricsPageNew() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const { hasActiveConnection, isLoading: statusLoading, isFetching: statusFetching } =
-    useMetaConnectionStatus();
-  
-  const { activeAdAccounts, syncCampaigns, syncDailyInsights, refreshData } = useMetaAuth();
+  // State
+  const [dateRange, setDateRange] = useState(getLastNDays(30));
+  const [selectedAccount, setSelectedAccount] = useState<string>("all");
+  const [selectedCampaign, setSelectedCampaign] = useState<string>("all");
+  const [selectedAdSet, setSelectedAdSet] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<"overview" | "adsets" | "creatives">("overview");
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [showConnectionDialog, setShowConnectionDialog] = useState(false);
 
-  const metaQueriesEnabled = hasActiveConnection;
-
-  const { data: adAccounts, isLoading: adAccountsLoading } = useAdAccounts({ enabled: metaQueriesEnabled });
-  const { data: campaigns } = useAdCampaigns(filters.accountId, { enabled: metaQueriesEnabled });
-
-  const statusPending = statusLoading || statusFetching || adAccountsLoading;
-
-  const { data: unifiedMetrics, isLoading: unifiedLoading } = useUnifiedMetrics(
-    {
-      dateRange: filters.dateRange,
-      accountId: filters.accountId,
-      campaignId: filters.campaignId,
-    },
-    { enabled: metaQueriesEnabled }
+  // Hooks
+  const { hasActiveConnection, isLoading: statusLoading } = useMetaConnectionStatus();
+  const { syncCampaigns, syncDailyInsights } = useMetaAuth();
+  const { data: accounts } = useAdAccounts({ enabled: hasActiveConnection });
+  const { data: campaigns } = useAdCampaigns(
+    selectedAccount === "all" ? undefined : selectedAccount,
+    { enabled: hasActiveConnection }
+  );
+  const { data: adSets } = useAdSets(
+    selectedCampaign === "all" ? undefined : selectedCampaign,
+    { enabled: hasActiveConnection && selectedCampaign !== "all" }
   );
 
-  const { data: dailyBreakdown, isLoading: dailyLoading } = useUnifiedDailyBreakdown(
+  // Metrics
+  const { data: adSetMetrics, isLoading: adSetMetricsLoading } = useAdSetMetrics(
     {
-      dateRange: filters.dateRange,
-      accountId: filters.accountId,
-      campaignId: filters.campaignId,
+      accountId: selectedAccount === "all" ? undefined : selectedAccount,
+      campaignId: selectedCampaign === "all" ? undefined : selectedCampaign,
+      adSetId: selectedAdSet === "all" ? undefined : selectedAdSet,
+      dateRange,
     },
-    { enabled: metaQueriesEnabled }
+    { enabled: hasActiveConnection }
   );
 
-  // Calcula período anterior com mesmo tamanho para variações (% change)
-  const prevDateRange = useMemo(() => {
-    if (!filters.dateRange?.start || !filters.dateRange?.end) return undefined;
-    const start = new Date(filters.dateRange.start);
-    const end = new Date(filters.dateRange.end);
-    const msPerDay = 24 * 60 * 60 * 1000;
-    const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / msPerDay) + 1);
-    const prevEnd = new Date(start.getTime() - msPerDay);
-    const prevStart = new Date(prevEnd.getTime() - (diffDays - 1) * msPerDay);
-    return {
-      start: prevStart.toISOString().split('T')[0],
-      end: prevEnd.toISOString().split('T')[0],
-    };
-  }, [filters.dateRange]);
-
-  const { data: prevMetrics, isLoading: prevLoading } = useUnifiedMetrics(
+  const { data: adMetrics, isLoading: adMetricsLoading } = useAdMetrics(
     {
-      dateRange: prevDateRange,
-      accountId: filters.accountId,
-      campaignId: filters.campaignId,
+      accountId: selectedAccount === "all" ? undefined : selectedAccount,
+      campaignId: selectedCampaign === "all" ? undefined : selectedCampaign,
+      adSetId: selectedAdSet === "all" ? undefined : selectedAdSet,
+      dateRange,
     },
-    { enabled: metaQueriesEnabled && !!prevDateRange }
+    { enabled: hasActiveConnection }
   );
 
-  const summaryQuery = useMemo(() => {
-    // Helper para calcular variação percentual segura
-    const calcChange = (current?: number, previous?: number) => {
-      if (current == null || previous == null || previous === 0) return undefined;
-      const change = ((current - previous) / previous) * 100;
-      return Number.isFinite(change) ? change : undefined;
-    };
+  const { data: creativePerformance, isLoading: creativePerformanceLoading } = useCreativePerformance(
+    dateRange,
+    { enabled: hasActiveConnection && activeTab === "overview" }
+  );
 
-    const isLoading = unifiedLoading || prevLoading;
-    if (!unifiedMetrics) {
-      return { isLoading, data: { primary: [], cost: [], funnel: [], updatedAt: null as string | null } };
+  // Computed values
+  const aggregatedMetrics = useMemo(() => {
+    if (!adSetMetrics || adSetMetrics.length === 0) {
+      return {
+        totalSpend: 0,
+        totalImpressions: 0,
+        totalClicks: 0,
+        totalLeads: 0,
+        avgCPL: 0,
+        avgCTR: 0,
+        avgCPC: 0,
+      };
     }
 
-    const impressions = unifiedMetrics.meta_impressions ?? 0;
-    const clicks = unifiedMetrics.meta_clicks ?? 0;
-    const metaLeads = unifiedMetrics.meta_leads ?? 0;
-    const crmLeads = unifiedMetrics.crm_total_leads ?? 0;
-    const spend = unifiedMetrics.meta_spend ?? 0;
-
-    // Calcular métricas de custo derivadas
-    const cpc = clicks > 0 ? spend / clicks : 0;
-    const cplMeta = unifiedMetrics.meta_cpl ?? (metaLeads > 0 ? spend / metaLeads : null);
-    const ctr = unifiedMetrics.meta_ctr ?? (impressions > 0 ? (clicks / impressions) * 100 : 0);
-
-    // Variações vs período anterior
-    const prevImpressions = prevMetrics?.meta_impressions ?? undefined;
-    const prevClicks = prevMetrics?.meta_clicks ?? undefined;
-    const prevCrmLeads = prevMetrics?.crm_total_leads ?? undefined;
-    const prevSpend = prevMetrics?.meta_spend ?? undefined;
-    const prevCpc = prevClicks && prevSpend ? prevSpend / prevClicks : undefined;
-    const prevCplMeta = prevMetrics?.meta_cpl ?? (prevMetrics?.meta_leads && prevSpend ? prevSpend / prevMetrics.meta_leads : undefined);
-    const prevCtr = prevMetrics?.meta_ctr ?? undefined;
-
-    const primary: MetaPrimaryMetric[] = [
-      { id: 'impressions', label: 'Impressões', value: impressions, formatter: 'integer' },
-      { id: 'clicks', label: 'Cliques', value: clicks, formatter: 'integer' },
-      // Exibir leads do CRM para refletir conversões reais
-      { id: 'crmLeads', label: 'Leads (CRM)', value: crmLeads, formatter: 'integer' },
-    ];
-
-    const cost: MetaPrimaryMetric[] = [
-      { id: 'cpc', label: 'Custo por Clique (CPC)', value: cpc, formatter: 'currency', currencyOptions: { currency: 'BRL', locale: 'pt-BR' } },
-      { id: 'cpl', label: 'Custo por Lead (CPL - Meta)', value: cplMeta ?? 0, formatter: 'currency', currencyOptions: { currency: 'BRL', locale: 'pt-BR' } },
-      { id: 'ctr', label: 'Taxa de Cliques (CTR)', value: ctr, formatter: 'percentage', suffix: '%' },
-    ];
-
-    const funnel: MetaEngagementStage[] = [
-      { id: 'impressions', label: 'Impressões', value: impressions },
-      { id: 'clicks', label: 'Cliques', value: clicks },
-      { id: 'metaLeads', label: 'Leads (Meta)', value: metaLeads },
-      { id: 'crmLeads', label: 'Leads (CRM)', value: crmLeads },
-      { id: 'closedWon', label: 'Clientes (Fechados)', value: unifiedMetrics.crm_fechados_ganho ?? 0 },
-    ];
-
-    // Data da última atualização com base no último dia do breakdown
-    const updatedAt = (dailyBreakdown && dailyBreakdown.length > 0)
-      ? new Date(dailyBreakdown[dailyBreakdown.length - 1].date + 'T00:00:00Z').toISOString()
-      : null;
+    const totals = adSetMetrics.reduce(
+      (acc, metric) => ({
+        spend: acc.spend + Number(metric.spend || 0),
+        impressions: acc.impressions + Number(metric.impressions || 0),
+        clicks: acc.clicks + Number(metric.clicks || 0),
+        leads: acc.leads + Number(metric.leads_count || 0),
+      }),
+      { spend: 0, impressions: 0, clicks: 0, leads: 0 }
+    );
 
     return {
-      isLoading,
-      data: {
-        primary,
-        cost,
-        funnel,
-        updatedAt,
-      },
+      totalSpend: totals.spend,
+      totalImpressions: totals.impressions,
+      totalClicks: totals.clicks,
+      totalLeads: totals.leads,
+      avgCPL: totals.leads > 0 ? totals.spend / totals.leads : 0,
+      avgCTR: totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0,
+      avgCPC: totals.clicks > 0 ? totals.spend / totals.clicks : 0,
     };
-  }, [unifiedMetrics, dailyBreakdown, unifiedLoading, prevMetrics, prevLoading]);
+  }, [adSetMetrics]);
 
-  const { data: campaignMetrics, isLoading: campaignsLoading } = useMetaCampaignOverviewMetrics(
-    {
-      dateRange: dateRangeDayPicker,
-      accountId: filters.accountId,
-      campaignId: filters.campaignId,
-    },
-    { enabled: metaQueriesEnabled }
-  );
-
-  // TODO: Refatorar os componentes abaixo para usar a nova fonte de dados unificada
-  // ou criar novos hooks que usem os filtros e a lógica de sincronização.
-  // const creativesQuery = { isLoading: true, data: [] };
-  // const investmentSlicesQuery = { isLoading: true, data: [] };
-  
-  const investmentTimelineQuery = useMemo(() => {
-    if (!dailyBreakdown) {
-      return { isLoading: dailyLoading, data: [] as MetaInvestmentTimelinePoint[] };
-    }
-
-    const data: MetaInvestmentTimelinePoint[] = dailyBreakdown.map(item => ({
-      date: item.date,
-      investment: item.spend,
-      uniqueCtr: item.ctr,
-    }));
-
-    return { isLoading: dailyLoading, data };
-  }, [dailyBreakdown, dailyLoading]);
-
-  const isLoading = statusPending || unifiedLoading || dailyLoading || campaignsLoading;
-
-  const hasData = useMemo(() => {
-    const metrics = [
-      unifiedMetrics?.meta_impressions,
-      unifiedMetrics?.meta_clicks,
-      unifiedMetrics?.meta_spend,
-      unifiedMetrics?.meta_leads,
-      unifiedMetrics?.crm_total_leads,
-    ].map((v) => Number(v ?? 0));
-    const anyMetric = metrics.some((v) => v > 0);
-    const hasBreakdown = (dailyBreakdown?.length ?? 0) > 0;
-    return anyMetric || hasBreakdown;
-  }, [unifiedMetrics, dailyBreakdown]);
-
-  const availableCampaigns = campaigns ?? [];
-
-  const filteredCampaigns = useMemo<MetaCampaignOverviewRow[]>(() => {
-    if (!campaignMetrics) return [];
-
-    return (campaignMetrics as any[]).map((metric) => ({
-      id: metric.ad_id ?? metric.ad_set_id ?? metric.id,
-      name: metric.ad_name ?? metric.ad_set_name ?? metric.name,
-      impressions: Number(metric.impressions ?? 0),
-      clicks: Number(metric.clicks ?? 0),
-      spend: Number(metric.spend ?? 0),
-      cpc: Number(metric.cpc ?? 0),
-      cpm: Number(metric.cpm ?? 0),
-      uniqueCtr: Number(metric.ctr ?? 0),
-      uniqueCtrRate: Number(metric.unique_ctr_rate ?? 0),
-    }));
-  }, [campaignMetrics]);
-
-  const handleSyncInsights = async () => {
-    if (!filters.dateRange) {
-      toast({
-        title: "Período não selecionado",
-        description: "Selecione um período para sincronizar os dados.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  // Handlers
+  const handleSyncAll = async () => {
     setIsSyncing(true);
-
     try {
-      const accountsToSync = filters.accountId
-        ? [filters.accountId]
-        : activeAdAccounts.map(acc => acc.id);
+      const accountsToSync =
+        selectedAccount === "all" ? (accounts || []).map((a) => a.id) : [selectedAccount];
 
       if (accountsToSync.length === 0) {
         toast({
           title: "Nenhuma conta ativa",
-          description: "Você precisa ter pelo menos uma conta Meta Ads ativa para sincronizar.",
+          description: "Você precisa ter pelo menos uma conta Meta Ads ativa.",
           variant: "destructive",
         });
-        setIsSyncing(false);
         return;
       }
 
-      console.log('🔄 Syncing campaigns for accounts:', accountsToSync);
-      let totalCampaigns = 0;
-
-      for (const accountId of accountsToSync) {
-        try {
-          const campaignResult = await syncCampaigns(accountId);
-          console.log(`✅ Campaigns synced for account ${accountId}:`, campaignResult);
-          totalCampaigns += campaignResult.campaignsCount || 0;
-        } catch (error) {
-          console.warn(`⚠️ Error syncing campaigns for account ${accountId}:`, error);
-        }
+      // Sync campaigns, ad sets, and ads
+      for (const accId of accountsToSync) {
+        await syncCampaigns(accId);
       }
 
-      console.log('🔄 Syncing daily insights...');
-      const result = await syncDailyInsights({
-        since: filters.dateRange.start,
-        until: filters.dateRange.end,
+      // Sync metrics
+      await syncDailyInsights({
+        since: dateRange.from.toISOString().split("T")[0],
+        until: dateRange.to.toISOString().split("T")[0],
         accountIds: accountsToSync,
       });
 
-      console.log('✅ Sync result:', result);
-
-      await refreshData();
+      await queryClient.invalidateQueries();
 
       toast({
-        title: "Dados sincronizados!",
-        description: `${totalCampaigns} campanhas e ${(result?.recordsProcessed ?? 0)} registros de métricas atualizados.`,
+        title: "Sincronização Concluída",
+        description: "Todos os dados foram atualizados com sucesso.",
       });
     } catch (error) {
-      console.error('❌ Error syncing insights:', error);
+      console.error("❌ Erro na sincronização:", error);
       toast({
-        title: "Erro ao sincronizar",
-        description: error instanceof Error ? error.message : "Não foi possível sincronizar os dados.",
+        title: "Erro na Sincronização",
+        description: "Ocorreu um erro ao sincronizar os dados.",
         variant: "destructive",
       });
     } finally {
@@ -304,181 +162,394 @@ export default function MetricsPage() {
     }
   };
 
-  if (statusPending) {
+  const handleAccountsUpdated = () => {
+    queryClient.invalidateQueries({ queryKey: ["metaConnectionStatus"] });
+    queryClient.invalidateQueries({ queryKey: ["adAccounts"] });
+    setShowConnectionDialog(false);
+  };
+
+  // Loading state
+  if (statusLoading) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
 
+  // No connection state
   if (!hasActiveConnection) {
     return (
       <div className="space-y-6 animate-fade-in">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Métricas Meta Ads</h1>
-          <p className="text-muted-foreground">
-            Visualize as métricas das campanhas após conectar sua conta Meta.
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-md">
+            <BarChart3 className="w-7 h-7 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Métricas de Anúncios</h1>
+            <p className="text-muted-foreground">Análise detalhada de conjuntos de anúncios e criativos</p>
+          </div>
         </div>
-        <Alert>
-          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>Conecte-se ao Meta Business Manager para acompanhar os indicadores de anúncios.</span>
-            <Button variant="outline" size="sm" asChild>
-              <a href="/metricas">Abrir métricas Meta Ads</a>
-            </Button>
-          </AlertDescription>
-        </Alert>
+
+        <Card className="border-border bg-card">
+          <CardContent className="pt-6">
+            <div className="space-y-4 text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-full flex items-center justify-center mx-auto">
+                <Target className="w-8 h-8 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-foreground">Conecte suas contas do Meta Ads</h2>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Sincronize suas campanhas, conjuntos de anúncios e criativos para análise completa de performance.
+                </p>
+              </div>
+              <Button onClick={() => setShowConnectionDialog(true)} className="gap-2">
+                <Target className="w-4 h-4" />
+                Conectar Meta Ads
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <MetaAdsConnectionDialog
+          open={showConnectionDialog}
+          onOpenChange={setShowConnectionDialog}
+          dateRange={dateRange}
+          onAccountsUpdated={handleAccountsUpdated}
+        />
       </div>
     );
   }
 
+  // Main content
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Relatório de Campanhas de Anúncios - Meta</h1>
-          <p className="text-muted-foreground">Painel consolidado das métricas chave de engajamento e custo.</p>
+      {/* Header com Filtros */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-md">
+            <BarChart3 className="w-7 h-7 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">Métricas de Anúncios</h1>
+            <p className="text-muted-foreground mt-1">Análise detalhada de conjuntos de anúncios e criativos</p>
+          </div>
         </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <DateRangePicker
-            date={dateRangeDayPicker}
-            onDateChange={(dateRange) => {
-              if (!dateRange?.from || !dateRange?.to) {
-                setFilters({ ...filters, dateRange: undefined });
-                return;
-              }
-              setFilters({
-                ...filters,
-                dateRange: {
-                  start: format(dateRange.from, "yyyy-MM-dd"),
-                  end: format(dateRange.to, "yyyy-MM-dd"),
-                },
-              });
-            }}
-          />
-          <Select value={filters.accountId || 'all'} onValueChange={(value) => setFilters({ ...filters, accountId: value === 'all' ? undefined : value, campaignId: undefined })}>
-            <SelectTrigger className="w-[240px] bg-card text-foreground">
-              <SelectValue placeholder="Selecione a conta de anúncios" />
+
+        {/* Filtros */}
+        <div className="flex flex-wrap gap-3">
+          <DateRangeFilter value={dateRange} onChange={setDateRange} />
+
+          <Select value={selectedAccount} onValueChange={(v) => {
+            setSelectedAccount(v);
+            setSelectedCampaign("all");
+            setSelectedAdSet("all");
+          }}>
+            <SelectTrigger className="w-[200px] bg-card">
+              <SelectValue placeholder="Conta" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as contas</SelectItem>
-              {adAccounts?.map((account) => (
+              {accounts?.map((account) => (
                 <SelectItem key={account.id} value={account.id}>
                   {account.business_name || account.external_id}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+
           <Select
-            value={filters.campaignId || 'all'}
-            onValueChange={(value: string) => setFilters({ ...filters, campaignId: value === 'all' ? undefined : value })}
+            value={selectedCampaign}
+            onValueChange={(v) => {
+              setSelectedCampaign(v);
+              setSelectedAdSet("all");
+            }}
+            disabled={selectedAccount === "all"}
           >
-            <SelectTrigger className="w-[240px] bg-card text-foreground">
-              <SelectValue placeholder="Selecione a campanha" />
+            <SelectTrigger className="w-[220px] bg-card">
+              <SelectValue placeholder="Campanha" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as campanhas</SelectItem>
-              {availableCampaigns.map((campaign) => (
+              {campaigns?.map((campaign) => (
                 <SelectItem key={campaign.id} value={campaign.id}>
                   {campaign.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+
+          {selectedCampaign !== "all" && adSets && adSets.length > 0 && (
+            <Select value={selectedAdSet} onValueChange={setSelectedAdSet}>
+              <SelectTrigger className="w-[220px] bg-card">
+                <SelectValue placeholder="Conjunto" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os conjuntos</SelectItem>
+                {adSets.map((adSet) => (
+                  <SelectItem key={adSet.id} value={adSet.id}>
+                    {adSet.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
           <Button
             variant="outline"
             size="default"
-            onClick={handleSyncInsights}
-            disabled={isSyncing || !filters.dateRange}
-            className="gap-2"
+            onClick={handleSyncAll}
+            disabled={isSyncing}
+            className="gap-2 bg-gradient-to-r from-primary/10 to-secondary/10 border-primary/30"
           >
-            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-            {isSyncing ? 'Sincronizando...' : 'Atualizar Dados'}
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
+            {isSyncing ? "Sincronizando..." : "Sincronizar"}
           </Button>
-      </div>
-    </div>
-
-      {!isLoading && !hasData && (
-        <Alert>
-          <AlertDescription className="flex items-center justify-between gap-2">
-            <span>Sem dados para o período selecionado.</span>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleSyncInsights}
-              disabled={isSyncing || !filters.dateRange}
-            >
-              {isSyncing ? 'Sincronizando...' : 'Sincronizar agora'}
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {filters.accountId && dateRangeDayPicker?.from && dateRangeDayPicker?.to && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Desempenho por Conjunto de Anúncios</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AdSetPerformanceTable
-                adAccountIds={[filters.accountId]}
-                campaignIds={filters.campaignId === "all" ? undefined : (filters.campaignId ? [filters.campaignId] : undefined)}
-                dateRange={dateRangeDayPicker}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Desempenho por Anúncio</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AdPerformanceTableV2
-                adAccountIds={[filters.accountId]}
-                campaignIds={filters.campaignId === "all" ? undefined : (filters.campaignId ? [filters.campaignId] : undefined)}
-                dateRange={dateRangeDayPicker}
-              />
-            </CardContent>
-          </Card>
-        </>
-      )}
-
-      <MetricsCardGroup
-        primary={summaryQuery.data?.primary ?? []}
-        cost={summaryQuery.data?.cost ?? []}
-        isLoading={summaryQuery.isLoading}
-      />
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <EngagementFunnel stages={summaryQuery.data?.funnel ?? []} isLoading={summaryQuery.isLoading} />
-        {/* <CreativeInvestmentChart data={creativesQuery.data ?? []} isLoading={creativesQuery.isLoading} /> */}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card className="border-border bg-card">
-          <CardHeader>
-            <CardTitle className="text-foreground">Visão geral por campanha</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              Impressões, cliques e custos por campanha ativa
-            </CardDescription>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-gradient-to-br from-card to-accent/20 border-border hover-lift">
+          <CardHeader className="pb-2">
+            <CardDescription>Investimento Total</CardDescription>
+            <CardTitle className="text-2xl font-bold text-foreground">
+              {formatCurrency(aggregatedMetrics.totalSpend)}
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <CampaignOverviewTable data={filteredCampaigns} isLoading={campaignsLoading} />
-          </CardContent>
         </Card>
-        {/* <InvestmentByDayPie data={investmentSlicesQuery.data ?? []} isLoading={investmentSlicesQuery.isLoading} /> */}
+
+        <Card className="bg-gradient-to-br from-card to-accent/20 border-border hover-lift">
+          <CardHeader className="pb-2">
+            <CardDescription>Leads Gerados</CardDescription>
+            <CardTitle className="text-2xl font-bold text-foreground">
+              {formatNumber(aggregatedMetrics.totalLeads)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-card to-accent/20 border-border hover-lift">
+          <CardHeader className="pb-2">
+            <CardDescription>CPL Médio</CardDescription>
+            <CardTitle className="text-2xl font-bold text-foreground">
+              {formatCurrency(aggregatedMetrics.avgCPL)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-card to-accent/20 border-border hover-lift">
+          <CardHeader className="pb-2">
+            <CardDescription>CTR Médio</CardDescription>
+            <CardTitle className="text-2xl font-bold text-foreground">
+              {aggregatedMetrics.avgCTR.toFixed(2)}%
+            </CardTitle>
+          </CardHeader>
+        </Card>
       </div>
 
-      <InvestmentTrendChart data={investmentTimelineQuery.data ?? []} isLoading={investmentTimelineQuery.isLoading} />
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3 bg-card">
+          <TabsTrigger value="overview" className="gap-2">
+            <TrendingUp className="w-4 h-4" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="adsets" className="gap-2">
+            <Layers className="w-4 h-4" />
+            Conjuntos
+          </TabsTrigger>
+          <TabsTrigger value="creatives" className="gap-2">
+            <ImageIcon className="w-4 h-4" />
+            Criativos
+          </TabsTrigger>
+        </TabsList>
 
-      {/* <CreativeGrid creatives={creativesQuery.data ?? []} isLoading={creativesQuery.isLoading} /> */}
+        {/* Tab: Overview */}
+        <TabsContent value="overview" className="space-y-6">
+          {creativePerformanceLoading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <>
+              {/* Top Performers */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Top Criativos por Leads */}
+                <Card className="border-border bg-card">
+                  <CardHeader>
+                    <CardTitle className="text-foreground flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-success" />
+                      Top 5 Criativos - Leads
+                    </CardTitle>
+                    <CardDescription>Criativos que mais geraram leads no período</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {creativePerformance?.topByLeads.slice(0, 5).map((ad, idx) => (
+                      <div
+                        key={ad.ad_id}
+                        className="flex items-center justify-between p-3 rounded-lg bg-gradient-to-r from-muted/50 to-accent/10 hover-lift"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="w-8 h-8 bg-gradient-to-br from-success/20 to-success/40 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-bold text-success">#{idx + 1}</span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {ad.ad_name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {ad.creative_type || "N/A"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0 ml-4">
+                          <p className="text-lg font-bold text-success">{ad.leads_count}</p>
+                          <p className="text-xs text-muted-foreground">{formatCurrency(ad.cpl)} CPL</p>
+                        </div>
+                      </div>
+                    ))}
+                    {(!creativePerformance?.topByLeads || creativePerformance.topByLeads.length === 0) && (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <AlertCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                        <p>Nenhum dado disponível</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-      <p className="text-xs text-muted-foreground">
-        Data da última atualização:{" "}
-        {summaryQuery.data?.updatedAt ? formatDateTime(summaryQuery.data.updatedAt) : "—"}
-      </p>
+                {/* Top Criativos por CTR */}
+                <Card className="border-border bg-card">
+                  <CardHeader>
+                    <CardTitle className="text-foreground flex items-center gap-2">
+                      <Target className="w-5 h-5 text-primary" />
+                      Top 5 Criativos - CTR
+                    </CardTitle>
+                    <CardDescription>Criativos com melhor taxa de clique</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {creativePerformance?.topByCTR.slice(0, 5).map((ad, idx) => (
+                      <div
+                        key={ad.ad_id}
+                        className="flex items-center justify-between p-3 rounded-lg bg-gradient-to-r from-muted/50 to-accent/10 hover-lift"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/40 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-bold text-primary">#{idx + 1}</span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {ad.ad_name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatNumber(ad.clicks)} cliques
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0 ml-4">
+                          <p className="text-lg font-bold text-primary">{ad.ctr.toFixed(2)}%</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatNumber(ad.impressions)} imp.
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    {(!creativePerformance?.topByCTR || creativePerformance.topByCTR.length === 0) && (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <AlertCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                        <p>Nenhum dado disponível</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Low Performers Alert */}
+              {creativePerformance && creativePerformance.lowPerformers.length > 0 && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Atenção:</strong> {creativePerformance.lowPerformers.length} criativos com gasto acima de R$ 50 e zero leads. Considere pausar ou otimizar.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        {/* Tab: Conjuntos de Anúncios */}
+        <TabsContent value="adsets" className="space-y-6">
+          {selectedAccount === "all" ? (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Selecione uma conta de anúncios específica para visualizar os conjuntos de anúncios.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle>Performance por Conjunto de Anúncios</CardTitle>
+                <CardDescription>
+                  Métricas detalhadas de todos os conjuntos no período selecionado
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AdSetPerformanceTable
+                  adAccountIds={[selectedAccount]}
+                  campaignIds={
+                    selectedCampaign === "all" ? undefined : selectedCampaign ? [selectedCampaign] : undefined
+                  }
+                  dateRange={{
+                    from: dateRange.from,
+                    to: dateRange.to,
+                  }}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Tab: Criativos */}
+        <TabsContent value="creatives" className="space-y-6">
+          {selectedAccount === "all" ? (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Selecione uma conta de anúncios específica para visualizar os criativos.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle>Performance por Criativo</CardTitle>
+                <CardDescription>
+                  Métricas detalhadas de todos os anúncios/criativos no período selecionado
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AdPerformanceTableV2
+                  adAccountIds={[selectedAccount]}
+                  campaignIds={
+                    selectedCampaign === "all" ? undefined : selectedCampaign ? [selectedCampaign] : undefined
+                  }
+                  dateRange={{
+                    from: dateRange.from,
+                    to: dateRange.to,
+                  }}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Connection Dialog */}
+      <MetaAdsConnectionDialog
+        open={showConnectionDialog}
+        onOpenChange={setShowConnectionDialog}
+        dateRange={dateRange}
+        onAccountsUpdated={handleAccountsUpdated}
+      />
     </div>
   );
 }
