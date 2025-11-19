@@ -9,11 +9,12 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
 
-interface NavItem {
+export interface NavItem {
   title: string;
   url: string;
   icon: LucideIcon;
@@ -22,7 +23,7 @@ interface NavItem {
   requiresOwner?: boolean;
 }
 
-const items: NavItem[] = [
+export const items: NavItem[] = [
   {
     title: "Dashboard Geral",
     url: "/dashboard",
@@ -84,17 +85,11 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
-        <div className="p-4 border-b border-sidebar-border">
-          <div className="flex items-center gap-2">
+        <div className="px-4 py-2">
+          <div className="flex items-center">
             <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center">
               <BarChart3 className="w-5 h-5 text-white" />
             </div>
-            {!isCollapsed && (
-              <div>
-                <h2 className="font-bold text-sidebar-foreground">MetriCom</h2>
-                <p className="text-xs text-sidebar-foreground/60">Flow System</p>
-              </div>
-            )}
           </div>
         </div>
 
@@ -125,6 +120,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarRail />
     </Sidebar>
   );
 }

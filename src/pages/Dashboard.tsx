@@ -126,7 +126,6 @@ export default function Dashboard() {
       {/* Header com filtros integrados */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
           <p className="text-muted-foreground">Visão completa de faturamento, oportunidades e Meta Ads</p>
         </div>
 

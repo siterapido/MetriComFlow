@@ -13,14 +13,14 @@ const SUPABASE_URL = 'https://fjoaliipjfcnokermkhy.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqb2FsaWlwamZjbm9rZXJta2h5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDQyMzgwNSwiZXhwIjoyMDc1OTk5ODA1fQ.nJjAUvhvOSEXQjweS-NWk5EjBxvNIyUzSY3mOxI40aw';
 
 async function applyMigration() {
-  console.log('🚀 Aplicando migração Meta Ads...\n');
+  console.log('🚀 Aplicando migração: Allow members to delete leads...\n');
 
   try {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Ler arquivo de migração
-    const migrationPath = join(process.cwd(), 'supabase/migrations/004_meta_ads_tables.sql');
+    const migrationPath = join(process.cwd(), 'supabase/migrations/20251219000000_allow_members_to_delete_leads.sql');
     const migrationSQL = readFileSync(migrationPath, 'utf-8');
 
     console.log('📄 Lendo migração:', migrationPath);
@@ -62,32 +62,6 @@ async function applyMigration() {
     }
 
     console.log('\n✨ Migração concluída!\n');
-
-    // Verificar se as tabelas foram criadas
-    console.log('🔍 Verificando tabelas criadas...\n');
-
-    const { data: metaConnections, error: metaError } = await supabase
-      .from('meta_business_connections')
-      .select('count');
-
-    if (metaError) {
-      console.log('❌ Tabela meta_business_connections:', metaError.message);
-    } else {
-      console.log('✅ Tabela meta_business_connections criada');
-    }
-
-    const { data: adAccounts, error: adError } = await supabase
-      .from('ad_accounts')
-      .select('count');
-
-    if (adError) {
-      console.log('❌ Tabela ad_accounts:', adError.message);
-    } else {
-      console.log('✅ Tabela ad_accounts criada');
-    }
-
-    console.log('\n🎉 Pronto! Agora você pode executar:');
-    console.log('   npx tsx scripts/test-meta-token.ts marckexpert1@gmail.com');
 
   } catch (error) {
     console.error('\n❌ Erro:', error instanceof Error ? error.message : error);

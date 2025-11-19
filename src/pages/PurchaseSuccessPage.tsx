@@ -43,7 +43,6 @@ const PurchaseSuccessPage = () => {
 
   return (
     <div className="max-w-xl mx-auto p-6">
-      <h1 className="text-2xl font-semibold mb-4">Compra concluída</h1>
       {status === "finalizing" && <p>Finalizando sua compra…</p>}
       {status === "done" && (
         <div className="space-y-3">

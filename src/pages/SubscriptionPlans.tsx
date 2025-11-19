@@ -141,9 +141,7 @@ export default function SubscriptionPlans() {
             <CreditCard className="w-7 h-7 text-white" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
-              Planos e Assinatura
-            </h1>
+            <h2 className="text-xl font-semibold text-foreground">Planos e Assinatura</h2>
             <p className="text-muted-foreground mt-1">
               {org ? `Gerencie o plano de ${org.name}` : "Escolha o plano ideal para sua equipe"}
             </p>

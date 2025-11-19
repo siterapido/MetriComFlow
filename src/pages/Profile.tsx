@@ -177,7 +177,6 @@ export default function Profile() {
           <UserCog className="h-6 w-6 text-white" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Meu Perfil</h1>
           <p className="text-muted-foreground">
             Atualize seus dados pessoais e mantenha suas credenciais seguras.
           </p>

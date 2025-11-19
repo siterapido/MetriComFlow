@@ -53,12 +53,11 @@ type Lead = Tables<"leads"> & {
 
 interface LeadCardProps {
   lead: Lead;
-  onDelete?: (id: string) => void;
   onUpdate?: (id: string, data: Partial<Lead>) => void;
   className?: string;
 }
 
-export function LeadCard({ lead, onDelete, onUpdate, className }: LeadCardProps) {
+export function LeadCard({ lead, onUpdate, className }: LeadCardProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const updateLead = useUpdateLead();
   const { toast } = useToast();

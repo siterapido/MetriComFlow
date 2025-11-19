@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, Link2, RefreshCw, Download, CalendarDays } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -20,9 +20,6 @@ import { MetricsCardGroup } from "@/components/metrics/meta/MetricsCardGroup";
 import { InvestmentTrendChart } from "@/components/metrics/meta/InvestmentTrendChart";
 import { UnifiedDailyBreakdownChart } from "@/components/metrics/meta/UnifiedDailyBreakdownChart";
 import { AdPerformanceTableV2 } from "@/components/metrics/AdPerformanceTableV2";
-import {
-  useMetaCampaignOverview,
-} from "@/hooks/useMetaMetricsV2";
 import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
 import { useAdAccounts, useAdCampaigns, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
 import { useMetaAuth } from "@/hooks/useMetaAuth";
@@ -35,6 +32,8 @@ import type { MetaCampaignOverviewRow, MetaPrimaryMetric, MetaEngagementStage, M
 import { formatDateTime } from "@/lib/formatters";
 import { DateRange } from "react-day-picker";
 import { format } from "date-fns";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 
 type CampaignFilter = "all" | string;
 
@@ -56,6 +55,7 @@ export default function MetricsPageModern() {
   const canManageMeta = useHasMetricsAccess();
 
   const metaQueriesEnabled = hasActiveConnection;
+  const queryClient = useQueryClient();
 
   const { data: adAccounts, isLoading: adAccountsLoading } = useAdAccounts({ enabled: metaQueriesEnabled });
   const { data: campaigns } = useAdCampaigns(filters.accountId, { enabled: metaQueriesEnabled });
@@ -79,6 +79,36 @@ export default function MetricsPageModern() {
     },
     { enabled: metaQueriesEnabled }
   );
+
+  // Assinatura realtime para atualizar métricas assim que novos insights forem gravados
+  useEffect(() => {
+    if (!hasActiveConnection) return;
+    const chan = supabase
+      .channel('realtime-metrics')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ad_daily_insights' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['unified-metrics'] });
+          queryClient.invalidateQueries({ queryKey: ['unified-daily-breakdown'] });
+          queryClient.invalidateQueries({ queryKey: ['metaCampaignOverview'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ad_set_daily_insights' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['unified-metrics'] });
+          queryClient.invalidateQueries({ queryKey: ['unified-daily-breakdown'] });
+          queryClient.invalidateQueries({ queryKey: ['metaCampaignOverview'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try { supabase.removeChannel(chan); } catch {}
+    };
+  }, [hasActiveConnection, queryClient]);
 
   const prevDateRange = useMemo(() => {
     if (!filters.dateRange?.start || !filters.dateRange?.end) return undefined;
@@ -252,6 +282,7 @@ export default function MetricsPageModern() {
         accountIds: accountsToSync,
       });
       await refreshData();
+      await queryClient.invalidateQueries();
       toast({
         title: "Dados atualizados",
         description: "Os indicadores foram atualizados com sucesso.",
@@ -279,7 +310,6 @@ export default function MetricsPageModern() {
     return (
       <div className="space-y-6 animate-fade-in">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Métricas Meta Ads</h1>
           <p className="text-muted-foreground">Conecte sua conta Meta para visualizar as métricas.</p>
         </div>
         <Alert>
@@ -321,7 +351,7 @@ export default function MetricsPageModern() {
         </Breadcrumb>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Relatório de Campanhas de Anúncios</h1>
+            <h2 className="text-xl font-semibold text-foreground">Relatório de Campanhas de Anúncios</h2>
             <p className="text-muted-foreground">KPIs, tendências e visão por campanhas do Meta Ads.</p>
           </div>
           <div className="flex items-center gap-2">

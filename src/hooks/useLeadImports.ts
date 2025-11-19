@@ -35,7 +35,16 @@ export function useLeadImportMappings() {
         .eq("organization_id", org.id)
         .order("usage_count", { ascending: false })
         .limit(50);
-      if (error) throw error;
+      if (error) {
+        const msg = (error as any)?.message?.toLowerCase() || "";
+        const details = (error as any)?.details?.toLowerCase() || "";
+        const code = (error as any)?.code || "";
+        // Tolerar ambiente sem tabela (migrations não aplicadas)
+        if (code === "404" || msg.includes("failed to fetch") || details.includes("not found")) {
+          return [] as LeadImportMapping[];
+        }
+        throw error;
+      }
       return (data ?? []) as LeadImportMapping[];
     },
     enabled: !!org?.id,
@@ -48,17 +57,40 @@ export function useLeadImportMappings() {
       const { error } = await supabase
         .from("lead_import_mappings")
         .insert({ organization_id: org.id, user_id: user?.id, name, mapping_json, usage_count: 0, last_used_at: new Date().toISOString() });
-      if (error) throw error;
+      if (error) {
+        const code = (error as any)?.code || "";
+        const msg = (error as any)?.message?.toLowerCase() || "";
+        if (code === "404" || msg.includes("failed to fetch")) return; // tolerar ausência
+        throw error;
+      }
     },
   });
 
   const touch = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      // Incremento simples: ler e atualizar (fallback quando migrations ainda não existem)
+      const { data, error } = await supabase
         .from("lead_import_mappings")
-        .update({ usage_count: supabase.rpc("", {}), last_used_at: new Date().toISOString() })
+        .select("usage_count")
+        .eq("id", id)
+        .single();
+      if (error) {
+        const code = (error as any)?.code || "";
+        const msg = (error as any)?.message?.toLowerCase() || "";
+        if (code === "404" || msg.includes("failed to fetch")) return; // tolerar ausência
+        throw error;
+      }
+      const next = (data?.usage_count ?? 0) + 1;
+      const { error: upError } = await supabase
+        .from("lead_import_mappings")
+        .update({ usage_count: next, last_used_at: new Date().toISOString() })
         .eq("id", id);
-      if (error) throw error;
+      if (upError) {
+        const code = (upError as any)?.code || "";
+        const msg = (upError as any)?.message?.toLowerCase() || "";
+        if (code === "404" || msg.includes("failed to fetch")) return; // tolerar ausência
+        throw upError;
+      }
     },
   });
 

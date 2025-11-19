@@ -16,7 +16,7 @@ import { LeadCard } from "@/components/leads/LeadCard";
 import { StageValueCard } from "@/components/leads/StageValueCard";
 import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
 import { useToast } from "@/hooks/use-toast";
-import { useLeads, useDeleteLead, useUpdateLead, type Lead } from "@/hooks/useLeads";
+import { useLeads, useUpdateLead, type Lead } from "@/hooks/useLeads";
 import { useAdAccounts, useAdCampaigns, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
 import type { FilterValues } from "@/components/meta-ads/MetaAdsFiltersV2";
 import { cn } from "@/lib/utils";
@@ -46,7 +46,6 @@ export default function LeadsLinear() {
 
   // Fetch data
   const { data: leads, isLoading, error } = useLeads();
-  const deleteLead = useDeleteLead();
   const updateLead = useUpdateLead();
   const { data: accounts } = useAdAccounts();
   const { data: campaigns } = useAdCampaigns(filters.accountId);
@@ -110,21 +109,7 @@ export default function LeadsLinear() {
     });
   };
 
-  const handleDeleteLead = async (id: string) => {
-    try {
-      await deleteLead.mutateAsync(id);
-      toast({
-        title: "Lead excluído",
-        description: "O lead foi removido com sucesso.",
-      });
-    } catch (error) {
-      toast({
-        title: "Erro ao excluir lead",
-        description: "Não foi possível remover o lead.",
-        variant: "destructive",
-      });
-    }
-  };
+  // Exclusão é realizada dentro do LeadEditDialog
 
   const onDragEnd = async (result: DropResult) => {
     const { source, destination, draggableId } = result;
@@ -194,9 +179,7 @@ export default function LeadsLinear() {
               <LayoutList className="w-7 h-7 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                CRM - Pipeline
-              </h1>
+              <h2 className="text-xl font-semibold text-foreground">CRM - Pipeline</h2>
               <p className="text-muted-foreground mt-1">
                 Gestão horizontal de oportunidades e contratos
               </p>
@@ -360,7 +343,6 @@ export default function LeadsLinear() {
                                     >
                                       <LeadCard
                                         lead={lead}
-                                        onDelete={handleDeleteLead}
                                       />
                                     </div>
                                   )}

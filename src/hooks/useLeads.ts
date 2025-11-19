@@ -485,7 +485,6 @@ export function useDeleteLead() {
     mutationFn: async (id: string) => {
       logDebug('[useDeleteLead] Deletando lead:', id)
       if (!org?.id) throw new Error('Organização ativa não definida')
-
       const { error } = await supabase
         .from('leads')
         .delete()
@@ -499,6 +498,18 @@ export function useDeleteLead() {
 
       logDebug('[useDeleteLead] Lead deletado com sucesso')
     },
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ['leads'] })
+
+      const previousLeads = queryClient.getQueryData(['leads']) as Lead[] | undefined
+
+      queryClient.setQueryData(['leads'], (old: Lead[] | undefined) => {
+        if (!old) return old
+        return old.filter((l) => l.id !== id)
+      })
+
+      return { previousLeads }
+    },
     onSuccess: () => {
       logDebug('[useDeleteLead] Invalidando queries')
 
@@ -508,12 +519,28 @@ export function useDeleteLead() {
       // Invalidar queries do dashboard
       queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
       queryClient.invalidateQueries({ queryKey: ['pipeline-metrics'] })
+      // Invalidar visões adicionais do pipeline
+      queryClient.invalidateQueries({ queryKey: ['leads-by-status'] })
+      queryClient.invalidateQueries({ queryKey: ['leads-follow-up'] })
+      queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] })
 
       toast.success('Lead removido com sucesso!')
     },
-    onError: (error) => {
+    onError: (error, _id, context) => {
+      if (context?.previousLeads) {
+        queryClient.setQueryData(['leads'], context.previousLeads)
+      }
       console.error('[useDeleteLead] Erro ao deletar lead:', error)
       toast.error('Erro ao remover lead')
+    },
+    onSettled: () => {
+      queryClient.refetchQueries({ queryKey: ['leads'], type: 'active' })
+      queryClient.refetchQueries({ queryKey: ['dashboard-summary'], type: 'active' })
+      queryClient.refetchQueries({ queryKey: ['pipeline-metrics'], type: 'active' })
+      // Refetch visões adicionais
+      queryClient.refetchQueries({ queryKey: ['leads-by-status'], type: 'active' })
+      queryClient.refetchQueries({ queryKey: ['leads-follow-up'], type: 'active' })
+      queryClient.refetchQueries({ queryKey: ['pipeline-stats'], type: 'active' })
     }
   })
 }
@@ -562,6 +589,19 @@ export function useLeadActivity(leadId?: string) {
 // Hook para buscar leads por status (visão do pipeline)
 export function useLeadsByStatus() {
   const { data: org } = useActiveOrganization()
+  const queryClient = useQueryClient()
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime-leads-by-status')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['leads-by-status'] })
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [queryClient])
   return useQuery({
     queryKey: ['leads-by-status', org?.id],
     queryFn: async () => {

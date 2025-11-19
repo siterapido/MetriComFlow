@@ -362,7 +362,7 @@ export const FormRenderer = ({
   return (
     <div className="w-full max-w-2xl rounded-2xl border border-border bg-card/80 backdrop-blur p-6 shadow-lg">
       <div className="space-y-2 text-center">
-        <h1 className="text-2xl font-semibold text-foreground">{formName}</h1>
+        <h2 className="text-xl font-semibold text-foreground">{formName}</h2>
         {variantName && <p className="text-sm text-muted-foreground">Campanha: {variantName}</p>}
       </div>
 
