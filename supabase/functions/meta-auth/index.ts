@@ -79,6 +79,20 @@ Deno.serve(async (req) => {
 
     console.log('✅ User authenticated successfully:', user.email);
 
+    // Permission check: only owners and traffic managers can manage Meta Ads
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('user_type')
+      .eq('id', user.id)
+      .maybeSingle();
+    const userType = (profile as any)?.user_type || null;
+    if (userType !== 'owner' && userType !== 'traffic_manager') {
+      return new Response(
+        JSON.stringify({ error: 'Permissão insuficiente para gerenciar integrações de anúncios.', success: false }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+      );
+    }
+
     const { action, code, redirect_uri }: MetaAuthRequest = await req.json();
 
     // Helper to deterministically resolve and normalize the redirect_uri so that

@@ -22,6 +22,8 @@ export interface UnifiedMetrics {
   meta_leads: number
   meta_ctr: number // CTR (%)
   meta_cpl: number | null // CPL reportado pelo Meta
+  meta_link_clicks: number
+  meta_post_engagement: number
 
   // CRM (bottom of funnel)
   crm_total_leads: number
@@ -57,11 +59,12 @@ export function useUnifiedMetrics(
   options?: { enabled?: boolean }
 ) {
   const { data: activeOrg } = useActiveOrganization()
+  const orgId = activeOrg?.id
 
   return useQuery<UnifiedMetrics>({
     queryKey: ['unified-metrics', activeOrg?.id, filters?.dateRange, filters?.accountId, filters?.campaignId],
     queryFn: async () => {
-      if (!activeOrg?.id) {
+      if (!orgId) {
         throw new Error('No active organization')
       }
 
@@ -89,7 +92,7 @@ export function useUnifiedMetrics(
       let insightsQuery = supabase
         .from('campaign_daily_insights')
         .select('spend, impressions, clicks, leads_count, ad_campaigns!inner(ad_account_id, ad_accounts!inner(organization_id))')
-        .eq('ad_campaigns.ad_accounts.organization_id', activeOrg.id)
+        .eq('ad_campaigns.ad_accounts.organization_id', orgId)
         .gte('date', startStr)
         .lt('date', endStr)
 
@@ -116,11 +119,33 @@ export function useUnifiedMetrics(
 
       logDebug('[useUnifiedMetrics] Meta Ads aggregated:', { meta_spend, meta_impressions, meta_clicks, meta_leads, meta_ctr, meta_cpl })
 
+      // 1b. Agregar engajamento adicional via ad_set_daily_insights (link_clicks, post_engagement)
+      // Usa filtro por campanha/conta como acima
+      let adSetInsightsQuery = supabase
+        .from('ad_set_daily_insights')
+        .select('link_clicks, post_engagement, campaign_id, date, ad_sets!inner(ad_campaigns!inner(ad_account_id, ad_accounts!inner(organization_id)))')
+        .eq('ad_sets.ad_campaigns.ad_accounts.organization_id', orgId)
+        .gte('date', startStr)
+        .lt('date', endStr)
+
+      if (filters?.campaignId) {
+        adSetInsightsQuery = adSetInsightsQuery.eq('campaign_id', filters.campaignId)
+      } else if (filters?.accountId) {
+        adSetInsightsQuery = adSetInsightsQuery.eq('ad_sets.ad_campaigns.ad_account_id', filters.accountId)
+      }
+
+      const { data: adsetInsights, error: adsetErr } = await adSetInsightsQuery
+      if (adsetErr) {
+        console.warn('[useUnifiedMetrics] Error fetching ad_set_daily_insights (engagement):', adsetErr)
+      }
+      const meta_link_clicks = (adsetInsights || []).reduce((sum: number, r: any) => sum + Number(r.link_clicks ?? 0), 0)
+      const meta_post_engagement = (adsetInsights || []).reduce((sum: number, r: any) => sum + Number(r.post_engagement ?? 0), 0)
+
       // 2. Buscar leads do CRM (todos os leads da org no período)
       let leadsQuery = supabase
         .from('leads')
         .select('status, value, campaign_id, source')
-        .eq('organization_id', activeOrg.id)
+        .eq('organization_id', orgId)
         .gte('created_at', startStr)
         .lt('created_at', endStr)
 
@@ -196,6 +221,8 @@ export function useUnifiedMetrics(
         meta_leads,
         meta_ctr,
         meta_cpl,
+        meta_link_clicks,
+        meta_post_engagement,
         crm_total_leads,
         crm_qualificados,
         crm_propostas,
@@ -218,7 +245,7 @@ export function useUnifiedMetrics(
     staleTime: 0, // Sempre buscar dados frescos
     refetchOnMount: true,
     refetchOnWindowFocus: true,
-    enabled: (options?.enabled ?? true) && !!activeOrg?.id,
+    enabled: (options?.enabled ?? true) && !!orgId,
   })
 }
 
@@ -232,6 +259,8 @@ export interface UnifiedDailyBreakdown {
   impressions: number
   clicks: number
   meta_leads: number
+  link_clicks: number
+  post_engagement: number
   crm_leads_created: number
   crm_leads_qualified: number
   crm_leads_closed_won: number
@@ -246,11 +275,12 @@ export function useUnifiedDailyBreakdown(
   options?: { enabled?: boolean }
 ) {
   const { data: activeOrg } = useActiveOrganization()
+  const orgId = activeOrg?.id
 
   return useQuery<UnifiedDailyBreakdown[]>({
-    queryKey: ['unified-daily-breakdown', activeOrg?.id, filters?.dateRange, filters?.accountId, filters?.campaignId],
+    queryKey: ['unified-daily-breakdown', orgId, filters?.dateRange, filters?.accountId, filters?.campaignId],
     queryFn: async () => {
-      if (!activeOrg?.id) {
+      if (!orgId) {
         throw new Error('No active organization')
       }
 
@@ -278,7 +308,7 @@ export function useUnifiedDailyBreakdown(
       let insightsQuery = supabase
         .from('campaign_daily_insights')
         .select('date, spend, impressions, clicks, leads_count, ad_campaigns!inner(ad_account_id, ad_accounts!inner(organization_id))')
-        .eq('ad_campaigns.ad_accounts.organization_id', activeOrg.id)
+        .eq('ad_campaigns.ad_accounts.organization_id', orgId)
         .gte('date', startStr)
         .lt('date', endStr)
         .order('date', { ascending: true })
@@ -295,11 +325,31 @@ export function useUnifiedDailyBreakdown(
         console.error('[useUnifiedDailyBreakdown] Error fetching insights:', insightsErr)
       }
 
+      // 1b. Agregar engajamento adicional via ad_set_daily_insights (link_clicks, post_engagement)
+      let adSetInsightsQuery = supabase
+        .from('ad_set_daily_insights')
+        .select('date, link_clicks, post_engagement, campaign_id, ad_sets!inner(ad_campaigns!inner(ad_account_id, ad_accounts!inner(organization_id)))')
+        .eq('ad_sets.ad_campaigns.ad_accounts.organization_id', orgId)
+        .gte('date', startStr)
+        .lt('date', endStr)
+        .order('date', { ascending: true })
+
+      if (filters?.campaignId) {
+        adSetInsightsQuery = adSetInsightsQuery.eq('campaign_id', filters.campaignId)
+      } else if (filters?.accountId) {
+        adSetInsightsQuery = adSetInsightsQuery.eq('ad_sets.ad_campaigns.ad_account_id', filters.accountId)
+      }
+
+      const { data: adsetInsights, error: adsetErr } = await adSetInsightsQuery
+      if (adsetErr) {
+        console.warn('[useUnifiedDailyBreakdown] Error fetching ad_set_daily_insights (engagement):', adsetErr)
+      }
+
       // 2. Buscar leads diários do CRM
       let leadsQuery = supabase
         .from('leads')
         .select('created_at, status, value, campaign_id')
-        .eq('organization_id', activeOrg.id)
+        .eq('organization_id', orgId)
         .gte('created_at', startStr)
         .lt('created_at', endStr)
 
@@ -336,6 +386,8 @@ export function useUnifiedDailyBreakdown(
             impressions: 0,
             clicks: 0,
             meta_leads: 0,
+            link_clicks: 0,
+            post_engagement: 0,
             crm_leads_created: 0,
             crm_leads_qualified: 0,
             crm_leads_closed_won: 0,
@@ -350,6 +402,30 @@ export function useUnifiedDailyBreakdown(
         dailyMap[date].impressions += insight.impressions || 0
         dailyMap[date].clicks += insight.clicks || 0
         dailyMap[date].meta_leads += insight.leads_count || 0
+      })
+
+      adsetInsights?.forEach((row: any) => {
+        const date = row.date
+        if (!dailyMap[date]) {
+          dailyMap[date] = {
+            date,
+            spend: 0,
+            impressions: 0,
+            clicks: 0,
+            meta_leads: 0,
+            link_clicks: 0,
+            post_engagement: 0,
+            crm_leads_created: 0,
+            crm_leads_qualified: 0,
+            crm_leads_closed_won: 0,
+            revenue: 0,
+            ctr: 0,
+            cpl: null,
+            roas: null,
+          }
+        }
+        dailyMap[date].link_clicks += Number(row.link_clicks ?? 0)
+        dailyMap[date].post_engagement += Number(row.post_engagement ?? 0)
       })
 
       // Processar leads
@@ -399,6 +475,6 @@ export function useUnifiedDailyBreakdown(
     staleTime: 0,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
-    enabled: (options?.enabled ?? true) && !!activeOrg?.id,
+    enabled: (options?.enabled ?? true) && !!orgId,
   })
 }

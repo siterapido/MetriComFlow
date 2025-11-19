@@ -11,6 +11,8 @@ interface MetaInsightRow {
   spend?: string;
   impressions?: string;
   clicks?: string;
+  inline_link_clicks?: string | number;
+  website_ctr?: any;
   actions?: Array<{
     action_type: string;
     value: string;
@@ -294,6 +296,8 @@ Deno.serve(async (req: Request) => {
             'spend',
             'impressions',
             'clicks',
+            'inline_link_clicks',
+            'website_ctr',
             'actions',
           ].join(',');
 
@@ -371,6 +375,17 @@ Deno.serve(async (req: Request) => {
             const leadsAction = (insight.actions || []).find(a => LEAD_ACTION_TYPES.has(a.action_type));
             const leadsCount = leadsAction ? parseInt(String(leadsAction.value)) : 0;
             const campaign = campaigns.find(c => c.external_id === insight.campaign_id);
+            const websiteCtrRaw = (insight as any).website_ctr;
+            let websiteCtr = 0;
+            try {
+              if (Array.isArray(websiteCtrRaw) && websiteCtrRaw.length > 0) {
+                const v = websiteCtrRaw[0]?.value;
+                websiteCtr = v !== undefined ? parseFloat(String(v)) : 0;
+              } else if (typeof websiteCtrRaw === 'number' || typeof websiteCtrRaw === 'string') {
+                websiteCtr = parseFloat(String(websiteCtrRaw)) || 0;
+              }
+            } catch { websiteCtr = 0; }
+            const linkClicks = parseInt(String((insight as any).inline_link_clicks ?? '0')) || 0;
             return campaign ? {
               campaign_id: campaign.id,
               date: insight.date_start,
@@ -378,9 +393,11 @@ Deno.serve(async (req: Request) => {
               impressions: parseInt(String(insight.impressions ?? '0')) || 0,
               clicks: parseInt(String(insight.clicks ?? '0')) || 0,
               leads_count: Number.isFinite(leadsCount) ? leadsCount : 0,
+              link_clicks: linkClicks,
+              website_ctr: websiteCtr,
             } : null;
           }).filter(Boolean) as Array<{
-            campaign_id: string; date: string; spend: number; impressions: number; clicks: number; leads_count: number;
+            campaign_id: string; date: string; spend: number; impressions: number; clicks: number; leads_count: number; link_clicks: number; website_ctr: number;
           }>;
 
           // Upsert in batches

@@ -12,8 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Filter, Calendar, MessageSquare, Paperclip, User, History, Loader2, Facebook } from "lucide-react";
+import { Plus, Search, Filter, Calendar, MessageSquare, Paperclip, User, History, Loader2, Facebook, Upload } from "lucide-react";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
+import { LeadsImportDialog } from "@/components/leads/LeadsImportDialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useLeads, useUpdateLead, type LeadWithLabels } from "@/hooks/useLeads";
@@ -59,6 +60,7 @@ type LeadStatus =
 export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [sourceFilter, setSourceFilter] = useState<'all' | 'meta_ads' | 'manual'>('all');
   const [campaignFilter, setCampaignFilter] = useState<string>('all');
   const { toast } = useToast();
@@ -254,6 +256,14 @@ export default function Leads() {
           >
             <Plus className="w-4 h-4" />
             Novo Lead
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setIsImportOpen(true)}
+          >
+            <Upload className="w-4 h-4" />
+            Importar planilha
           </Button>
         </div>
       </div>
@@ -496,11 +506,12 @@ export default function Leads() {
       )}
 
       {/* Modal para Novo Lead */}
-      <NewLeadModal
-        open={isNewLeadModalOpen}
-        onOpenChange={setIsNewLeadModalOpen}
-        onSave={handleNewLead}
-      />
+  <NewLeadModal
+    open={isNewLeadModalOpen}
+    onOpenChange={setIsNewLeadModalOpen}
+    onSave={handleNewLead}
+  />
+  <LeadsImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} />
 
       {/* Histórico de movimentações */}
       <Card className="border-border bg-card">

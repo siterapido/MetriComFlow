@@ -9,6 +9,307 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      companies: {
+        Row: {
+          id: string
+          organization_id: string
+          owner_id: string | null
+          name: string
+          domain: string | null
+          phone: string | null
+          address: string | null
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          owner_id?: string | null
+          name: string
+          domain?: string | null
+          phone?: string | null
+          address?: string | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          owner_id?: string | null
+          name?: string
+          domain?: string | null
+          phone?: string | null
+          address?: string | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_companies_organization"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "companies_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contacts: {
+        Row: {
+          id: string
+          organization_id: string
+          company_id: string | null
+          owner_id: string | null
+          full_name: string
+          email: string | null
+          phone: string | null
+          role: string | null
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          company_id?: string | null
+          owner_id?: string | null
+          full_name: string
+          email?: string | null
+          phone?: string | null
+          role?: string | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          company_id?: string | null
+          owner_id?: string | null
+          full_name?: string
+          email?: string | null
+          phone?: string | null
+          role?: string | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_contacts_organization"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_pipelines: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          team_id: string | null
+          active: boolean | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          name: string
+          team_id?: string | null
+          active?: boolean | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          name?: string
+          team_id?: string | null
+          active?: boolean | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_deal_pipelines_organization"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_stages: {
+        Row: {
+          id: string
+          pipeline_id: string
+          name: string
+          position: number
+          probability: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          pipeline_id: string
+          name: string
+          position: number
+          probability?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          pipeline_id?: string
+          name?: string
+          position?: number
+          probability?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_stages_pipeline_id_fkey"
+            columns: ["pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "deal_pipelines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deals: {
+        Row: {
+          id: string
+          organization_id: string
+          company_id: string | null
+          contact_id: string | null
+          lead_id: string | null
+          title: string
+          value: number | null
+          pipeline_id: string | null
+          stage_id: string | null
+          status: "open" | "won" | "lost"
+          owner_id: string | null
+          expected_close_date: string | null
+          source: string | null
+          lost_reason: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          company_id?: string | null
+          contact_id?: string | null
+          lead_id?: string | null
+          title: string
+          value?: number | null
+          pipeline_id?: string | null
+          stage_id?: string | null
+          status?: "open" | "won" | "lost"
+          owner_id?: string | null
+          expected_close_date?: string | null
+          source?: string | null
+          lost_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          company_id?: string | null
+          contact_id?: string | null
+          lead_id?: string | null
+          title?: string
+          value?: number | null
+          pipeline_id?: string | null
+          stage_id?: string | null
+          status?: "open" | "won" | "lost"
+          owner_id?: string | null
+          expected_close_date?: string | null
+          source?: string | null
+          lost_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_deals_organization"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deals_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deals_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deals_pipeline_id_fkey"
+            columns: ["pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "deal_pipelines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deals_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "deal_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deals_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_activity: {
         Row: {
           action_type: "created" | "moved" | "updated" | "deleted" | "commented"
@@ -684,3 +985,18 @@ export type TablesUpdate<
       ? U
       : never
     : never
+      deal_metrics: {
+        Row: {
+          organization_id: string | null
+          month: string | null
+          week: string | null
+          status: string | null
+          value: number | null
+          expected_close_date: string | null
+          probability: number | null
+          owner_id: string | null
+          pipeline_id: string | null
+          stage_id: string | null
+        }
+        Relationships: []
+      }

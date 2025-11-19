@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Tables, TablesInsert, TablesUpdate } from '@/lib/database.types';
+import { useActiveOrganization } from '@/hooks/useActiveOrganization';
 
 type Task = Tables<'tasks'>;
 type TaskInsert = TablesInsert<'tasks'>;
@@ -14,9 +15,11 @@ export function useTasks(filters?: {
   completed?: boolean;
   overdue?: boolean;
 }) {
+  const { data: org } = useActiveOrganization();
   return useQuery({
-    queryKey: ['tasks', filters],
+    queryKey: ['tasks', org?.id, filters],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Organização ativa não definida');
       let query = supabase
         .from('tasks')
         .select(`
@@ -37,6 +40,7 @@ export function useTasks(filters?: {
             status
           )
         `)
+        .eq('organization_id', org.id)
         .order('due_date', { ascending: true, nullsFirst: false });
 
       // Aplicar filtros
@@ -79,9 +83,11 @@ export function useTasks(filters?: {
 
 // Hook para buscar tarefas pendentes do usuário atual
 export function useMyTasks() {
+  const { data: org } = useActiveOrganization();
   return useQuery({
-    queryKey: ['my-tasks'],
+    queryKey: ['my-tasks', org?.id],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Organização ativa não definida');
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
@@ -110,6 +116,7 @@ export function useMyTasks() {
           )
         `)
         .eq('assigned_to', teamMember.id)
+        .eq('organization_id', org.id)
         .eq('completed', false)
         .order('due_date', { ascending: true, nullsFirst: false });
 
@@ -129,6 +136,7 @@ export function useMyTasks() {
 // Hook para criar tarefa
 export function useCreateTask() {
   const queryClient = useQueryClient();
+  const { data: org } = useActiveOrganization();
 
   return useMutation({
     mutationFn: async (task: TaskInsert) => {
@@ -137,12 +145,14 @@ export function useCreateTask() {
       if (!user) {
         throw new Error('Usuário não autenticado');
       }
+      if (!org?.id) throw new Error('Organização ativa não definida');
 
       const { data, error } = await supabase
         .from('tasks')
         .insert({
           ...task,
           created_by: user.id,
+          organization_id: org.id,
         })
         .select()
         .single();
@@ -175,9 +185,11 @@ export function useCreateTask() {
 // Hook para atualizar tarefa
 export function useUpdateTask() {
   const queryClient = useQueryClient();
+  const { data: org } = useActiveOrganization();
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: TaskUpdate & { id: string }) => {
+      if (!org?.id) throw new Error('Organização ativa não definida');
       // Se a tarefa está sendo marcada como concluída, definir completed_at
       if (updates.completed === true) {
         updates.completed_at = new Date().toISOString();
@@ -189,6 +201,7 @@ export function useUpdateTask() {
         .from('tasks')
         .update(updates)
         .eq('id', id)
+        .eq('organization_id', org.id)
         .select()
         .single();
 
@@ -220,13 +233,16 @@ export function useUpdateTask() {
 // Hook para deletar tarefa
 export function useDeleteTask() {
   const queryClient = useQueryClient();
+  const { data: org } = useActiveOrganization();
 
   return useMutation({
     mutationFn: async (id: string) => {
+      if (!org?.id) throw new Error('Organização ativa não definida');
       const { error } = await supabase
         .from('tasks')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('organization_id', org.id);
 
       if (error) {
         console.error('Erro ao deletar tarefa:', error);

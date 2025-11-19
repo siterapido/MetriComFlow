@@ -318,7 +318,7 @@ Deno.serve(async (req: Request) => {
   // Carrega formulário base (sem relacionamentos) para evitar dependência de FKs no schema cache
   const { data: baseForm, error: baseError } = await supabase
     .from("lead_forms")
-    .select("id, name, success_message, is_active, default_owner_id, submission_count")
+    .select("id, name, success_message, is_active, default_owner_id, submission_count, organization_id")
     .eq("id", body.formId)
     .maybeSingle();
 
@@ -536,6 +536,8 @@ Deno.serve(async (req: Request) => {
     utm_term: tracking?.utmTerm ?? null,
     utm_content: tracking?.utmContent ?? null,
     fbclid: tracking?.fbc ?? null, // Facebook Click ID for CAPI
+    // Multi-tenant: vincular lead à organização proprietária do formulário
+    organization_id: (baseForm as any)?.organization_id ?? null,
   };
 
   // Remove keys with undefined to avoid Supabase errors

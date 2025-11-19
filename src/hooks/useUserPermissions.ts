@@ -69,6 +69,7 @@ export const useUserPermissions = () => {
       }
 
       const isOwner = orgRole === "owner";
+      const isOrgAdmin = orgRole === "admin";
       const isTrafficManager = userType === "traffic_manager";
       const isSales = userType === "sales";
 
@@ -99,7 +100,7 @@ export const useUserPermissions = () => {
         hasMetricsAccess: isOwner || isTrafficManager,
         canManageUsers: isOwner,
         canManageGoals: isOwner,
-        canDeleteLeads: isOwner,
+        canDeleteLeads: isOwner || isOrgAdmin,
         canManageTeamMembers: isOwner,
         // Subscription limits
         canAddAdAccount: planLimits

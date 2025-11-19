@@ -12,7 +12,10 @@ import SetupAdmin from "./pages/SetupAdmin";
 import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
 import LeadsLinear from "./pages/LeadsLinear";
+import LeadImports from "./pages/LeadImports";
+import LeadImportDetails from "./pages/LeadImportDetails";
 import TrafficMetrics from "./pages/TrafficMetrics";
+import MetricsPageModern from "./pages/MetricsPageModern";
 import Users from "./pages/Users";
 import LeadForms from "./pages/LeadForms";
 import NotFound from "./pages/NotFound";
@@ -27,6 +30,10 @@ import AcceptInvitation from "./pages/AcceptInvitation";
 import SubscriptionPlans from "./pages/SubscriptionPlans";
 import FinalizeSignup from "./pages/FinalizeSignup";
 import PublicLeadForm from "./pages/PublicLeadForm";
+import PurchasePage from "./pages/PurchasePage";
+import PurchaseSuccessPage from "./pages/PurchaseSuccessPage";
+import PurchaseCancelPage from "./pages/PurchaseCancelPage";
+import PosLoginPage from "./pages/PosLoginPage";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +54,7 @@ const App = () => (
             <Route path="/login" element={<Auth />} />
             {/* Checkout removido temporariamente para reinimplementação */}
             <Route path="/finalizar-cadastro" element={<FinalizeSignup />} />
+            <Route path="/pos-login" element={<PosLoginPage />} />
             <Route path="/setup-admin" element={<SetupAdmin />} />
             <Route path="/forms/:formId" element={<PublicLeadForm />} />
             {/* Slug pair must come BEFORE orgSlug/formId to avoid misrouting */}
@@ -59,15 +67,20 @@ const App = () => (
             <Route path="/accept-invitation" element={<AcceptInvitation />} />
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
+                <Route path="/comprar" element={<PurchasePage />} />
+                <Route path="/compra/sucesso" element={<PurchaseSuccessPage />} />
+                <Route path="/compra/cancelada" element={<PurchaseCancelPage />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/leads" element={<LeadsLinear />} />
                 <Route path="/leads/kanban" element={<Leads />} />
+                <Route path="/leads/importacoes" element={<LeadImports />} />
+                <Route path="/leads/importacoes/:batchId" element={<LeadImportDetails />} />
                 <Route path="/formularios" element={<LeadForms />} />
                 {/* Rota /metas desabilitada temporariamente */}
                 <Route path="/metas" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/metas-legacy" element={<Navigate to="/dashboard" replace />} />
                 {/* Rotas de métricas */}
-                <Route path="/metricas" element={<TrafficMetrics />} />
+                <Route path="/metricas" element={<MetricsPageModern />} />
                 <Route path="/meta-ads-config" element={<Navigate to="/metricas" replace />} />
                 <Route path="/metrics" element={<Navigate to="/metricas" replace />} />
                 {/* Nova página unificada de gestão de equipe */}

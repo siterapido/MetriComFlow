@@ -318,7 +318,7 @@ Deno.serve(async (req: Request) => {
             if (campaign?.ad_account_id) {
               const { data: adAccount, error: adAccountError } = await supabase
                 .from("ad_accounts")
-                .select("business_name, external_id")
+                .select("business_name, external_id, organization_id")
                 .eq("id", campaign.ad_account_id)
                 .maybeSingle();
 
@@ -522,6 +522,7 @@ Deno.serve(async (req: Request) => {
               priority,
               lead_score: leadScore,
               conversion_probability: conversionProbability,
+              organization_id: (adAccount as any)?.organization_id ?? null,
             };
 
             const { data: newLead, error: insertError } = await supabase

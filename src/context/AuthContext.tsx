@@ -10,6 +10,7 @@ type AuthContextValue = {
   signUp: (email: string, password: string, metadata?: Record<string, any>) => ReturnType<typeof authHelpers.signUp>
   signOut: () => ReturnType<typeof authHelpers.signOut>
   signInWithOAuth: (provider: Parameters<typeof authHelpers.signInWithOAuth>[0]) => ReturnType<typeof authHelpers.signInWithOAuth>
+  signInWithMagicLink: (email: string) => ReturnType<typeof authHelpers.signInWithMagicLink>
   resetPasswordForEmail: (email: string) => ReturnType<typeof authHelpers.resetPasswordForEmail>
   updatePassword: (newPassword: string) => ReturnType<typeof authHelpers.updatePassword>
 }
@@ -78,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp: authHelpers.signUp,
     signOut: authHelpers.signOut,
     signInWithOAuth: authHelpers.signInWithOAuth,
+    signInWithMagicLink: authHelpers.signInWithMagicLink,
     resetPasswordForEmail: authHelpers.resetPasswordForEmail,
     updatePassword: authHelpers.updatePassword,
   }), [user, session, loading])

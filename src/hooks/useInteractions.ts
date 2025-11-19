@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Tables, TablesInsert, TablesUpdate } from '@/lib/database.types';
 import { useEffect } from 'react';
+import { useActiveOrganization } from '@/hooks/useActiveOrganization';
 
 type Interaction = Tables<'interactions'>;
 type InteractionInsert = TablesInsert<'interactions'>;
@@ -10,9 +11,11 @@ type InteractionUpdate = TablesUpdate<'interactions'>;
 
 // Hook para buscar interações
 export function useInteractions(leadId?: string) {
+  const { data: org } = useActiveOrganization();
   const query = useQuery({
-    queryKey: ['interactions', leadId],
+    queryKey: ['interactions', org?.id, leadId],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Organização ativa não definida');
       let query = supabase
         .from('interactions')
         .select(`
@@ -27,6 +30,7 @@ export function useInteractions(leadId?: string) {
             title
           )
         `)
+        .eq('organization_id', org.id)
         .order('interaction_date', { ascending: false });
 
       if (leadId) {
@@ -71,6 +75,7 @@ export function useInteractions(leadId?: string) {
 // Hook para criar interação
 export function useCreateInteraction() {
   const queryClient = useQueryClient();
+  const { data: org } = useActiveOrganization();
 
   return useMutation({
     mutationFn: async (interaction: InteractionInsert) => {
@@ -79,6 +84,9 @@ export function useCreateInteraction() {
       if (!user) {
         throw new Error('Usuário não autenticado');
       }
+      if (!org?.id) {
+        throw new Error('Organização ativa não definida');
+      }
 
       const { data, error } = await supabase
         .from('interactions')
@@ -86,6 +94,7 @@ export function useCreateInteraction() {
           ...interaction,
           created_by: user.id,
           interaction_date: interaction.interaction_date || new Date().toISOString(),
+          organization_id: org.id,
         })
         .select()
         .single();
@@ -119,13 +128,16 @@ export function useCreateInteraction() {
 // Hook para atualizar interação
 export function useUpdateInteraction() {
   const queryClient = useQueryClient();
+  const { data: org } = useActiveOrganization();
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: InteractionUpdate & { id: string }) => {
+      if (!org?.id) throw new Error('Organização ativa não definida');
       const { data, error } = await supabase
         .from('interactions')
         .update(updates)
         .eq('id', id)
+        .eq('organization_id', org.id)
         .select()
         .single();
 
@@ -157,13 +169,16 @@ export function useUpdateInteraction() {
 // Hook para deletar interação
 export function useDeleteInteraction() {
   const queryClient = useQueryClient();
+  const { data: org } = useActiveOrganization();
 
   return useMutation({
     mutationFn: async (id: string) => {
+      if (!org?.id) throw new Error('Organização ativa não definida');
       const { error } = await supabase
         .from('interactions')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('organization_id', org.id);
 
       if (error) {
         console.error('Erro ao deletar interação:', error);

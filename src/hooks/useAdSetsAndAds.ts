@@ -443,6 +443,11 @@ export const useAdMetrics = (
             impressions,
             clicks,
             leads_count,
+            reach,
+            frequency,
+            quality_ranking,
+            engagement_ranking,
+            conversion_ranking,
             ads!inner(
               id,
               name,
@@ -457,7 +462,7 @@ export const useAdMetrics = (
           .gte("date", startStr)
           .lte("date", endStr)
           .order("date", { ascending: false })
-          .limit(2000);
+          .limit(5000);
 
         // Aplica filtros quando possível nas tabelas relacionadas
         if (adSetId) {
@@ -465,6 +470,18 @@ export const useAdMetrics = (
         }
         if (campaignId) {
           query = query.eq("ads.campaign_id", campaignId);
+        }
+        // Se houver accountId sem campaignId, restringe por campanhas da conta
+        if (!campaignId && accountId) {
+          const { data: camps } = await supabase
+            .from("ad_campaigns")
+            .select("id")
+            .eq("ad_account_id", accountId)
+            .limit(5000);
+          const campIds = (camps ?? []).map((c: any) => c.id);
+          if (campIds.length > 0) {
+            query = query.in("ads.campaign_id", campIds);
+          }
         }
         // Nota: accountId exige join adicional em ad_campaigns/ad_accounts; se não houver campaignId, filtramos por campanha quando disponível
 
@@ -476,7 +493,7 @@ export const useAdMetrics = (
         }
         if (!rows || rows.length === 0) return [];
 
-        const aggregated: Record<string, AdMetrics> = {};
+        const aggregated: Record<string, (AdMetrics & { _freqSum: number; _freqCount: number; _latestDate?: string })> = {};
         for (const r of rows as any[]) {
           const ad = r.ads;
           if (!ad) continue;
@@ -496,12 +513,30 @@ export const useAdMetrics = (
               cpm: 0,
               cpc: 0,
               ctr: 0,
+              quality_ranking: undefined,
+              engagement_ranking: undefined,
+              conversion_ranking: undefined,
+              _freqSum: 0,
+              _freqCount: 0,
+              _latestDate: undefined,
             };
           }
           aggregated[key].spend += Number(r.spend ?? 0);
           aggregated[key].impressions += Number(r.impressions ?? 0);
           aggregated[key].clicks += Number(r.clicks ?? 0);
           aggregated[key].leads_count += Number(r.leads_count ?? 0);
+          // Alcance: somatório simples (valores diários já são únicos)
+          // Frequência: média simples sobre o período
+          aggregated[key]._freqSum += Number(r.frequency ?? 0);
+          aggregated[key]._freqCount += 1;
+          // Rankings: usa o registro mais recente por data
+          const d = String(r.date || '');
+          if (!aggregated[key]._latestDate || d >= aggregated[key]._latestDate) {
+            aggregated[key]._latestDate = d;
+            if (r.quality_ranking) aggregated[key].quality_ranking = r.quality_ranking;
+            if (r.engagement_ranking) aggregated[key].engagement_ranking = r.engagement_ranking;
+            if (r.conversion_ranking) aggregated[key].conversion_ranking = r.conversion_ranking;
+          }
         }
 
         // Calcula métricas derivadas
@@ -511,6 +546,13 @@ export const useAdMetrics = (
           m.cpm = m.impressions > 0 ? (m.spend / m.impressions) * 1000 : 0;
           m.cpc = m.clicks > 0 ? m.spend / m.clicks : 0;
           m.ctr = m.impressions > 0 ? (m.clicks / m.impressions) * 100 : 0;
+          // Frequência média
+          const freqAvg = m._freqCount > 0 ? m._freqSum / m._freqCount : 0;
+          // Remoção de campos internos
+          delete (m as any)._freqSum;
+          delete (m as any)._freqCount;
+          (m as any).frequency = freqAvg;
+          delete (m as any)._latestDate;
         }
 
         return Object.values(aggregated).sort((a, b) => b.spend - a.spend);

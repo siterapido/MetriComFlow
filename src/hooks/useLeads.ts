@@ -28,6 +28,34 @@ export type LeadUpdate = TablesUpdate<'leads'>
 export type LeadActivity = Tables<'lead_activity'>
 export type Comment = Tables<'comments'>
 
+export interface LeadImportPayload {
+  title: string
+  description?: string | null
+  status?: string | null
+  value?: number | null
+  contract_value?: number | null
+  contract_months?: number | null
+  contract_type?: 'monthly' | 'annual' | 'one_time' | null
+  due_date?: string | null
+  expected_close_date?: string | null
+  last_contact_date?: string | null
+  next_follow_up_date?: string | null
+  priority?: 'low' | 'medium' | 'high' | 'urgent' | null
+  lead_score?: number | null
+  conversion_probability?: number | null
+  product_interest?: string | null
+  lead_source_detail?: string | null
+  source?: string | null
+  campaign_id?: string | null
+  external_lead_id?: string | null
+  ad_id?: string | null
+  adset_id?: string | null
+  closed_won_at?: string | null
+  closed_lost_at?: string | null
+  lost_reason?: string | null
+  organization_id?: string | null
+}
+
 // Novos tipos para CRM
 export type LeadStatus = 'novo' | 'contato_inicial' | 'qualificado' | 'proposta' | 'negociacao' | 'fechado_ganho' | 'fechado_perdido' | 'follow_up' | 'aguardando_resposta'
 export type LeadPriority = 'baixa' | 'media' | 'alta' | 'urgente'
@@ -301,6 +329,50 @@ export const useCreateLead = () => {
   })
 }
 
+export function useImportLeads() {
+  const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
+
+  return useMutation({
+    mutationFn: async (rows: LeadImportPayload[]) => {
+      if (!org?.id) {
+        throw new Error("Organização ativa não definida")
+      }
+
+      const payload = rows.map((row) => ({
+        ...row,
+        organization_id: row.organization_id ?? org.id,
+      }))
+
+      const { data, error } = await supabase
+        .from("leads")
+        .insert(payload as TablesInsert<"leads">[])
+        .select("id")
+
+      if (error) {
+        console.error("[useImportLeads] Erro ao inserir leads:", error)
+        throw error
+      }
+
+      return data ?? []
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] })
+      queryClient.invalidateQueries({ queryKey: ["pipeline-metrics"] })
+      queryClient.invalidateQueries({ queryKey: ["meta-kpis"] })
+      queryClient.invalidateQueries({ queryKey: ["combined-funnel"] })
+      queryClient.invalidateQueries({ queryKey: ["pipeline-evolution"] })
+
+      toast.success(`${data.length} leads importados com sucesso!`)
+    },
+    onError: (error) => {
+      toast.error("Erro ao importar os leads")
+      console.error("[useImportLeads] Erro ao importar leads:", error)
+    },
+  })
+}
+
 export const useUpdateLead = () => {
   const queryClient = useQueryClient()
   const { data: org } = useActiveOrganization()
@@ -344,7 +416,7 @@ export const useUpdateLead = () => {
           })
       ) as LeadUpdate
 
-      console.log('[useUpdateLead] Payload sanitizado:', sanitizedUpdates)
+      logDebug('[useUpdateLead] Payload sanitizado:', sanitizedUpdates)
 
       if (!org?.id) throw new Error('Organização ativa não definida')
 
@@ -363,7 +435,7 @@ export const useUpdateLead = () => {
         throw new Error(msg)
       }
 
-      console.log('[useUpdateLead] Lead atualizado com sucesso:', data)
+      logDebug('[useUpdateLead] Lead atualizado com sucesso:', data)
       return data
     },
     onMutate: async ({ id, updates }) => {
@@ -390,7 +462,7 @@ export const useUpdateLead = () => {
       toast.error(message)
     },
     onSettled: () => {
-      console.log('[useUpdateLead] Atualizando queries em tempo real')
+      logDebug('[useUpdateLead] Atualizando queries em tempo real')
 
       // Refetch queries de leads para atualização imediata
       queryClient.refetchQueries({ queryKey: ['leads'], type: 'active' })
@@ -407,15 +479,18 @@ export const useUpdateLead = () => {
 
 export function useDeleteLead() {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   return useMutation({
     mutationFn: async (id: string) => {
       logDebug('[useDeleteLead] Deletando lead:', id)
+      if (!org?.id) throw new Error('Organização ativa não definida')
 
       const { error } = await supabase
         .from('leads')
         .delete()
         .eq('id', id)
+        .eq('organization_id', org.id)
 
       if (error) {
         console.error('[useDeleteLead] Erro ao deletar lead:', error)
@@ -486,21 +561,21 @@ export function useLeadActivity(leadId?: string) {
 
 // Hook para buscar leads por status (visão do pipeline)
 export function useLeadsByStatus() {
+  const { data: org } = useActiveOrganization()
   return useQuery({
-    queryKey: ['leads-by-status'],
+    queryKey: ['leads-by-status', org?.id],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
       const { data, error } = await supabase
         .from('leads')
         .select('id, title, status, value, priority, assignee_name, created_at')
+        .eq('organization_id', org.id)
         .order('position')
 
       if (error) throw error
 
-      // Agrupar por status
       const grouped = data.reduce((acc, lead) => {
-        if (!acc[lead.status]) {
-          acc[lead.status] = []
-        }
+        if (!acc[lead.status]) acc[lead.status] = []
         acc[lead.status].push(lead)
         return acc
       }, {} as Record<string, typeof data>)
@@ -513,12 +588,15 @@ export function useLeadsByStatus() {
 
 // Hook para estatísticas do pipeline
 export function usePipelineStats() {
+  const { data: org } = useActiveOrganization()
   return useQuery({
-    queryKey: ['pipeline-stats'],
+    queryKey: ['pipeline-stats', org?.id],
     queryFn: async () => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
       const { data, error } = await supabase
         .from('leads')
         .select('status, value, priority, created_at, closed_won_at')
+        .eq('organization_id', org.id)
 
       if (error) throw error
 
@@ -533,24 +611,14 @@ export function usePipelineStats() {
       }
 
       data.forEach(lead => {
-        // Contar por status
         stats.byStatus[lead.status] = (stats.byStatus[lead.status] || 0) + 1
-        
-        // Contar por prioridade
-        if (lead.priority) {
-          stats.byPriority[lead.priority] = (stats.byPriority[lead.priority] || 0) + 1
-        }
-
-        // Somar valores
+        if (lead.priority) stats.byPriority[lead.priority] = (stats.byPriority[lead.priority] || 0) + 1
         if (lead.value) {
           stats.totalValue += lead.value
-          if (lead.status === 'fechado_ganho') {
-            stats.wonValue += lead.value
-          }
+          if (lead.status === 'fechado_ganho') stats.wonValue += lead.value
         }
       })
 
-      // Calcular métricas
       const wonLeads = stats.byStatus['fechado_ganho'] || 0
       stats.conversionRate = stats.total > 0 ? (wonLeads / stats.total) * 100 : 0
       stats.avgDealSize = wonLeads > 0 ? stats.wonValue / wonLeads : 0

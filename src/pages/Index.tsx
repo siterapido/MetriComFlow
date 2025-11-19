@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart } from "recharts";
 import { PlanCard } from "@/components/subscription/PlanCard";
 import type { SubscriptionPlan, BillingPeriod } from "@/hooks/useSubscription";
 import { useSubscriptionPlans } from "@/hooks/useSubscription";
@@ -62,7 +62,7 @@ function HeaderLanding() {
             asChild
             onClick={() => track({ event: "lp_header_cta_click", label: "assinar" })}
           >
-            <a href={paymentLinkUrl}>Contrar plano</a>
+            <a href={paymentLinkUrl}>Contratar plano</a>
           </Button>
         </div>
       </div>
@@ -93,17 +93,21 @@ function Hero() {
               Nova geração de CRM + Ads
             </div>
             <h1 className="mt-4 text-4xl sm:text-5xl font-bold tracking-tight">
-              Unifique <span className="gradient-text">Ads, Leads e Metas</span>.
-              <br /> Cresça com previsibilidade.
+              Mais <span className="gradient-text">leads qualificados</span> e receita previsível.
             </h1>
             <p className="mt-4 text-lg text-muted-foreground">
-              Dashboard e CRM integrados com Meta Lead Ads, metas da equipe e relatórios prontos em um único fluxo.
+              Integre Ads, Leads e Metas para enxergar ROI em tempo real e decidir com clareza.
             </p>
+            <ul className="mt-4 space-y-2 text-sm text-muted-foreground list-disc pl-5">
+              <li>Aumente MQLs com qualificação integrada ao CRM</li>
+              <li>Reduza retrabalho com relatórios automáticos e unificados</li>
+              <li>Ganhe previsibilidade acompanhando metas e KPIs em um só lugar</li>
+            </ul>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button className="accent-ring" size="lg" asChild onClick={() => {
                 track({ event: "lp_hero_cta_click", label: "assinar_agora" });
               }}>
-                <a href={paymentLinkUrl}>Contrar plano</a>
+                <a href={paymentLinkUrl}>Contratar plano</a>
               </Button>
               <Button className="accent-ring" size="lg" variant="outline" onClick={() => {
                 track({ event: "lp_hero_cta_click", label: "agendar_demo" });
@@ -140,11 +144,13 @@ function SocialProof() {
   return (
     <section className="container mx-auto px-4 py-10">
       <div className="text-center text-muted-foreground">Confiado por equipes de marketing e vendas</div>
-      <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-6 items-center opacity-80">
-        <div className="h-8 bg-muted rounded" />
-        <div className="h-8 bg-muted rounded" />
-        <div className="h-8 bg-muted rounded" />
-        <div className="h-8 bg-muted rounded" />
+      <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-6 items-center">
+        <img src="/logos/acme.svg" alt="Acme" className="h-8 grayscale opacity-80 hover:opacity-100 transition" />
+        <img src="/logos/beta.svg" alt="Beta" className="h-8 grayscale opacity-80 hover:opacity-100 transition" />
+        <img src="/logos/omega.svg" alt="Omega" className="h-8 grayscale opacity-80 hover:opacity-100 transition" />
+        <img src="/logos/delta.svg" alt="Delta" className="h-8 grayscale opacity-80 hover:opacity-100 transition" />
+        <img src="/logos/epsilon.svg" alt="Epsilon" className="h-8 grayscale opacity-80 hover:opacity-100 transition" />
+        <img src="/logos/gamma.svg" alt="Gamma" className="h-8 grayscale opacity-80 hover:opacity-100 transition" />
       </div>
     </section>
   );
@@ -215,57 +221,91 @@ function Features() {
   );
 }
 
+function Benefits() {
+  return (
+    <section className="container mx-auto px-4 py-16">
+      <h2 className="text-3xl font-bold text-center">Benefícios que impactam o resultado</h2>
+      <div className="mt-8 grid md:grid-cols-3 gap-6">
+        <div className="p-6 border rounded-lg">
+          <div className="font-semibold">Mais MQLs, menos atrito</div>
+          <p className="text-muted-foreground mt-2">Qualificação integrada ao CRM para avançar leads com velocidade.</p>
+        </div>
+        <div className="p-6 border rounded-lg">
+          <div className="font-semibold">Clareza de ROI</div>
+          <p className="text-muted-foreground mt-2">KPIs e metas unificados para decisões objetivas no dia a dia.</p>
+        </div>
+        <div className="p-6 border rounded-lg">
+          <div className="font-semibold">Relatórios sem retrabalho</div>
+          <p className="text-muted-foreground mt-2">Economize horas com dashboards e exports prontos para ação.</p>
+        </div>
+      </div>
+      <div className="mt-6 grid md:grid-cols-3 gap-6">
+        <div className="p-6 border rounded-lg">
+          <div className="font-semibold">Previsibilidade de metas</div>
+          <p className="text-muted-foreground mt-2">Acompanhe metas por equipe e reduza surpresas no fechamento.</p>
+        </div>
+        <div className="p-6 border rounded-lg">
+          <div className="font-semibold">Integração nativa com Ads</div>
+          <p className="text-muted-foreground mt-2">Sincronização de leads e custo por origem em um fluxo único.</p>
+        </div>
+        <div className="p-6 border rounded-lg">
+          <div className="font-semibold">Onboarding rápido</div>
+          <p className="text-muted-foreground mt-2">Comece em minutos e evolua conforme suas necessidades.</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function DataVizShowcase() {
-  const visitsLeads = [
-    { name: "Jan", visits: 1200, leads: 120 },
-    { name: "Fev", visits: 1500, leads: 180 },
-    { name: "Mar", visits: 1600, leads: 210 },
-    { name: "Abr", visits: 1400, leads: 190 },
-    { name: "Mai", visits: 2000, leads: 260 },
-    { name: "Jun", visits: 2200, leads: 300 },
+  const funnelData = [
+    { stage: "Visitas", value: 2200 },
+    { stage: "Leads", value: 300 },
+    { stage: "MQL", value: 120 },
+    { stage: "Vendas", value: 40 },
   ];
-  const mqlGrowth = [
-    { name: "Jan", mql: 10 },
-    { name: "Fev", mql: 14 },
-    { name: "Mar", mql: 20 },
-    { name: "Abr", mql: 21 },
-    { name: "Mai", mql: 28 },
-    { name: "Jun", mql: 31 },
+  const roiTrend = [
+    { name: "Jan", investimento: 10, receita: 18 },
+    { name: "Fev", investimento: 12, receita: 19 },
+    { name: "Mar", investimento: 13, receita: 22 },
+    { name: "Abr", investimento: 12, receita: 21 },
+    { name: "Mai", investimento: 15, receita: 26 },
+    { name: "Jun", investimento: 16, receita: 28 },
   ];
   return (
     <section className="relative overflow-hidden container mx-auto px-4 py-16">
       <div className="absolute inset-0 -z-10 mesh-gradient opacity-30" />
-      <h2 className="text-3xl font-bold text-center">Inteligência visual que acelera decisões</h2>
-      <p className="text-center text-muted-foreground mt-2">Painéis claros para acompanhar funil e eficiência de mídia.</p>
+      <h2 className="text-3xl font-bold text-center">Entenda seu funil e retorno de mídia</h2>
+      <p className="text-center text-muted-foreground mt-2">Visualizações objetivas para converter mais e investir melhor.</p>
       <div className="mt-8 grid md:grid-cols-2 gap-8">
         <div className="gradient-card rounded-lg border p-4">
-          <div className="text-sm text-muted-foreground mb-2">Visitas x Leads (exemplo)</div>
+          <div className="text-sm text-muted-foreground mb-2">Funil de conversão (exemplo)</div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={visitsLeads} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={funnelData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid stroke="hsl(var(--border) / 0.4)" vertical={false} />
-                <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" />
+                <XAxis dataKey="stage" stroke="hsl(var(--muted-foreground))" />
                 <YAxis stroke="hsl(var(--muted-foreground))" />
                 <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }} />
                 <Legend />
-                <Bar dataKey="visits" fill="hsl(var(--muted-foreground))" />
-                <Bar dataKey="leads" fill="hsl(var(--primary))" />
+                <Bar dataKey="value" fill="hsl(var(--primary))" />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
         <div className="gradient-card rounded-lg border p-4">
-          <div className="text-sm text-muted-foreground mb-2">Crescimento de MQLs (exemplo)</div>
+          <div className="text-sm text-muted-foreground mb-2">Investimento vs Receita (exemplo)</div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={mqlGrowth} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+              <ComposedChart data={roiTrend} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid stroke="hsl(var(--border) / 0.4)" vertical={false} />
                 <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" />
                 <YAxis stroke="hsl(var(--muted-foreground))" />
                 <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", color: "hsl(var(--foreground))" }} />
                 <Legend />
-                <Line type="monotone" dataKey="mql" stroke="hsl(var(--primary))" strokeWidth={3} dot={false} />
-              </LineChart>
+                <Bar dataKey="investimento" fill="hsl(var(--secondary))" />
+                <Line type="monotone" dataKey="receita" stroke="hsl(var(--primary))" strokeWidth={3} dot={false} />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -350,8 +390,8 @@ function PricingTeaser() {
   return (
     <section className="container mx-auto px-4 py-16">
       <div className="p-8 border rounded-lg text-center">
-        <h3 className="text-2xl font-semibold">Planos simples e transparentes</h3>
-        <p className="mt-2 text-muted-foreground">Escolha seu plano e evolua conforme seu time cresce.</p>
+        <h3 className="text-2xl font-semibold">Planos pensados para crescer com você</h3>
+        <p className="mt-2 text-muted-foreground">Comece rápido, escale recursos e pague apenas pelo que precisa.</p>
         <div className="mt-6">
           <Button size="lg" onClick={() => {
             track({ event: "lp_pricing_cta_click" });
@@ -490,7 +530,7 @@ function PricingPlansSection() {
               plan={plan}
               onSelect={handleSelect}
               ctaHref={getPaymentLink(normalizePlanSlug(plan.slug)) ?? undefined}
-              ctaLabel="Contrar plano"
+              ctaLabel="Contratar plano"
             />
           ))}
         </div>
@@ -604,6 +644,7 @@ const Index = () => {
       <PAS />
       <HowItWorks />
       <Features />
+      <Benefits />
       <DataVizShowcase />
       <CRMDemoShowcase />
       <Testimonials />

@@ -141,6 +141,20 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Permission check: only owners and traffic managers can connect ad accounts
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('user_type')
+      .eq('id', user.id)
+      .maybeSingle();
+    const userType = (profile as any)?.user_type || null;
+    if (userType !== 'owner' && userType !== 'traffic_manager') {
+      return new Response(
+        JSON.stringify({ error: 'Permissão insuficiente para conectar contas de anúncios.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Get user's active organization
     const { data: orgMembership, error: orgError } = await supabase
       .from('organization_memberships')
@@ -287,17 +301,14 @@ Deno.serve(async (req: Request) => {
             status: as.status,
             start_time: as.start_time,
             end_time: as.end_time,
-            ad_account_id: accountId,
             campaign_id: campaignInternalId, // Usa o ID interno da campanha
-            organization_id: organizationId,
-            provider: 'meta',
             updated_at: new Date().toISOString(),
           }));
 
           if (adSetRecords.length > 0) {
             const { data: upsertedAdSets, error: adSetUpsertError } = await supabase
               .from('ad_sets')
-              .upsert(adSetRecords, { onConflict: 'external_id, organization_id' })
+              .upsert(adSetRecords, { onConflict: 'external_id' })
               .select('id, external_id');
 
             if (adSetUpsertError) {
@@ -326,17 +337,14 @@ Deno.serve(async (req: Request) => {
                     status: ad.status,
                     ad_set_id: adSetInternalId,
                     creative_id: ad.creative?.id,
-                    creative_name: ad.creative?.name,
                     creative_data: ad.creative,
-                    organization_id: organizationId,
-                    provider: 'meta',
                     updated_at: new Date().toISOString(),
                   }));
 
                   if (adRecords.length > 0) {
                     const { error: adUpsertError } = await supabase
                       .from('ads')
-                      .upsert(adRecords, { onConflict: 'external_id, organization_id' });
+                      .upsert(adRecords, { onConflict: 'external_id' });
 
                     if (adUpsertError) {
                       console.error(`Error upserting ads for ad set ${adSet.id}:`, adUpsertError.message);

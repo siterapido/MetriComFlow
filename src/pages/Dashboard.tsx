@@ -19,8 +19,7 @@ import { UnifiedROICards } from "@/components/dashboard/UnifiedROICards";
 import { IntegratedConversionUnified } from "@/components/dashboard/IntegratedConversionUnified";
 import { UnifiedMetricsChart } from "@/components/dashboard/UnifiedMetricsChart";
 import { useUnifiedMetrics, useUnifiedDailyBreakdown } from "@/hooks/useUnifiedMetrics";
-import { AutoSyncStatus } from "@/components/meta-ads/AutoSyncStatus";
-import { OrganizationSyncStatus } from "@/components/meta-ads/OrganizationSyncStatus";
+ 
 
 export default function Dashboard() {
   const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
@@ -32,7 +31,7 @@ export default function Dashboard() {
     dateRange: getLastNDaysDateRange(30),
   });
 
-  const [isSyncing, setIsSyncing] = useState(false);
+  
 
   const {
     hasActiveConnection: hasMetaConnection,
@@ -40,7 +39,7 @@ export default function Dashboard() {
     isFetching: metaStatusFetching,
   } = useMetaConnectionStatus();
 
-  const { activeAdAccounts, syncCampaigns, syncDailyInsights, refreshData } = useMetaAuth();
+  const { activeAdAccounts } = useMetaAuth();
   const metaStatusPending = metaStatusLoading || metaStatusFetching;
   const metaQueriesEnabled = hasMetaConnection;
 
@@ -112,76 +111,7 @@ export default function Dashboard() {
 
   const isLoading = summaryLoading || revenueLoading;
 
-  // Handler para sincronizar dados Meta Ads
-  const handleSyncInsights = async () => {
-    if (!metaFilters.dateRange) {
-      toast({
-        title: "Período não selecionado",
-        description: "Selecione um período para sincronizar os dados.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsSyncing(true);
-
-    try {
-      const accountsToSync = metaFilters.accountId
-        ? [metaFilters.accountId]
-        : activeAdAccounts.map(acc => acc.id);
-
-      if (accountsToSync.length === 0) {
-        toast({
-          title: "Nenhuma conta ativa",
-          description: "Você precisa ter pelo menos uma conta Meta Ads ativa para sincronizar.",
-          variant: "destructive",
-        });
-        setIsSyncing(false);
-        return;
-      }
-
-      // Etapa 1: Sincronizar campanhas primeiro
-      console.log('🔄 Syncing campaigns for accounts:', accountsToSync);
-      let totalCampaigns = 0;
-
-      for (const accountId of accountsToSync) {
-        try {
-          const campaignResult = await syncCampaigns(accountId);
-          console.log(`✅ Campaigns synced for account ${accountId}:`, campaignResult);
-          totalCampaigns += campaignResult.campaignsCount || 0;
-        } catch (error) {
-          console.warn(`⚠️ Error syncing campaigns for account ${accountId}:`, error);
-        }
-      }
-
-      // Etapa 2: Sincronizar insights
-      console.log('🔄 Syncing daily insights...');
-      const result = await syncDailyInsights({
-        since: metaFilters.dateRange.start,
-        until: metaFilters.dateRange.end,
-        accountIds: accountsToSync,
-      });
-
-      console.log('✅ Sync result:', result);
-
-      // Refresh data
-      await refreshData();
-
-      toast({
-        title: "Dados sincronizados!",
-        description: `${totalCampaigns} campanhas e ${(result?.recordsProcessed ?? 0)} registros de métricas atualizados.`,
-      });
-    } catch (error) {
-      console.error('❌ Error syncing insights:', error);
-      toast({
-        title: "Erro ao sincronizar",
-        description: error instanceof Error ? error.message : "Não foi possível sincronizar os dados.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSyncing(false);
-    }
-  };
+  
 
   if (isLoading) {
     return (
@@ -200,7 +130,7 @@ export default function Dashboard() {
           <p className="text-muted-foreground">Visão completa de faturamento, oportunidades e Meta Ads</p>
         </div>
 
-        {/* Filtros minimalistas inline */}
+        {/* Filtros simples inline */}
         {hasMetaConnection && (
           <div className="flex flex-wrap gap-2">
             <DateRangeFilter
@@ -251,16 +181,7 @@ export default function Dashboard() {
               </Select>
             )}
 
-            <Button
-              variant="outline"
-              size="default"
-              onClick={handleSyncInsights}
-              disabled={isSyncing || !metaFilters.dateRange}
-              className="gap-2 bg-gradient-to-r from-primary/10 to-secondary/10 border-primary/30 hover:from-primary/20 hover:to-secondary/20"
-            >
-              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Sincronizando...' : 'Atualizar Dados'}
-            </Button>
+            
           </div>
         )}
       </div>
@@ -268,9 +189,9 @@ export default function Dashboard() {
       {!metaStatusPending && !hasMetaConnection && (
         <Alert>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>Conecte-se ao Meta Business Manager para visualizar métricas e funis de campanhas.</span>
+            <span>Conecte sua conta Meta para visualizar métricas de campanhas.</span>
             <Button variant="outline" size="sm" asChild>
-              <a href="/metricas">Configurar Meta Ads</a>
+              <a href="/metricas">Abrir métricas Meta Ads</a>
             </Button>
           </AlertDescription>
         </Alert>
@@ -348,13 +269,7 @@ export default function Dashboard() {
 
       {/* Visão unificada já inclui o funil completo + KPI principal */}
 
-      {/* Status de Sincronização Automática */}
-      {hasMetaConnection && (
-        <div className="space-y-6">
-          <AutoSyncStatus />
-          <OrganizationSyncStatus />
-        </div>
-      )}
+      
     </div>
   );
 }

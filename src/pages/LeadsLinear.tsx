@@ -9,8 +9,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Loader2, LayoutList, Filter } from "lucide-react";
+import { Plus, Search, Loader2, LayoutList, Filter, Upload } from "lucide-react";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
+import { LeadsImportDialog } from "@/components/leads/LeadsImportDialog";
 import { LeadCard } from "@/components/leads/LeadCard";
 import { StageValueCard } from "@/components/leads/StageValueCard";
 import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
@@ -35,6 +36,7 @@ type StageId = typeof BOARD_STAGES[number]["id"];
 export default function LeadsLinear() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const { toast } = useToast();
 
   // Filters state (sem filtro de data por padrão - mostra todos os leads)
@@ -272,6 +274,14 @@ export default function LeadsLinear() {
             <Plus className="w-4 h-4" />
             Novo Lead
           </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setIsImportOpen(true)}
+          >
+            <Upload className="w-4 h-4" />
+            Importar planilha
+          </Button>
         </div>
       </div>
 
@@ -378,12 +388,13 @@ export default function LeadsLinear() {
         </DragDropContext>
       )}
 
-      {/* Modal para Novo Lead */}
-      <NewLeadModal
-        open={isNewLeadModalOpen}
-        onOpenChange={setIsNewLeadModalOpen}
-        onSave={handleNewLead}
-      />
-    </div>
+  {/* Modal para Novo Lead */}
+  <NewLeadModal
+    open={isNewLeadModalOpen}
+    onOpenChange={setIsNewLeadModalOpen}
+    onSave={handleNewLead}
+  />
+  <LeadsImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} />
+  </div>
   );
 }

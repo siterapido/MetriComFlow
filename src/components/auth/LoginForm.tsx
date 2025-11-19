@@ -13,6 +13,7 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [mode, setMode] = useState<"magic" | "password">("magic");
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -22,25 +23,30 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      const { data, error } = await authHelpers.signIn(email, password);
-
-      if (error) throw error;
-
-      if (data.user) {
-        const settings = mergeUserSettings(
-          (data.user.user_metadata?.settings as Partial<UserSettings> | null) ?? undefined
-        );
-        const homePath = resolveDefaultHomePath(settings);
-
-        // Redirecionamento pós-login, se fornecido via query (?next=/planos?plan=slug)
-        const params = new URLSearchParams(location.search);
-        const next = params.get("next");
-
+      if (mode === "magic") {
+        const { error } = await authHelpers.signInWithMagicLink(email);
+        if (error) throw error;
         toast({
-          title: "Login realizado com sucesso!",
-          description: `Bem-vindo de volta, ${data.user.email}!`,
+          title: "Verifique seu e‑mail",
+          description: "Enviamos um link de acesso para o seu e‑mail.",
         });
-        navigate(next || homePath);
+        // No Magic Link não navegamos aqui; a navegação ocorrerá após o usuário clicar no link
+      } else {
+        const { data, error } = await authHelpers.signIn(email, password);
+        if (error) throw error;
+        if (data.user) {
+          const settings = mergeUserSettings(
+            (data.user.user_metadata?.settings as Partial<UserSettings> | null) ?? undefined
+          );
+          const homePath = resolveDefaultHomePath(settings);
+          const params = new URLSearchParams(location.search);
+          const next = params.get("next");
+          toast({
+            title: "Login realizado com sucesso!",
+            description: `Bem-vindo de volta, ${data.user.email}!`,
+          });
+          navigate(next || homePath);
+        }
       }
     } catch (error) {
       console.error("Login error:", error);
@@ -59,7 +65,9 @@ export function LoginForm() {
       <CardHeader>
         <CardTitle>Entrar no InsightFy</CardTitle>
         <CardDescription>
-          Digite suas credenciais para acessar o sistema
+          {mode === "magic"
+            ? "Digite seu e‑mail para receber um Magic Link"
+            : "Digite suas credenciais para acessar o sistema"}
         </CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
@@ -81,43 +89,52 @@ export function LoginForm() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password">Senha</Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="pl-10"
-                required
-                disabled={isLoading}
-              />
+          {mode === "password" && (
+            <div className="space-y-2">
+              <Label htmlFor="password">Senha</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pl-10"
+                  required
+                  disabled={isLoading}
+                />
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
 
         <CardFooter>
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={isLoading}
-          >
+          <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Entrando...
+                {mode === "magic" ? "Enviando..." : "Entrando..."}
               </>
+            ) : mode === "magic" ? (
+              "Enviar Magic Link"
             ) : (
               "Entrar"
             )}
           </Button>
-          <div className="w-full mt-2 text-center">
-            <Link to="/auth/forgot-password" className="text-sm text-primary hover:underline">
-              Esqueci minha senha
-            </Link>
+          <div className="w-full mt-2 text-center space-y-2">
+            {mode === "password" ? (
+              <Link to="/auth/forgot-password" className="text-sm text-primary hover:underline block">
+                Esqueci minha senha
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              className="text-sm text-muted-foreground hover:underline"
+              onClick={() => setMode(mode === "magic" ? "password" : "magic")}
+            >
+              {mode === "magic" ? "Entrar com senha" : "Voltar para Magic Link"}
+            </button>
           </div>
         </CardFooter>
       </form>

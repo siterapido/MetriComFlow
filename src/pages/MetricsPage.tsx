@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Link2, RefreshCw, Download, CalendarDays } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -11,14 +11,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
-import { AdSetPerformanceTable } from "@/components/metrics/AdSetPerformanceTable";
-import { AdPerformanceTableV2 } from "@/components/metrics/AdPerformanceTableV2";
+import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbSeparator, BreadcrumbPage } from "@/components/ui/breadcrumb";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+ 
 import { EngagementFunnel } from "@/components/metrics/meta/EngagementFunnel";
 // import { CreativeInvestmentChart } from "@/components/metrics/meta/CreativeInvestmentChart";
 import { CampaignOverviewTable } from "@/components/metrics/meta/CampaignOverviewTable";
 // import { InvestmentByDayPie } from "@/components/metrics/meta/InvestmentByDayPie";
 import { MetricsCardGroup } from "@/components/metrics/meta/MetricsCardGroup";
 import { InvestmentTrendChart } from "@/components/metrics/meta/InvestmentTrendChart";
+import { UnifiedDailyBreakdownChart } from "@/components/metrics/meta/UnifiedDailyBreakdownChart";
 // import { CreativeGrid } from "@/components/metrics/meta/CreativeGrid";
 import {
   useMetaCampaignOverview,
@@ -31,14 +35,20 @@ import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
 import { useAdAccounts, useAdCampaigns, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
 import { useMetaAuth } from "@/hooks/useMetaAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useHasMetricsAccess } from "@/hooks/useUserPermissions";
+import { MetaAdsConnectionDialog } from "@/components/metrics/MetaAdsConnectionDialog";
 import { useUnifiedMetrics, useUnifiedDailyBreakdown } from "@/hooks/useUnifiedMetrics";
+import { useAdSetWeeklyMetrics } from "@/hooks/useAdSetWeeklyMetrics";
+import { AdSetWeeklyCards } from "@/components/metrics/AdSetWeeklyCards";
+import { AdSetWeeklyTrendChart } from "@/components/metrics/AdSetWeeklyTrendChart";
+import { AdSetWeeklyComparisonTable } from "@/components/metrics/AdSetWeeklyComparisonTable";
 import { useMetaCampaignOverviewMetrics } from "@/hooks/useMetaCampaignMetrics";
 import type { MetaCampaignOverviewRow, MetaPrimaryMetric, MetaEngagementStage, MetaInvestmentTimelinePoint } from "@/lib/metaMetrics";
 import { formatDateTime, formatCurrency } from "@/lib/formatters";
 import { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import { type FilterValues } from "@/components/meta-ads/MetaAdsFiltersV2";
-import { RefreshCw } from "lucide-react";
+ 
 
 type CampaignFilter = "all" | string;
 
@@ -50,12 +60,14 @@ export default function MetricsPage() {
     ? { from: new Date(filters.dateRange.start), to: new Date(filters.dateRange.end) }
     : undefined;
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showConnectionDialog, setShowConnectionDialog] = useState(false);
   const { toast } = useToast();
 
   const { hasActiveConnection, isLoading: statusLoading, isFetching: statusFetching } =
     useMetaConnectionStatus();
   
   const { activeAdAccounts, syncCampaigns, syncDailyInsights, refreshData } = useMetaAuth();
+  const canManageMeta = useHasMetricsAccess();
 
   const metaQueriesEnabled = hasActiveConnection;
 
@@ -142,6 +154,8 @@ export default function MetricsPage() {
     const primary: MetaPrimaryMetric[] = [
       { id: 'impressions', label: 'Impressões', value: impressions, formatter: 'integer' },
       { id: 'clicks', label: 'Cliques', value: clicks, formatter: 'integer' },
+      { id: 'linkClicks', label: 'Cliques no Link', value: unifiedMetrics.meta_link_clicks ?? 0, formatter: 'integer' },
+      { id: 'postEngagement', label: 'Engajamento com Publicação', value: unifiedMetrics.meta_post_engagement ?? 0, formatter: 'integer' },
       // Exibir leads do CRM para refletir conversões reais
       { id: 'crmLeads', label: 'Leads (CRM)', value: crmLeads, formatter: 'integer' },
     ];
@@ -184,6 +198,12 @@ export default function MetricsPage() {
     },
     { enabled: metaQueriesEnabled }
   );
+
+  const activeAccountIds = activeAdAccounts.map((account) => account.id);
+  const tableAdAccountIds = filters.accountId ? [filters.accountId] : activeAccountIds;
+  const campaignFilterIds = filters.campaignId ? [filters.campaignId] : undefined;
+  const showPerformanceTables =
+    tableAdAccountIds.length > 0 && !!dateRangeDayPicker?.from && !!dateRangeDayPicker?.to;
 
   // TODO: Refatorar os componentes abaixo para usar a nova fonte de dados unificada
   // ou criar novos hooks que usem os filtros e a lógica de sincronização.
@@ -289,14 +309,14 @@ export default function MetricsPage() {
       await refreshData();
 
       toast({
-        title: "Dados sincronizados!",
-        description: `${totalCampaigns} campanhas e ${(result?.recordsProcessed ?? 0)} registros de métricas atualizados.`,
+        title: "Dados atualizados",
+        description: "Os indicadores foram atualizados com sucesso.",
       });
     } catch (error) {
       console.error('❌ Error syncing insights:', error);
       toast({
-        title: "Erro ao sincronizar",
-        description: error instanceof Error ? error.message : "Não foi possível sincronizar os dados.",
+        title: "Erro ao atualizar",
+        description: "Não foi possível atualizar os dados no momento.",
         variant: "destructive",
       });
     } finally {
@@ -324,11 +344,22 @@ export default function MetricsPage() {
         <Alert>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span>Conecte-se ao Meta Business Manager para acompanhar os indicadores de anúncios.</span>
-            <Button variant="outline" size="sm" asChild>
-              <a href="/metricas">Abrir métricas Meta Ads</a>
-            </Button>
+            {canManageMeta && (
+              <Button variant="default" size="sm" className="gap-2" onClick={() => setShowConnectionDialog(true)}>
+                <Link2 className="w-4 h-4" />
+                Conectar Meta Ads
+              </Button>
+            )}
           </AlertDescription>
         </Alert>
+        <MetaAdsConnectionDialog
+          open={showConnectionDialog}
+          onOpenChange={setShowConnectionDialog}
+          dateRange={filters.dateRange}
+          onAccountsUpdated={() => {
+            setShowConnectionDialog(false);
+          }}
+        />
       </div>
     );
   }
@@ -338,7 +369,7 @@ export default function MetricsPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Relatório de Campanhas de Anúncios - Meta</h1>
-          <p className="text-muted-foreground">Painel consolidado das métricas chave de engajamento e custo.</p>
+          <p className="text-muted-foreground">Painel com KPIs e tendências para decisão diária.</p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <DateRangePicker
@@ -394,56 +425,72 @@ export default function MetricsPage() {
             className="gap-2"
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-            {isSyncing ? 'Sincronizando...' : 'Atualizar Dados'}
+            {isSyncing ? 'Atualizando...' : 'Atualizar'}
           </Button>
+          {canManageMeta && (
+            <Button
+              variant="outline"
+              size="default"
+              onClick={() => setShowConnectionDialog(true)}
+              className="gap-2"
+            >
+              <Link2 className="w-4 h-4" />
+              Contas Meta
+            </Button>
+          )}
+          <Button
+            variant="default"
+            size="default"
+            onClick={() => {
+              const rows: string[] = []
+              rows.push('Métrica,Valor')
+              const p = summaryQuery.data?.primary ?? []
+              const c = summaryQuery.data?.cost ?? []
+              p.forEach(m => rows.push(`${m.label},${m.value}`))
+              c.forEach(m => rows.push(`${m.label},${m.value}`))
+              rows.push('')
+              rows.push('Data,Investimento,CTR,Leads CRM')
+              (dailyBreakdown ?? []).forEach(d => {
+                const ctr = typeof d.ctr === 'number' ? d.ctr : Number(d.ctr ?? 0)
+                const leads = typeof d.crm_leads === 'number' ? d.crm_leads : Number(d.crm_leads ?? 0)
+                rows.push(`${d.date},${d.spend},${ctr},${leads}`)
+              })
+              const csv = rows.join('\n')
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              const start = filters.dateRange?.start ?? 'inicio'
+              const end = filters.dateRange?.end ?? 'fim'
+              a.href = url
+              a.download = `metricas-meta-${start}_a_${end}.csv`
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+            className="gap-2"
+          >
+            Exportar CSV
+          </Button>
+          <MetaAdsConnectionDialog
+            open={showConnectionDialog}
+            onOpenChange={setShowConnectionDialog}
+            dateRange={filters.dateRange}
+            onAccountsUpdated={async () => {
+              setShowConnectionDialog(false);
+              await refreshData();
+            }}
+          />
       </div>
     </div>
 
       {!isLoading && !hasData && (
         <Alert>
           <AlertDescription className="flex items-center justify-between gap-2">
-            <span>Sem dados para o período selecionado.</span>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleSyncInsights}
-              disabled={isSyncing || !filters.dateRange}
-            >
-              {isSyncing ? 'Sincronizando...' : 'Sincronizar agora'}
-            </Button>
+            <span>Sem dados para o período selecionado. Ajuste os filtros para outro intervalo.</span>
           </AlertDescription>
         </Alert>
       )}
 
-      {filters.accountId && dateRangeDayPicker?.from && dateRangeDayPicker?.to && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Desempenho por Conjunto de Anúncios</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AdSetPerformanceTable
-                adAccountIds={[filters.accountId]}
-                campaignIds={filters.campaignId === "all" ? undefined : (filters.campaignId ? [filters.campaignId] : undefined)}
-                dateRange={dateRangeDayPicker}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Desempenho por Anúncio</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AdPerformanceTableV2
-                adAccountIds={[filters.accountId]}
-                campaignIds={filters.campaignId === "all" ? undefined : (filters.campaignId ? [filters.campaignId] : undefined)}
-                dateRange={dateRangeDayPicker}
-              />
-            </CardContent>
-          </Card>
-        </>
-      )}
+      
 
       <MetricsCardGroup
         primary={summaryQuery.data?.primary ?? []}
@@ -451,9 +498,48 @@ export default function MetricsPage() {
         isLoading={summaryQuery.isLoading}
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <EngagementFunnel stages={summaryQuery.data?.funnel ?? []} isLoading={summaryQuery.isLoading} />
-        {/* <CreativeInvestmentChart data={creativesQuery.data ?? []} isLoading={creativesQuery.isLoading} /> */}
+      {/* Conjuntos (4 Semanas) */}
+      {(() => {
+        const weekly = useAdSetWeeklyMetrics(
+          {
+            accountId: filters.accountId,
+            campaignId: filters.campaignId,
+          },
+          { enabled: metaQueriesEnabled }
+        );
+        if (!weekly.data) return null;
+        const weeks = weekly.data.weeks;
+        const latest = weeks[weeks.length - 1];
+        const total = weekly.data.totalByWeek[latest];
+        const weeklyRows = (() => {
+          const prev = weeks[weeks.length - 2];
+          return Object.entries(weekly.data.byAdSet).map(([id, arr]) => {
+            const name = arr[0]?.ad_set_name ?? '—';
+            const curAgg = arr.find(a => a.week === latest);
+            const prevAgg = arr.find(a => a.week === prev);
+            return {
+              ad_set_id: id,
+              ad_set_name: name,
+              current: curAgg ? { spend: curAgg.spend, leads_count: curAgg.leads_count, cpl: curAgg.cpl, ctr: curAgg.ctr } : { spend: 0, leads_count: 0, cpl: 0, ctr: 0 },
+              previous: prevAgg ? { spend: prevAgg.spend, leads_count: prevAgg.leads_count, cpl: prevAgg.cpl, ctr: prevAgg.ctr } : undefined,
+            };
+          }).sort((a, b) => b.current.spend - a.current.spend);
+        })();
+        return (
+          <div className="space-y-4">
+            <AdSetWeeklyCards total={{ spend: total.spend, leads_count: total.leads_count, ctr: total.ctr, cpl: total.cpl }} wow={weekly.data.wowDelta} />
+            <AdSetWeeklyTrendChart data={weeks.map(wk => ({ week: wk, ...(weekly.data.totalByWeek[wk] || { spend: 0, leads_count: 0, ctr: 0 }) }))} />
+            <AdSetWeeklyComparisonTable rows={weeklyRows} />
+          </div>
+        );
+      })()}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <UnifiedDailyBreakdownChart data={dailyBreakdown ?? []} isLoading={dailyLoading} />
+        <div className="space-y-6">
+          <InvestmentTrendChart data={investmentTimelineQuery.data ?? []} isLoading={investmentTimelineQuery.isLoading} />
+          <EngagementFunnel stages={summaryQuery.data?.funnel ?? []} isLoading={summaryQuery.isLoading} />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -470,8 +556,6 @@ export default function MetricsPage() {
         </Card>
         {/* <InvestmentByDayPie data={investmentSlicesQuery.data ?? []} isLoading={investmentSlicesQuery.isLoading} /> */}
       </div>
-
-      <InvestmentTrendChart data={investmentTimelineQuery.data ?? []} isLoading={investmentTimelineQuery.isLoading} />
 
       {/* <CreativeGrid creatives={creativesQuery.data ?? []} isLoading={creativesQuery.isLoading} /> */}
 

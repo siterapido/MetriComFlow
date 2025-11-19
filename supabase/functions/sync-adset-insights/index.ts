@@ -197,15 +197,26 @@ serve(async (req) => {
 
         let nextUrl: string | null = baseUrl;
         const rows: any[] = [];
+        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+        let retries = 0;
         while (nextUrl) {
           const res = await fetch(nextUrl);
           if (!res.ok) {
-            console.error("Meta API error (adset insights)", account.external_id, res.status, await res.text());
+            const body = await res.text();
+            console.error("Meta API error (adset insights)", account.external_id, res.status, body);
+            // Backoff para 429/5xx e tentativa de continuar
+            if ((res.status === 429 || res.status >= 500) && retries < 3) {
+              retries++;
+              await sleep(800 * retries);
+              continue;
+            }
             break;
           }
           const data = await res.json();
           rows.push(...(data?.data || []));
           nextUrl = data?.paging?.next || null;
+          // Micro-backoff para reduzir risco de rate-limit
+          await sleep(120);
         }
 
         totalRows += rows.length;

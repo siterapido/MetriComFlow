@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CalendarIcon, X, Loader2, Facebook, Trash2, MessageCircle, Phone, Mail, MessageSquare, ArrowRightLeft, User as UserIcon, DollarSign, Clock, AlertCircle } from "lucide-react";
+import { CalendarIcon, X, Loader2, Facebook, Trash2, MessageCircle, Phone, Mail, MessageSquare, ArrowRightLeft, User as UserIcon, DollarSign, Clock, AlertCircle, Plus } from "lucide-react";
 import { format, formatDistanceToNowStrict, isToday, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -36,11 +36,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useInteractions } from "@/hooks/useInteractions";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useLabels, useAddLabelToLead, useRemoveLabelFromLead } from "@/hooks/useLabels";
+import { useLabels, useAddLabelToLead, useRemoveLabelFromLead, useCreateLabel } from "@/hooks/useLabels";
 import { useAdCampaigns } from "@/hooks/useMetaMetrics";
 import { useToast } from "@/hooks/use-toast";
 import { useAssignableUsers } from "@/hooks/useAssignableUsers";
-import { USER_TYPE_LABELS } from "@/hooks/useUserPermissions";
+import { useUserPermissions, USER_TYPE_LABELS } from "@/hooks/useUserPermissions";
 import type { Tables } from "@/lib/database.types";
 
 type Lead = Tables<"leads"> & {
@@ -74,10 +74,12 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
   const { data: labels } = useLabels();
   const addLabelToLead = useAddLabelToLead();
   const removeLabelFromLead = useRemoveLabelFromLead();
+  const createLabel = useCreateLabel();
   const { data: campaigns } = useAdCampaigns();
   const { data: assignableUsers } = useAssignableUsers();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { data: permissions } = useUserPermissions();
 
   // Resolve phone for WhatsApp CTA in footer
   const resolvedPhone: string | null = (() => {
@@ -114,6 +116,7 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [newLabelName, setNewLabelName] = useState("");
 
   // Initialize contract value
   useEffect(() => {
@@ -232,6 +235,7 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
     }
   };
 
+  const deleteRestrictionMessage = "Somente proprietários e administradores podem excluir leads.";
   const handleDelete = async () => {
     try {
       await deleteLead.mutateAsync(lead.id);
@@ -239,6 +243,7 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
         title: "Lead excluído",
         description: "O lead foi removido com sucesso.",
       });
+      setShowDeleteConfirm(false);
       onOpenChange(false);
     } catch (error) {
       toast({
@@ -249,6 +254,19 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
     }
   };
 
+  const handleOpenDeleteDialog = () => {
+    if (permissions?.canDeleteLeads === false) {
+      toast({
+        title: "Permissão insuficiente",
+        description: deleteRestrictionMessage,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setShowDeleteConfirm(true);
+  };
+
   const toggleLabel = (labelId: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -256,6 +274,32 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
         ? prev.selectedLabels.filter((id) => id !== labelId)
         : [...prev.selectedLabels, labelId],
     }));
+  };
+
+  const handleCreateLabel = async () => {
+    const name = newLabelName.trim();
+    if (!name) {
+      toast({ title: "Nome obrigatório", description: "Digite o nome da etiqueta.", variant: "destructive" });
+      return;
+    }
+    const exists = (labels || []).find((l) => l.name.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      setFormData((prev) => ({ ...prev, selectedLabels: prev.selectedLabels.includes(exists.id) ? prev.selectedLabels : [...prev.selectedLabels, exists.id] }));
+      toast({ title: "Etiqueta existente", description: "A etiqueta já existia e foi selecionada." });
+      setNewLabelName("");
+      return;
+    }
+    try {
+      const created = await createLabel.mutateAsync({ name } as any);
+      if (created?.id) {
+        setFormData((prev) => ({ ...prev, selectedLabels: [...prev.selectedLabels, created.id] }));
+      }
+      toast({ title: "Etiqueta criada", description: "A etiqueta foi criada e selecionada." });
+      setNewLabelName("");
+    } catch (error: any) {
+      const description = error?.message || "Não foi possível criar a etiqueta";
+      toast({ title: "Erro", description, variant: "destructive" });
+    }
   };
 
   const formatCurrency = (value: string) => {
@@ -470,6 +514,33 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
                         )}
                       </Badge>
                     ))}
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Input
+                      placeholder="Nova etiqueta"
+                      value={newLabelName}
+                      onChange={(e) => setNewLabelName(e.target.value)}
+                      disabled={isSubmitting || createLabel.isPending}
+                      className="bg-input border-border"
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleCreateLabel}
+                      disabled={isSubmitting || createLabel.isPending || !newLabelName.trim()}
+                      className="bg-primary hover:bg-primary/90"
+                    >
+                      {createLabel.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Criando
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Criar etiqueta
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
 
@@ -791,16 +862,30 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
                 <span className="text-xs text-muted-foreground">sem telefone detectado</span>
               )}
             </div>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => setShowDeleteConfirm(true)}
-              disabled={isSubmitting}
-              className="mr-auto"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Excluir
-            </Button>
+            <div className="mr-auto flex flex-col gap-1">
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleOpenDeleteDialog}
+                disabled={
+                  isSubmitting ||
+                  (permissions ? !permissions.canDeleteLeads : false)
+                }
+                title={
+                  permissions && !permissions.canDeleteLeads
+                    ? deleteRestrictionMessage
+                    : undefined
+                }
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Excluir
+              </Button>
+              {permissions && !permissions.canDeleteLeads && (
+                <span className="text-[11px] text-muted-foreground">
+                  {deleteRestrictionMessage}
+                </span>
+              )}
+            </div>
             <Button
               type="button"
               variant="outline"
@@ -841,7 +926,11 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
             <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleDelete}>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={!permissions?.canDeleteLeads}
+            >
               Excluir
             </Button>
           </DialogFooter>

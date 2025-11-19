@@ -3,7 +3,7 @@
  * Análise granular por Campanha > Conjunto > Criativo
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -32,6 +32,7 @@ import { MetaAdsConnectionDialog } from '@/components/metrics/MetaAdsConnectionD
 import { useMetaConnectionStatus } from '@/hooks/useMetaConnectionStatus';
 import { useMetricsSummary, useAdAccounts, useAdCampaigns } from '@/hooks/useMetaMetrics';
 import { useMetaAuth } from '@/hooks/useMetaAuth';
+import { useHasMetricsAccess } from '@/hooks/useUserPermissions';
 import {
   useAdSets,
   useSyncAdSets,
@@ -45,9 +46,15 @@ import {
   getLastNDays,
 } from "@/hooks/useAdSetsAndAds";
 import { AdPerformanceTableV2 } from "@/components/metrics/AdPerformanceTableV2";
+import { AdSetPerformanceTable } from "@/components/metrics/AdSetPerformanceTable";
+import { AdSetWeeklyCards } from "@/components/metrics/AdSetWeeklyCards";
+import { AdSetWeeklyTrendChart } from "@/components/metrics/AdSetWeeklyTrendChart";
+import { AdSetWeeklyComparisonTable } from "@/components/metrics/AdSetWeeklyComparisonTable";
+import { useAdSetWeeklyMetrics } from "@/hooks/useAdSetWeeklyMetrics";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency, formatNumber } from "@/lib/formatters";
+import { supabase } from "@/lib/supabase";
 
 export default function TrafficMetrics() {
   const { toast } = useToast();
@@ -63,6 +70,7 @@ export default function TrafficMetrics() {
 
   // Meta auth utilities (to ensure campaigns are present)
   const { syncCampaigns, syncDailyInsights } = useMetaAuth();
+  const canManageMeta = useHasMetricsAccess();
 
   const invalidateMetaQueries = () => {
     queryClient.invalidateQueries({ queryKey: ['metaConnectionStatus'] });
@@ -139,6 +147,34 @@ export default function TrafficMetrics() {
   const syncAds = useSyncAds();
   const syncAdSetInsights = useSyncAdSetInsights();
   const syncAdInsights = useSyncAdInsights();
+
+  // Realtime subscriptions for ad and ad set insights
+  useEffect(() => {
+    if (!hasActiveConnection) return;
+    const chan = supabase
+      .channel('realtime-ads-insights')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ad_daily_insights' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['metrics'] });
+          queryClient.invalidateQueries({ queryKey: ['ad-metrics'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ad_set_daily_insights' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['metrics'] });
+          queryClient.invalidateQueries({ queryKey: ['ad-set-metrics'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try { supabase.removeChannel(chan); } catch {}
+    };
+  }, [hasActiveConnection, queryClient]);
 
   // Handlers
   const handleSyncAll = async () => {
@@ -219,15 +255,17 @@ export default function TrafficMetrics() {
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                onClick={() => setShowConnectionDialog(true)}
-                className="gap-2"
-              >
-                <Link2 className="w-4 h-4" />
-                Conectar Meta Ads
-              </Button>
-            </div>
+            {canManageMeta && (
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  onClick={() => setShowConnectionDialog(true)}
+                  className="gap-2"
+                >
+                  <Link2 className="w-4 h-4" />
+                  Conectar Meta Ads
+                </Button>
+              </div>
+            )}
 
             <Alert>
               <AlertDescription>
@@ -265,15 +303,17 @@ export default function TrafficMetrics() {
 
         {/* Filtros Inline */}
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowConnectionDialog(true)}
-            className="gap-2"
-          >
-            <Link2 className="w-4 h-4" />
-            Contas Meta
-          </Button>
+          {canManageMeta && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowConnectionDialog(true)}
+              className="gap-2"
+            >
+              <Link2 className="w-4 h-4" />
+              Contas Meta
+            </Button>
+          )}
 
           <DateRangeFilter value={dateRange} onChange={setDateRange} />
 
@@ -477,6 +517,44 @@ export default function TrafficMetrics() {
             </div>
           )}
 
+          {/* Widgets Semanais (4 semanas) */}
+          {(() => {
+            const weekly = useAdSetWeeklyMetrics(
+              {
+                accountId: selectedAccount === 'all' ? undefined : selectedAccount,
+                campaignId: selectedCampaign === 'all' ? undefined : selectedCampaign,
+                adSetIds: selectedAdSet === 'all' ? undefined : [selectedAdSet],
+              },
+              { enabled: hasActiveConnection && activeTab === 'adsets' }
+            );
+            if (!weekly.data) return null;
+            const weeks = weekly.data.weeks;
+            const latest = weeks[weeks.length - 1];
+            const total = weekly.data.totalByWeek[latest];
+            return (
+              <div className="space-y-4">
+                <AdSetWeeklyCards total={{ spend: total.spend, leads_count: total.leads_count, ctr: total.ctr, cpl: total.cpl }} wow={weekly.data.wowDelta} />
+                <AdSetWeeklyTrendChart data={weeks.map(wk => ({ week: wk, ...(weekly.data.totalByWeek[wk] || { spend: 0, leads_count: 0, ctr: 0 }) }))} />
+                {(() => {
+                  const cur = weeks[weeks.length - 1];
+                  const prev = weeks[weeks.length - 2];
+                  const rows = Object.entries(weekly.data.byAdSet).map(([id, arr]) => {
+                    const name = arr[0]?.ad_set_name ?? '—';
+                    const curAgg = arr.find(a => a.week === cur);
+                    const prevAgg = arr.find(a => a.week === prev);
+                    return {
+                      ad_set_id: id,
+                      ad_set_name: name,
+                      current: curAgg ? { spend: curAgg.spend, leads_count: curAgg.leads_count, cpl: curAgg.cpl, ctr: curAgg.ctr } : { spend: 0, leads_count: 0, cpl: 0, ctr: 0 },
+                      previous: prevAgg ? { spend: prevAgg.spend, leads_count: prevAgg.leads_count, cpl: prevAgg.cpl, ctr: prevAgg.ctr } : undefined,
+                    };
+                  }).sort((a, b) => b.current.spend - a.current.spend);
+                  return <AdSetWeeklyComparisonTable rows={rows} />;
+                })()}
+              </div>
+            );
+          })()}
+
           {/* Grid de Métricas de Conjuntos */}
           {adSetMetricsLoading ? (
             <div className="flex justify-center py-12">
@@ -539,6 +617,26 @@ export default function TrafficMetrics() {
               </Button>
             </div>
           )}
+
+          <Card className="border-border bg-card">
+            <CardHeader>
+              <CardTitle>Detalhes de Conjuntos</CardTitle>
+              <CardDescription>Informações completas e métricas com filtros, ordenação e paginação</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AdSetPerformanceTable
+                adAccountIds={
+                  selectedAccount === 'all'
+                    ? (accounts?.map((a) => a.id) ?? [])
+                    : [selectedAccount]
+                }
+                campaignIds={
+                  selectedCampaign === 'all' ? undefined : [selectedCampaign]
+                }
+                dateRange={dateRange}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Tab: Criativos */}
@@ -550,9 +648,17 @@ export default function TrafficMetrics() {
             </CardHeader>
             <CardContent>
               <AdPerformanceTableV2
-                accountId={selectedAccount === 'all' ? undefined : selectedAccount}
-                campaignId={selectedCampaign === 'all' ? undefined : selectedCampaign}
-                adSetId={selectedAdSet === 'all' ? undefined : selectedAdSet}
+                adAccountIds={
+                  selectedAccount === 'all'
+                    ? (accounts?.map((a) => a.id) ?? [])
+                    : [selectedAccount]
+                }
+                campaignIds={
+                  selectedCampaign === 'all' ? undefined : [selectedCampaign]
+                }
+                adSetIds={
+                  selectedAdSet === 'all' ? undefined : [selectedAdSet]
+                }
                 dateRange={dateRange}
               />
             </CardContent>

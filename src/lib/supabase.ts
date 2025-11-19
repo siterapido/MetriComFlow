@@ -9,9 +9,12 @@ const rawAppUrl = import.meta.env.VITE_APP_URL as string | undefined
 const supabaseUrl = rawSupabaseUrl?.trim()
 const supabaseAnonKey = rawSupabaseAnonKey?.trim()
 
-// Normalize app URL: trim whitespace and remove trailing slash to avoid // in redirects
+// Normalize app URL: prefer current browser origin to avoid mismatches in localhost/dev
+// Always remove trailing slash to avoid // in redirects
 const normalizedEnvAppUrl = rawAppUrl?.trim().replace(/\/$/, '')
-const appUrl = normalizedEnvAppUrl || (typeof window !== 'undefined' ? window.location.origin : undefined)
+const normalizedWindowOrigin = typeof window !== 'undefined' ? window.location.origin.replace(/\/$/, '') : undefined
+// In browser, use the actual origin; fall back to env in non-browser contexts
+const appUrl = normalizedWindowOrigin || normalizedEnvAppUrl
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
@@ -30,6 +33,10 @@ try {
     }
     if (rawAppUrl && rawAppUrl !== normalizedEnvAppUrl) {
       console.warn('[Supabase] VITE_APP_URL tinha espaços/linhas a mais ou barra final. Valor foi normalizado.')
+    }
+    // Warn if env app URL differs from current origin (common source de "logout" em localhost)
+    if (normalizedEnvAppUrl && normalizedWindowOrigin && normalizedEnvAppUrl !== normalizedWindowOrigin) {
+      console.warn('[Supabase] VITE_APP_URL difere da origem atual do navegador (', normalizedWindowOrigin, '). Redirecionamentos usarão a origem atual para evitar perda de sessão em localhost.')
     }
   }
 } catch (err) {
@@ -156,6 +163,16 @@ export const authHelpers = {
     return await supabase.auth.signInWithPassword({
       email,
       password,
+    })
+  },
+
+  // Sign in with Magic Link (email OTP)
+  signInWithMagicLink: async (email: string) => {
+    return await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: appUrl ? `${appUrl}/auth/callback` : undefined,
+      },
     })
   },
 

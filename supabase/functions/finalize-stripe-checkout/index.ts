@@ -288,6 +288,78 @@ export default (globalThis as any).Deno?.serve(async (req: Request) => {
       },
     });
 
+    // Emitir Magic Link pós-compra (idempotente por sessão)
+    try {
+      const customerEmail = session.customer_email ?? session.customer_details?.email ?? null;
+      if (customerEmail) {
+        const { data: existingMagic } = await adminClient
+          .from("magic_links")
+          .select("id")
+          .eq("checkout_session_id", session.id)
+          .eq("status", "active")
+          .maybeSingle();
+
+        if (!existingMagic) {
+          const rawToken = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+          const enc = new TextEncoder();
+          const digest = await crypto.subtle.digest("SHA-256", enc.encode(rawToken));
+          const hex = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+
+          const ttlMinutes = Number(((globalThis as any).Deno?.env.get("MAGIC_LINK_TTL_MINUTES") ?? "30"));
+          const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000).toISOString();
+
+          await adminClient
+            .from("magic_links")
+            .insert({
+              email: customerEmail,
+              user_id: userData.user.id,
+              checkout_session_id: session.id,
+              token_hash: hex,
+              expires_at: expiresAt,
+              status: "active",
+            });
+
+          const APP_URL = (globalThis as any).Deno?.env.get("APP_URL") ?? (globalThis as any).Deno?.env.get("VITE_APP_URL") ?? undefined;
+          const validateUrl = APP_URL
+            ? `${String(APP_URL).replace(/\/$/, "")}/magic/validate?t=${encodeURIComponent(rawToken)}`
+            : undefined;
+
+          const RESEND_API_KEY = (globalThis as any).Deno?.env.get("RESEND_API_KEY") ?? "";
+          const FROM_EMAIL = (globalThis as any).Deno?.env.get("MAGIC_LINK_FROM_EMAIL") ?? "InsightFy <acesso@insightfy.app>";
+
+          if (RESEND_API_KEY && validateUrl) {
+            const html = `
+              <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827;">
+                <h2 style="color: #111827;">Compra confirmada — seu acesso está pronto</h2>
+                <p>Use o botão abaixo para entrar com seu Magic Link. Este link é válido por ${ttlMinutes} minutos e pode ser usado apenas uma vez.</p>
+                <p style="margin: 24px 0;">
+                  <a href="${validateUrl}" target="_blank" rel="noopener noreferrer"
+                    style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">
+                    Entrar com Magic Link
+                  </a>
+                </p>
+                <p>Se o botão não funcionar, copie e cole este link no navegador:</p>
+                <p style="word-break: break-all; color: #2563eb;">${validateUrl}</p>
+                <hr style="margin: 32px 0; border: none; border-top: 1px solid #e5e7eb;" />
+                <p style="font-size: 12px; color: #6b7280;">Se você não esperava este e-mail, ignore-o. Em caso de expiração, solicite um novo link pelo app.</p>
+              </div>
+            `;
+            try {
+              await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ from: FROM_EMAIL, to: customerEmail, subject: "Seu Magic Link de acesso", html }),
+              });
+            } catch (mailErr) {
+              console.warn("Falha ao enviar e-mail de magic link:", mailErr);
+            }
+          }
+        }
+      }
+    } catch (emitErr) {
+      console.warn("Erro ao emitir Magic Link pós-compra:", emitErr);
+    }
+
     return new Response(
       JSON.stringify({ success: true }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },

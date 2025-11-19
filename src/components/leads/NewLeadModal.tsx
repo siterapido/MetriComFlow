@@ -13,7 +13,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useCreateLead } from "@/hooks/useLeads";
-import { useLabels, useAddLabelToLead } from "@/hooks/useLabels";
+import { useLabels, useAddLabelToLead, useCreateLabel } from "@/hooks/useLabels";
 import { useAdCampaigns } from "@/hooks/useMetaMetrics";
 import { useToast } from "@/hooks/use-toast";
 import { useAssignableUsers } from "@/hooks/useAssignableUsers";
@@ -42,6 +42,7 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
   const createLead = useCreateLead();
   const { data: labels } = useLabels();
   const addLabelToLead = useAddLabelToLead();
+  const createLabel = useCreateLabel();
   const { data: campaigns } = useAdCampaigns();
   const { data: assignableUsers } = useAssignableUsers();
 
@@ -61,6 +62,7 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newLabelName, setNewLabelName] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,6 +161,32 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
         ? prev.selectedLabels.filter(id => id !== labelId)
         : [...prev.selectedLabels, labelId]
     }));
+  };
+
+  const handleCreateLabel = async () => {
+    const name = newLabelName.trim();
+    if (!name) {
+      toast({ title: "Nome obrigatório", description: "Digite o nome da etiqueta.", variant: "destructive" });
+      return;
+    }
+    const exists = (labels || []).find((l) => l.name.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      setFormData((prev) => ({ ...prev, selectedLabels: prev.selectedLabels.includes(exists.id) ? prev.selectedLabels : [...prev.selectedLabels, exists.id] }));
+      toast({ title: "Etiqueta existente", description: "A etiqueta já existia e foi selecionada." });
+      setNewLabelName("");
+      return;
+    }
+    try {
+      const created = await createLabel.mutateAsync({ name } as any);
+      if (created?.id) {
+        setFormData((prev) => ({ ...prev, selectedLabels: [...prev.selectedLabels, created.id] }));
+      }
+      toast({ title: "Etiqueta criada", description: "A etiqueta foi criada e selecionada." });
+      setNewLabelName("");
+    } catch (error: any) {
+      const description = error?.message || "Não foi possível criar a etiqueta";
+      toast({ title: "Erro", description, variant: "destructive" });
+    }
   };
 
   const formatCurrency = (value: string) => {
@@ -447,6 +475,33 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
                   )}
                 </Badge>
               ))}
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <Input
+                placeholder="Nova etiqueta"
+                value={newLabelName}
+                onChange={(e) => setNewLabelName(e.target.value)}
+                disabled={isSubmitting || createLabel.isPending}
+                className="bg-input border-border"
+              />
+              <Button
+                type="button"
+                onClick={handleCreateLabel}
+                disabled={isSubmitting || createLabel.isPending || !newLabelName.trim()}
+                className="bg-primary hover:bg-primary/90"
+              >
+                {createLabel.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Criando
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Criar etiqueta
+                  </>
+                )}
+              </Button>
             </div>
           </div>
 
