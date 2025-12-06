@@ -6,6 +6,13 @@ declare const Deno: {
 };
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import {
+  META_API_VERSION,
+  fetchWithBackoff,
+  mapAdRecord,
+  mapAdSetRecord,
+  normalizeMetaPaging,
+} from "../_shared/meta-sync.ts";
 
 // Load Supabase client dynamically to avoid module resolution issues in editors
 async function loadCreateClient() {
@@ -104,11 +111,13 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Obter informações da conta de anúncios do Meta (Graph API v24.0)
-    const accountUrl = `https://graph.facebook.com/v24.0/act_${ad_account_id}` +
+    const graphBase = `https://graph.facebook.com/${META_API_VERSION}`;
+
+    // Obter informações da conta de anúncios do Meta
+    const accountUrl = `${graphBase}/act_${ad_account_id}` +
       `?fields=id,name,business_name&access_token=${access_token}`;
 
-    const accountResponse = await fetch(accountUrl);
+    const accountResponse = await fetchWithBackoff(accountUrl, { method: "GET" });
     const accountData = await accountResponse.json();
 
     if (!accountResponse.ok) {
@@ -231,10 +240,10 @@ Deno.serve(async (req: Request) => {
 
     // Buscar campanhas da conta (Graph API v24.0)
     const effectiveStatus = encodeURIComponent('["ACTIVE","PAUSED","ARCHIVED"]');
-    const campaignsUrl = `https://graph.facebook.com/v24.0/act_${ad_account_id}/campaigns` +
+    const campaignsUrl = `${graphBase}/act_${ad_account_id}/campaigns` +
       `?fields=id,name,objective,status,start_time,stop_time&effective_status=${effectiveStatus}&limit=500&access_token=${access_token}`;
 
-    const campaignsResponse = await fetch(campaignsUrl);
+    const campaignsResponse = await fetchWithBackoff(campaignsUrl, { method: "GET" });
     const campaignsData = await campaignsResponse.json();
 
     if (!campaignsResponse.ok) {
@@ -277,7 +286,7 @@ Deno.serve(async (req: Request) => {
         throw new Error(`Error upserting campaigns: ${upsertError.message}`);
       }
 
-      campaignsSyncedCount = upsertedCampaigns?.length || 0;
+      campaignsSyncedCount = upsertedCampaigns?.length || recordsToUpsert.length || 0;
 
       // Mapeia external_id para o id interno da campanha
       const campaignIdMap = new Map(upsertedCampaigns.map(c => [c.external_id, c.id]));
@@ -287,23 +296,15 @@ Deno.serve(async (req: Request) => {
         const campaignInternalId = campaignIdMap.get(campaign.id);
         if (!campaignInternalId) continue;
 
-        const adSetsUrl = `https://graph.facebook.com/v24.0/${campaign.id}/adsets` +
-          `?fields=id,name,status,start_time,end_time&limit=500&access_token=${access_token}`;
+        const adSetsUrl = `${graphBase}/${campaign.id}/adsets` +
+          `?fields=id,name,status,optimization_goal,billing_event,bid_strategy,targeting,daily_budget,lifetime_budget,start_time,end_time&limit=500&access_token=${access_token}`;
         
-        const adSetsResponse = await fetch(adSetsUrl);
+        const adSetsResponse = await fetchWithBackoff(adSetsUrl, { method: "GET" });
         const adSetsData = await adSetsResponse.json();
 
         if (adSetsResponse.ok && adSetsData.data) {
-          const adSets: MetaAdSet[] = adSetsData.data;
-          const adSetRecords = adSets.map(as => ({
-            external_id: as.id,
-            name: as.name,
-            status: as.status,
-            start_time: as.start_time,
-            end_time: as.end_time,
-            campaign_id: campaignInternalId, // Usa o ID interno da campanha
-            updated_at: new Date().toISOString(),
-          }));
+          const adSets: MetaAdSet[] = normalizeMetaPaging(adSetsData) as MetaAdSet[];
+          const adSetRecords = adSets.map(as => mapAdSetRecord(as, campaignInternalId));
 
           if (adSetRecords.length > 0) {
             const { data: upsertedAdSets, error: adSetUpsertError } = await supabase
@@ -314,7 +315,7 @@ Deno.serve(async (req: Request) => {
             if (adSetUpsertError) {
               console.error(`Error upserting ad sets for campaign ${campaign.id}:`, adSetUpsertError.message);
             } else {
-              adSetsSyncedCount += upsertedAdSets?.length || 0;
+              adSetsSyncedCount += upsertedAdSets?.length || adSetRecords.length || 0;
               
               const adSetIdMap = new Map(upsertedAdSets.map(as => [as.external_id, as.id]));
 
@@ -323,23 +324,15 @@ Deno.serve(async (req: Request) => {
                 const adSetInternalId = adSetIdMap.get(adSet.id);
                 if (!adSetInternalId) continue;
 
-                const adsUrl = `https://graph.facebook.com/v24.0/${adSet.id}/ads` +
-                  `?fields=id,name,status,creative{id,name,object_story_spec,image_url,thumbnail_url}&limit=500&access_token=${access_token}`;
+                const adsUrl = `${graphBase}/${adSet.id}/ads` +
+                  `?fields=id,name,status,creative{id,name,object_story_spec,image_url,thumbnail_url,asset_feed_spec},effective_object_story_id,adset_id,created_time,updated_time&limit=500&access_token=${access_token}`;
                 
-                const adsResponse = await fetch(adsUrl);
+                const adsResponse = await fetchWithBackoff(adsUrl, { method: "GET" });
                 const adsData = await adsResponse.json();
 
                 if (adsResponse.ok && adsData.data) {
-                  const ads: MetaAd[] = adsData.data;
-                  const adRecords = ads.map(ad => ({
-                    external_id: ad.id,
-                    name: ad.name,
-                    status: ad.status,
-                    ad_set_id: adSetInternalId,
-                    creative_id: ad.creative?.id,
-                    creative_data: ad.creative,
-                    updated_at: new Date().toISOString(),
-                  }));
+                  const ads: MetaAd[] = normalizeMetaPaging(adsData) as MetaAd[];
+                  const adRecords = ads.map(ad => mapAdRecord(ad, adSetInternalId, campaignInternalId));
 
                   if (adRecords.length > 0) {
                     const { error: adUpsertError } = await supabase

@@ -14,8 +14,6 @@ import Leads from "./pages/Leads";
 import LeadsLinear from "./pages/LeadsLinear";
 import LeadImports from "./pages/LeadImports";
 import LeadImportDetails from "./pages/LeadImportDetails";
-import TrafficMetrics from "./pages/TrafficMetrics";
-import MetricsPageModern from "./pages/MetricsPageModern";
 import Users from "./pages/Users";
 import LeadForms from "./pages/LeadForms";
 import NotFound from "./pages/NotFound";
@@ -79,10 +77,10 @@ const App = () => (
                 {/* Rota /metas desabilitada temporariamente */}
                 <Route path="/metas" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/metas-legacy" element={<Navigate to="/dashboard" replace />} />
-                {/* Rotas de métricas */}
-                <Route path="/metricas" element={<MetricsPageModern />} />
-                <Route path="/meta-ads-config" element={<Navigate to="/metricas" replace />} />
-                <Route path="/metrics" element={<Navigate to="/metricas" replace />} />
+                {/* Rotas de métricas desativadas - redireciona para o dashboard CRM */}
+                <Route path="/metricas" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/meta-ads-config" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/metrics" element={<Navigate to="/dashboard" replace />} />
                 {/* Nova página unificada de gestão de equipe */}
                 <Route path="/equipe" element={<TeamManagement />} />
                 {/* Redirects de rotas antigas para nova rota unificada */}

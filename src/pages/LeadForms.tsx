@@ -423,7 +423,7 @@ const LeadForms = () => {
         form.setValue("campaignId", null, { shouldDirty: false, shouldTouch: false });
       }
     }
-  }, [selectedAccountId, adCampaignIds]);
+  }, [selectedAccountId, adCampaignIds, adCampaigns, form]);
 
   const createFormMutation = useMutation<Tables<"lead_forms">, unknown, CreateLeadFormPayload>({
     mutationFn: async ({ form: formPayload, fields, variant }: CreateLeadFormPayload) => {

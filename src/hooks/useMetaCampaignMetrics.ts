@@ -36,7 +36,9 @@ const fetchCampaignMetrics = async ({
   try {
     const { data: fallbackData, error: fallbackError } = await supabase.rpc("get_ad_set_metrics", rpcParams);
     if (!fallbackError && Array.isArray(fallbackData) && fallbackData.length > 0) return fallbackData;
-  } catch (_) {}
+  } catch (error) {
+    console.warn("Fallback get_ad_set_metrics falhou", error);
+  }
 
   // Fallback 2: agregar diretamente campaign_daily_insights por campanha com escopo de organização
   try {
@@ -80,7 +82,8 @@ const fetchCampaignMetrics = async ({
       unique_ctr_rate: 0,
     }));
     return mapped;
-  } catch (_) {
+  } catch (error) {
+    console.warn("Fallback direto em campaign_daily_insights falhou", error);
     return [];
   }
 };

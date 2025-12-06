@@ -91,10 +91,10 @@ export function ActivityLog({ leadId, limit = 50 }: ActivityLogProps) {
   })
   const { data: teamMembers } = useTeamMembers()
 
-  const getTeamMemberName = (userId: string) => {
+  const getTeamMemberName = React.useCallback((userId: string) => {
     const member = teamMembers?.find(m => m.profile_id === userId)
     return member?.name || 'Usuário desconhecido'
-  }
+  }, [teamMembers])
 
   const activities: ActivityItem[] = React.useMemo(() => {
     const items: ActivityItem[] = []
@@ -137,7 +137,7 @@ export function ActivityLog({ leadId, limit = 50 }: ActivityLogProps) {
     return items
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, limit)
-  }, [interactions, tasks, teamMembers, limit])
+  }, [interactions, tasks, limit, getTeamMemberName])
 
   if (loadingInteractions || loadingTasks) {
     return (

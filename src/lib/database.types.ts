@@ -985,18 +985,3 @@ export type TablesUpdate<
       ? U
       : never
     : never
-      deal_metrics: {
-        Row: {
-          organization_id: string | null
-          month: string | null
-          week: string | null
-          status: string | null
-          value: number | null
-          expected_close_date: string | null
-          probability: number | null
-          owner_id: string | null
-          pipeline_id: string | null
-          stage_id: string | null
-        }
-        Relationships: []
-      }

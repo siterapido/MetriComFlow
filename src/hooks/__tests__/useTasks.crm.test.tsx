@@ -16,8 +16,8 @@ vi.mock('@/lib/supabase', () => {
   ]
 
   const builder: any = {
-    select() { calls.push({ method: 'select', args: arguments as any }); return builder },
-    order() { calls.push({ method: 'order', args: arguments as any }); return builder },
+    select(...args: any[]) { calls.push({ method: 'select', args }); return builder },
+    order(...args: any[]) { calls.push({ method: 'order', args }); return builder },
     eq(key: string, value: any) { calls.push({ method: 'eq', args: [key, value] }); return builder },
     then(resolve: any) { return resolve({ data: rows, error: null }) },
   }

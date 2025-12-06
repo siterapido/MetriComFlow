@@ -83,7 +83,9 @@ serve(async (req) => {
           const t1 = Date.now();
           console.log(JSON.stringify({ event: "metrics_response", level: "adSet", accountCount: accountIds.length, campaignsRequested: Array.isArray(campaign_ids) ? campaign_ids.length : 0, rows: mapped.length, durationMs: t1 - t0 }));
           return new Response(JSON.stringify({ success: true, data: mapped }), { status: 200, headers: corsHeaders() });
-        } catch (_e) {}
+        } catch (error) {
+          console.error(JSON.stringify({ event: "metrics_fallback_error", level: "adSet", error: String(error) }));
+        }
       }
       let combinedCampaignIds: string[] = [];
       if (Array.isArray(campaign_ids) && campaign_ids.length > 0) {
@@ -186,7 +188,9 @@ serve(async (req) => {
           const t1 = Date.now();
           console.log(JSON.stringify({ event: "metrics_response", level: "ad", accountCount: accountIds.length, campaignsRequested: Array.isArray(campaign_ids) ? campaign_ids.length : 0, rows: mapped.length, durationMs: t1 - t0 }));
           return new Response(JSON.stringify({ success: true, data: mapped }), { status: 200, headers: corsHeaders() });
-        } catch (_e) {}
+        } catch (error) {
+          console.error(JSON.stringify({ event: "metrics_fallback_error", level: "ad", error: String(error) }));
+        }
       }
       let combinedCampaignIds: string[] = [];
       if (Array.isArray(campaign_ids) && campaign_ids.length > 0) {
@@ -239,12 +243,60 @@ serve(async (req) => {
         let text = undefined as string | undefined;
         try {
           const spec = info?.creative_data?.object_story_spec ?? info?.creative_data?.object_story_spec ?? null;
-          const ld = spec?.link_data ?? null;
-          const vd = spec?.video_data ?? null;
-          linkUrl = ld?.link || vd?.call_to_action?.value?.link_url || undefined;
-          title = ld?.call_to_action?.value?.link_title || vd?.call_to_action?.value?.link_title || undefined;
-          text = ld?.message || vd?.message || undefined;
-        } catch {}
+          if (spec) {
+            // Try link_data (IMAGE type)
+            const ld = spec.link_data ?? null;
+            if (ld) {
+              linkUrl = ld.link || ld.call_to_action?.value?.link_url || undefined;
+              title = ld.name || ld.call_to_action?.value?.link_title || undefined;
+              text = ld.message || undefined;
+            }
+            
+            // Try video_data (VIDEO type)
+            if (!linkUrl || !title || !text) {
+              const vd = spec.video_data ?? null;
+              if (vd) {
+                linkUrl = linkUrl || vd.link || vd.call_to_action?.value?.link_url || undefined;
+                title = title || vd.title || vd.call_to_action?.value?.link_title || undefined;
+                text = text || vd.message || undefined;
+              }
+            }
+            
+            // Try carousel_data (CAROUSEL type)
+            if (!linkUrl || !title || !text) {
+              const cd = spec.carousel_data ?? null;
+              if (cd) {
+                linkUrl = linkUrl || cd.link || cd.call_to_action?.value?.link_url || undefined;
+                title = title || cd.name || undefined;
+                text = text || cd.message || undefined;
+                // Try first child attachment
+                const firstChild = cd.child_attachments?.[0];
+                if (firstChild) {
+                  linkUrl = linkUrl || firstChild.link || undefined;
+                  title = title || firstChild.name || undefined;
+                  text = text || firstChild.description || undefined;
+                }
+              }
+            }
+            
+            // Try collection_data (COLLECTION type)
+            if (!linkUrl || !title || !text) {
+              const cold = spec.collection_data ?? null;
+              if (cold) {
+                linkUrl = linkUrl || cold.link || undefined;
+                title = title || cold.name || undefined;
+                text = text || cold.description || undefined;
+              }
+            }
+          }
+          
+          // Fallback to direct fields from ads table
+          if (!linkUrl) linkUrl = info?.link_url || undefined;
+          if (!title) title = info?.title || undefined;
+          if (!text) text = info?.body || undefined;
+        } catch (e) {
+          console.warn("Error extracting creative data:", e);
+        }
         const cur = agg.get(id) ?? {
           id,
           name: info?.name ?? "—",

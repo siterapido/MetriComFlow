@@ -143,12 +143,16 @@ export function IntegratedConversionUnified({ metrics, isLoading }: IntegratedCo
       if (saved === "preferCRM" || saved === "preferMeta") {
         setConfig((c) => ({ ...c, leadUnifyStrategy: saved as any }))
       }
-    } catch {}
+    } catch (error) {
+      console.warn("Não foi possível carregar a estratégia de leads salva", error)
+    }
   }, [])
   useEffect(() => {
     try {
       localStorage.setItem("mf_lead_strategy", config.leadUnifyStrategy)
-    } catch {}
+    } catch (error) {
+      console.warn("Não foi possível salvar a estratégia de leads", error)
+    }
   }, [config.leadUnifyStrategy])
   // Hooks precisam ser chamados de forma incondicional em todas as renderizações.
   // Portanto, calculamos os dados do funil com guardas internos e só então decidimos o que renderizar.

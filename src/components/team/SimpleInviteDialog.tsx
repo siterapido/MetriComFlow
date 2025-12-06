@@ -223,7 +223,9 @@ export function SimpleInviteDialog({
                     onClick={async () => {
                       try {
                         await navigator.clipboard.writeText(inviteLink);
-                      } catch (_) {}
+                      } catch (error) {
+                        console.warn("Não foi possível copiar o link de convite", error);
+                      }
                     }}
                   >
                     <Copy className="h-4 w-4" />

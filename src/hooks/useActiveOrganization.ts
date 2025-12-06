@@ -51,7 +51,13 @@ export function useActiveOrganization() {
 
         if (preferredMembershipSrv && preferredMembershipSrv.organizations) {
           // Atualiza localStorage para refletir preferência do servidor
-          try { if (typeof window !== 'undefined') window.localStorage.setItem('activeOrgId', profilePref.active_organization_id as string) } catch (_) {}
+          try {
+            if (typeof window !== 'undefined') {
+              window.localStorage.setItem('activeOrgId', profilePref.active_organization_id as string)
+            }
+          } catch (error) {
+            console.warn("Falha ao persistir organização ativa preferida no localStorage", error)
+          }
           return {
             id: preferredMembershipSrv.organizations.id,
             name: preferredMembershipSrv.organizations.name,
@@ -70,9 +76,10 @@ export function useActiveOrganization() {
         preferredOrgId = typeof window !== "undefined"
           ? window.localStorage.getItem("activeOrgId")
           : null;
-      } catch (_e) {
-        preferredOrgId = null;
-      }
+    } catch (error) {
+      console.warn("Falha ao recuperar organização ativa do localStorage", error)
+      preferredOrgId = null;
+    }
 
       if (preferredOrgId) {
         const { data: preferredMembership } = await supabase

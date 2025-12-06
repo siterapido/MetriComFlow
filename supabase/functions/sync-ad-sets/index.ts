@@ -1,36 +1,15 @@
-// Edge Function: sync-ad-sets
-// Description: Sincroniza conjuntos de anúncios (ad sets) do Meta Ads para o banco de dados
-// Method: POST
-// Auth: Required (service_role or authenticated user)
-//
-// Body Parameters:
-// - campaign_ids: string[] (opcional) - IDs internos das campanhas para sincronizar
-// - ad_account_ids: string[] (opcional) - IDs internos das contas para sincronizar todas as campanhas
-// - since: string (opcional) - Data inicial para filtrar ad sets ativos
-//
-// Returns: { success: boolean, synced_ad_sets: number, ad_sets: AdSet[] }
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  META_API_VERSION,
+  fetchWithBackoff,
+  mapAdSetRecord,
+  normalizeMetaPaging,
+  resolveAccessToken,
+} from "../_shared/meta-sync.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const META_API_VERSION = "v24.0";
-
-interface AdSetFromMeta {
-  id: string;
-  name: string;
-  status: string;
-  optimization_goal?: string;
-  billing_event?: string;
-  bid_strategy?: string;
-  targeting?: any;
-  daily_budget?: string;
-  lifetime_budget?: string;
-  start_time?: string;
-  end_time?: string;
-  campaign_id: string; // External ID da campanha no Meta
-}
 
 serve(async (req) => {
   try {
@@ -45,14 +24,8 @@ serve(async (req) => {
       });
     }
 
-    // Parse request body
     const { campaign_ids, ad_account_ids, since } = await req.json();
-
-    console.log("🔄 sync-ad-sets called with:", {
-      campaign_ids,
-      ad_account_ids,
-      since,
-    });
+    console.log("🔄 sync-ad-sets called with:", { campaign_ids, ad_account_ids, since });
 
     // Initialize Supabase client
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -62,16 +35,19 @@ serve(async (req) => {
       },
     });
 
-    // Step 1: Get campaigns to sync
+    // Step 1: Get campaigns (with owner of each ad account for token resolution)
     let campaignsQuery = supabase
       .from("ad_campaigns")
-      .select("id, external_id, ad_account_id, ad_accounts!inner(external_id)");
+      .select("id, external_id, ad_account_id, ad_accounts!inner(external_id, connected_by, provider, is_active)");
 
     if (campaign_ids && campaign_ids.length > 0) {
       campaignsQuery = campaignsQuery.in("id", campaign_ids);
     } else if (ad_account_ids && ad_account_ids.length > 0) {
       campaignsQuery = campaignsQuery.in("ad_account_id", ad_account_ids);
     }
+
+    // Apenas contas Meta ativas
+    campaignsQuery = campaignsQuery.eq("ad_accounts.provider", "meta").eq("ad_accounts.is_active", true);
 
     const { data: campaigns, error: campaignsError } = await campaignsQuery;
 
@@ -93,41 +69,30 @@ serve(async (req) => {
 
     console.log(`📊 Found ${campaigns.length} campaigns to sync ad sets`);
 
-    // Step 2: Get access token
-    const { data: connection } = await supabase
-      .from("meta_business_connections")
-      .select("access_token")
-      .eq("is_active", true)
-      .limit(1)
-      .single();
-
-    let accessToken = connection?.access_token;
-
-    // Fallback to global META_ACCESS_TOKEN if no user token
-    if (!accessToken) {
-      accessToken = Deno.env.get("META_ACCESS_TOKEN");
-      console.log("⚠️ Using global META_ACCESS_TOKEN as fallback");
-    }
-
-    if (!accessToken) {
-      console.error("❌ No access token available");
-      return new Response(
-        JSON.stringify({ error: "No Meta access token available" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    // Step 3: Fetch ad sets from Meta API for each campaign
+    const tokenCache = new Map<string, string | null>();
     const allAdSets: any[] = [];
+    const errors: string[] = [];
     let totalSynced = 0;
 
     for (const campaign of campaigns) {
+      const connectedBy = (campaign as any)?.ad_accounts?.connected_by ?? null;
+      const token = await resolveAccessToken(supabase, connectedBy, tokenCache);
+      if (!token) {
+        errors.push(`No Meta token for campaign ${campaign.id} (account ${campaign.ad_account_id})`);
+        continue;
+      }
+
+      if (!campaign.external_id) {
+        errors.push(`Campaign ${campaign.id} missing external_id`);
+        continue;
+      }
+
       try {
         console.log(`🔍 Fetching ad sets for campaign: ${campaign.external_id}`);
 
         const metaUrl = `https://graph.facebook.com/${META_API_VERSION}/${campaign.external_id}/adsets`;
         const baseParams = new URLSearchParams({
-          access_token: accessToken,
+          access_token: token,
           fields: [
             "id",
             "name",
@@ -147,78 +112,50 @@ serve(async (req) => {
 
         if (since) baseParams.append("since", since);
 
-        // Try with user token first, then fallback to META_ACCESS_TOKEN if available
-        const buildUrl = (token: string) => {
-          const p = new URLSearchParams(baseParams);
-          p.set("access_token", token);
-          return `${metaUrl}?${p.toString()}`;
-        };
-
-        const fallbackToken = Deno.env.get("META_ACCESS_TOKEN");
-        let firstUrl = buildUrl(accessToken);
-        let res = await fetch(firstUrl);
-        if (!res.ok && fallbackToken && fallbackToken !== accessToken) {
-          console.warn(`⚠️ Primary token failed for campaign ${campaign.external_id} (status ${res.status}). Retrying with META_ACCESS_TOKEN.`);
-          firstUrl = buildUrl(fallbackToken);
-          res = await fetch(firstUrl);
-        }
+        const res = await fetchWithBackoff(`${metaUrl}?${baseParams.toString()}`, { method: "GET" });
         if (!res.ok) {
-          const errorData = await res.text();
-          console.error(`❌ Meta API error for campaign ${campaign.external_id}:`, errorData);
+          const raw = await res.text();
+          console.error(`❌ Meta API error for campaign ${campaign.external_id}:`, raw);
+          errors.push(`Meta error for campaign ${campaign.external_id}: ${res.status}`);
           continue;
         }
 
         const firstData = await res.json();
-        const adSets: AdSetFromMeta[] = (firstData?.data || []).slice();
+        const adSets = normalizeMetaPaging(firstData);
 
-        // Pagination: follow paging.next if present
+        // Pagination
         let nextUrl: string | null = firstData?.paging?.next || null;
         while (nextUrl) {
-          const pageRes = await fetch(nextUrl);
+          const pageRes = await fetchWithBackoff(nextUrl, { method: "GET" });
           if (!pageRes.ok) {
-            console.warn(`⚠️ Paging request failed for campaign ${campaign.external_id} (status ${pageRes.status}). Stopping pagination.`);
+            console.warn(`⚠️ Paging failed for campaign ${campaign.external_id} (status ${pageRes.status}).`);
             break;
           }
           const pageData = await pageRes.json();
-          if (Array.isArray(pageData?.data)) adSets.push(...pageData.data);
+          adSets.push(...normalizeMetaPaging(pageData));
           nextUrl = pageData?.paging?.next || null;
         }
 
         console.log(`✅ Found ${adSets.length} ad sets for campaign ${campaign.external_id}`);
 
-        // Step 4: Upsert ad sets to database
-        for (const adSet of adSets) {
-          const adSetData = {
-            external_id: adSet.id,
-            campaign_id: campaign.id, // Internal campaign ID
-            name: adSet.name,
-            status: adSet.status,
-            optimization_goal: adSet.optimization_goal || null,
-            billing_event: adSet.billing_event || null,
-            bid_strategy: adSet.bid_strategy || null,
-            targeting: adSet.targeting || null,
-            daily_budget: adSet.daily_budget ? parseFloat(adSet.daily_budget) / 100 : null, // Meta returns cents
-            lifetime_budget: adSet.lifetime_budget ? parseFloat(adSet.lifetime_budget) / 100 : null,
-            start_time: adSet.start_time || null,
-            end_time: adSet.end_time || null,
-          };
-
-          const { error: upsertError } = await supabase
+        const adSetRecords = adSets.map((adset) => mapAdSetRecord(adset, campaign.id));
+        if (adSetRecords.length > 0) {
+          const { data, error: upsertError } = await supabase
             .from("ad_sets")
-            .upsert(adSetData, {
-              onConflict: "external_id",
-              ignoreDuplicates: false,
-            });
+            .upsert(adSetRecords, { onConflict: "external_id" })
+            .select("id, external_id");
 
           if (upsertError) {
-            console.error(`❌ Error upserting ad set ${adSet.id}:`, upsertError);
+            console.error(`❌ Error upserting ad sets for campaign ${campaign.external_id}:`, upsertError);
+            errors.push(`DB error for campaign ${campaign.external_id}`);
           } else {
-            allAdSets.push(adSetData);
-            totalSynced++;
+            allAdSets.push(...adSetRecords);
+            totalSynced += data?.length || adSetRecords.length;
           }
         }
       } catch (error) {
         console.error(`❌ Error processing campaign ${campaign.external_id}:`, error);
+        errors.push(`Unexpected error for campaign ${campaign.external_id}`);
         continue;
       }
     }
@@ -227,10 +164,11 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        success: true,
+        success: errors.length === 0,
         synced_ad_sets: totalSynced,
         campaigns_processed: campaigns.length,
         ad_sets: allAdSets,
+        errors,
       }),
       {
         status: 200,

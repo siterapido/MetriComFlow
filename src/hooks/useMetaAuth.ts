@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useQueryClient } from '@tanstack/react-query';
@@ -12,6 +12,7 @@ interface MetaConnection {
   meta_user_email?: string;
   connected_at: string;
   is_active: boolean;
+  token_expires_at?: string;
 }
 
 interface AdAccount {
@@ -96,10 +97,10 @@ export function useMetaAuth() {
 
         // Try to get body directly
         if (res.body) {
-        logDebug('🔍 Response body:', res.body);
-        return res.body;
+          logDebug('🔍 Response body:', res.body);
+          return res.body;
+        }
       }
-    }
 
       // Some versions return context.error directly
       if (error?.context?.error) {
@@ -116,7 +117,7 @@ export function useMetaAuth() {
   };
 
   // Fetch existing connections and ad accounts
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!user || !activeOrg?.id) return;
 
     try {
@@ -147,7 +148,7 @@ export function useMetaAuth() {
         .select('*')
         .eq('organization_id', activeOrg.id)
         .eq('provider', 'meta')
-        .order('created_at', { ascending: false});
+        .order('created_at', { ascending: false });
 
       if (adAccountsError) {
         console.error('Error fetching ad accounts:', adAccountsError);
@@ -159,7 +160,7 @@ export function useMetaAuth() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeOrg?.id, queryClient, user]);
 
   // Get Meta OAuth URL
   const getAuthUrl = async (): Promise<string> => {
@@ -199,7 +200,7 @@ export function useMetaAuth() {
   };
 
   // Exchange authorization code for access token
-  const exchangeCode = async (code: string): Promise<void> => {
+  const exchangeCode = useCallback(async (code: string): Promise<void> => {
     try {
       setConnecting(true);
 
@@ -273,7 +274,7 @@ export function useMetaAuth() {
     } finally {
       setConnecting(false);
     }
-  };
+  }, [REDIRECT_URI, fetchData]);
 
   // Start OAuth flow
   const connectMetaBusiness = async (): Promise<string> => {
@@ -763,7 +764,7 @@ export function useMetaAuth() {
     }
   };
 
-  // Sync daily insights from Meta API
+  // Sync daily insights from Meta API (Campaigns, Ad Sets, and Ads)
   const syncDailyInsights = async (params?: {
     since?: string;
     until?: string;
@@ -773,6 +774,11 @@ export function useMetaAuth() {
     success: boolean;
     message: string;
     recordsProcessed?: number;
+    details?: {
+      campaigns: { success: boolean; message?: string; records?: number };
+      adSets: { success: boolean; message?: string; records?: number };
+      ads: { success: boolean; message?: string; records?: number };
+    };
   }> => {
     try {
       // Get the access token for authorization
@@ -785,43 +791,175 @@ export function useMetaAuth() {
       // Default to last 30 days if no range provided
       const today = new Date().toISOString().split('T')[0];
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const since = params?.since || thirtyDaysAgo;
+      const until = params?.until || today;
 
       const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/sync-daily-insights`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          since: params?.since || thirtyDaysAgo,
-          until: params?.until || today,
-          ad_account_ids: params?.accountIds,
-          campaign_external_ids: params?.campaignIds,
-          maxDaysPerChunk: 30,
-        })
-      });
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      };
 
-      const responseText = await response.text();
-      logDebug('📥 Sync response status:', response.status);
-      logDebug('📥 Sync response body:', responseText);
+      // Resolve external IDs for campaigns if provided (for sync-daily-insights which expects external IDs)
+      let campaignExternalIds: string[] | undefined;
+      if (params?.campaignIds && params.campaignIds.length > 0) {
+        const { data: campaigns } = await supabase
+          .from('ad_campaigns' as any)
+          .select('external_id')
+          .in('id', params.campaignIds);
 
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        throw new Error(`Invalid response from server: ${responseText}`);
+        if (campaigns) {
+          campaignExternalIds = campaigns.map((c: any) => c.external_id);
+        }
       }
 
-      if (!response.ok) {
-        const errorMessage = data?.error || data?.message || `HTTP ${response.status}`;
-        throw new Error(errorMessage);
+      // Helper function to call edge functions
+      const callSyncFunction = async (endpoint: string, body: any) => {
+        try {
+          const response = await fetch(`${supabaseUrl}/functions/v1/${endpoint}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body)
+          });
+
+          const text = await response.text();
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch {
+            throw new Error(`Invalid JSON response: ${text.substring(0, 100)}...`);
+          }
+
+          if (!response.ok) {
+            throw new Error(data?.error || data?.message || `HTTP ${response.status}`);
+          }
+
+          return { success: true, data };
+        } catch (error) {
+          console.error(`Error in ${endpoint}:`, error);
+          return {
+            success: false,
+            message: error instanceof Error ? error.message : String(error)
+          };
+        }
+      };
+
+      // First, ensure ad_sets and ads structure is synced (if needed)
+      // This is important because insights need the structure to exist
+      let adSetsStructureSynced = false;
+      let adsStructureSynced = false;
+
+      if (params?.accountIds && params.accountIds.length > 0) {
+        // Sync ad sets structure first
+        const adSetsStructureResult = await callSyncFunction('sync-ad-sets', {
+          ad_account_ids: params.accountIds,
+          campaign_ids: params?.campaignIds,
+        });
+        adSetsStructureSynced = adSetsStructureResult.success;
+
+        // Small delay to avoid rate limits
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Sync ads structure
+        const adsStructureResult = await callSyncFunction('sync-ads', {
+          ad_account_ids: params.accountIds,
+          campaign_ids: params?.campaignIds,
+        });
+        adsStructureSynced = adsStructureResult.success;
+
+        // Small delay before fetching insights
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      // Now sync insights in parallel
+      const [campaignsResult, adSetsResult, adsResult] = await Promise.all([
+        // 1. Campaigns
+        callSyncFunction('sync-daily-insights', {
+          since,
+          until,
+          ad_account_ids: params?.accountIds,
+          campaign_external_ids: campaignExternalIds, // Uses external IDs
+          maxDaysPerChunk: 30,
+        }),
+        // 2. Ad Sets
+        callSyncFunction('sync-adset-insights', {
+          since,
+          until,
+          ad_account_ids: params?.accountIds,
+          campaign_ids: params?.campaignIds, // Uses internal IDs
+          maxDaysPerChunk: 30,
+        }),
+        // 3. Ads
+        callSyncFunction('sync-ad-insights', {
+          since,
+          until,
+          ad_account_ids: params?.accountIds,
+          campaign_ids: params?.campaignIds, // Uses internal IDs
+          maxDaysPerChunk: 30,
+        })
+      ]);
+
+      // Refresh queries
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['unified-metrics'] }),
+        queryClient.invalidateQueries({ queryKey: ['unified-daily-breakdown'] }),
+        queryClient.invalidateQueries({ queryKey: ['ad-set-metrics'] }),
+        queryClient.invalidateQueries({ queryKey: ['ad-metrics'] }),
+        queryClient.invalidateQueries({ queryKey: ['creative-performance'] }),
+      ]);
+
+      const success = campaignsResult.success || adSetsResult.success || adsResult.success;
+      const totalRecords = (campaignsResult.data?.recordsProcessed || 0) +
+        (adSetsResult.data?.totalUpserts || 0) +
+        (adsResult.data?.totalUpserts || 0);
+
+      // Log detailed results for debugging
+      console.log('📊 Sync Results:', {
+        structure: { adSets: adSetsStructureSynced, ads: adsStructureSynced },
+        insights: {
+          campaigns: { success: campaignsResult.success, records: campaignsResult.data?.recordsProcessed },
+          adSets: { success: adSetsResult.success, records: adSetsResult.data?.totalUpserts },
+          ads: { success: adsResult.success, records: adsResult.data?.totalUpserts },
+        }
+      });
+
+      let message = 'Sincronização concluída';
+      const parts: string[] = [];
+      if (campaignsResult.success) parts.push(`Campanhas: ${campaignsResult.data?.recordsProcessed || 0} registros`);
+      if (adSetsResult.success) parts.push(`Conjuntos: ${adSetsResult.data?.totalUpserts || 0} registros`);
+      if (adsResult.success) parts.push(`Anúncios: ${adsResult.data?.totalUpserts || 0} registros`);
+
+      if (parts.length > 0) {
+        message = `Sincronização concluída. ${parts.join(', ')}.`;
+      }
+
+      if (!success) {
+        message = 'Falha na sincronização. Verifique os detalhes.';
+      } else if (!campaignsResult.success || !adSetsResult.success || !adsResult.success) {
+        message = 'Sincronização parcialmente concluída. ' + (parts.length > 0 ? parts.join(', ') : '');
       }
 
       return {
-        success: true,
-        message: data?.message || 'Sincronização concluída com sucesso',
-        recordsProcessed: data?.recordsProcessed,
+        success,
+        message,
+        recordsProcessed: totalRecords,
+        details: {
+          campaigns: {
+            success: campaignsResult.success,
+            message: campaignsResult.message,
+            records: campaignsResult.data?.recordsProcessed
+          },
+          adSets: {
+            success: adSetsResult.success,
+            message: adSetsResult.message,
+            records: adSetsResult.data?.totalUpserts
+          },
+          ads: {
+            success: adsResult.success,
+            message: adsResult.message,
+            records: adsResult.data?.totalUpserts
+          }
+        }
       };
     } catch (error) {
       console.error('❌ Error syncing insights:', error);
@@ -830,8 +968,8 @@ export function useMetaAuth() {
   };
 
   // Handle OAuth callback
-  const handleOAuthCallback = async () => {
-      const url = new URL(window.location.href);
+  const handleOAuthCallback = useCallback(async () => {
+    const url = new URL(window.location.href);
     const urlParams = new URLSearchParams(url.search);
     const code = urlParams.get('code');
     const error = urlParams.get('error');
@@ -880,21 +1018,21 @@ export function useMetaAuth() {
         console.error('❌ Error in handleOAuthCallback:', err);
       }
     }
-  };
+  }, [exchangeCode, user]);
 
   useEffect(() => {
     fetchData();
-  }, [user, activeOrg?.id]);
+  }, [fetchData]);
 
   // Check for OAuth callback on mount
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
-    
+
     if (code && user) {
       handleOAuthCallback().catch(console.error);
     }
-  }, [user]);
+  }, [handleOAuthCallback, user]);
 
   return {
     connections,

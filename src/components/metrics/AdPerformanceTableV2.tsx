@@ -30,20 +30,7 @@ export function AdPerformanceTableV2({
   dateRange,
 }: AdPerformanceTableV2Props) {
   const hasDates = !!dateRange.from && !!dateRange.to;
-  if (!hasDates) {
-    return (
-      <div className="text-center text-muted-foreground py-8">
-        Selecione um período válido para visualizar os anúncios.
-      </div>
-    );
-  }
-  if (!adAccountIds || adAccountIds.length === 0) {
-    return (
-      <div className="text-center text-muted-foreground py-8">
-        Nenhuma conta publicitária selecionada. Conecte ou selecione contas para carregar os anúncios.
-      </div>
-    );
-  }
+  const hasAccounts = Array.isArray(adAccountIds) && adAccountIds.length > 0;
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<string>("all");
   const [sortKey, setSortKey] = useState<string>("spend");
@@ -51,15 +38,14 @@ export function AdPerformanceTableV2({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const query = useGetMetrics({
-    ad_account_ids: adAccountIds,
+    ad_account_ids: hasAccounts ? adAccountIds : [],
     campaign_ids: campaignIds,
     ad_set_ids: adSetIds,
-    since: dateRange.from?.toISOString().split('T')[0] || '',
-    until: dateRange.to?.toISOString().split('T')[0] || '',
+    since: hasDates && dateRange.from ? dateRange.from.toISOString().split('T')[0] : '',
+    until: hasDates && dateRange.to ? dateRange.to.toISOString().split('T')[0] : '',
     level: 'ad',
   });
   const adMetrics = query.data;
-
   const processed = useMemo(() => {
     const rows = adMetrics?.data ?? [];
     let list = rows.filter((r: any) => {
@@ -76,6 +62,21 @@ export function AdPerformanceTableV2({
     const end = start + pageSize;
     return { total: list.length, pageItems: list.slice(start, end) };
   }, [adMetrics, search, status, sortKey, sortDir, page, pageSize]);
+
+  if (!hasDates) {
+    return (
+      <div className="text-center text-muted-foreground py-8">
+        Selecione um período válido para visualizar os anúncios.
+      </div>
+    );
+  }
+  if (!hasAccounts) {
+    return (
+      <div className="text-center text-muted-foreground py-8">
+        Nenhuma conta publicitária selecionada. Conecte ou selecione contas para carregar os anúncios.
+      </div>
+    );
+  }
 
   if (query.isLoading) {
     return (

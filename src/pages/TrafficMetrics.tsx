@@ -119,6 +119,54 @@ export default function TrafficMetrics() {
     { enabled: hasActiveConnection && activeTab === 'adsets' }
   );
 
+  const adSetWeeklyMetrics = useAdSetWeeklyMetrics(
+    {
+      accountId: selectedAccount === 'all' ? undefined : selectedAccount,
+      campaignId: selectedCampaign === 'all' ? undefined : selectedCampaign,
+      adSetIds: selectedAdSet === 'all' ? undefined : [selectedAdSet],
+    },
+    { enabled: hasActiveConnection && activeTab === 'adsets' }
+  );
+
+  const adSetWeeklySummary = useMemo(() => {
+    const data = adSetWeeklyMetrics.data;
+    if (!data || data.weeks.length === 0) return null;
+    const weeks = data.weeks;
+    const latest = weeks[weeks.length - 1];
+    const total = data.totalByWeek[latest];
+    if (!total) return null;
+    const prev = weeks.length > 1 ? weeks[weeks.length - 2] : undefined;
+    const rows = Object.entries(data.byAdSet)
+      .map(([id, arr]) => {
+        const name = arr[0]?.ad_set_name ?? '—';
+        const curAgg = arr.find((a) => a.week === latest);
+        const prevAgg = prev ? arr.find((a) => a.week === prev) : undefined;
+        return {
+          ad_set_id: id,
+          ad_set_name: name,
+          current: curAgg
+            ? { spend: curAgg.spend, leads_count: curAgg.leads_count, cpl: curAgg.cpl, ctr: curAgg.ctr }
+            : { spend: 0, leads_count: 0, cpl: 0, ctr: 0 },
+          previous: prevAgg
+            ? { spend: prevAgg.spend, leads_count: prevAgg.leads_count, cpl: prevAgg.cpl, ctr: prevAgg.ctr }
+            : undefined,
+        };
+      })
+      .sort((a, b) => b.current.spend - a.current.spend);
+
+    const trendData = weeks.map((wk) => ({
+      week: wk,
+      ...(data.totalByWeek[wk] || { spend: 0, leads_count: 0, ctr: 0, cpl: 0 }),
+    }));
+
+    return {
+      total,
+      rows,
+      trendData,
+      wow: data.wowDelta,
+    };
+  }, [adSetWeeklyMetrics.data]);
+
   // Ads (Criativos)
   const { data: ads } = useAds(
     {
@@ -172,7 +220,11 @@ export default function TrafficMetrics() {
       .subscribe();
 
     return () => {
-      try { supabase.removeChannel(chan); } catch {}
+      try {
+        supabase.removeChannel(chan);
+      } catch (error) {
+        console.warn("Falha ao remover canal realtime de métricas", error);
+      }
     };
   }, [hasActiveConnection, queryClient]);
 
@@ -518,42 +570,21 @@ export default function TrafficMetrics() {
           )}
 
           {/* Widgets Semanais (4 semanas) */}
-          {(() => {
-            const weekly = useAdSetWeeklyMetrics(
-              {
-                accountId: selectedAccount === 'all' ? undefined : selectedAccount,
-                campaignId: selectedCampaign === 'all' ? undefined : selectedCampaign,
-                adSetIds: selectedAdSet === 'all' ? undefined : [selectedAdSet],
-              },
-              { enabled: hasActiveConnection && activeTab === 'adsets' }
-            );
-            if (!weekly.data) return null;
-            const weeks = weekly.data.weeks;
-            const latest = weeks[weeks.length - 1];
-            const total = weekly.data.totalByWeek[latest];
-            return (
-              <div className="space-y-4">
-                <AdSetWeeklyCards total={{ spend: total.spend, leads_count: total.leads_count, ctr: total.ctr, cpl: total.cpl }} wow={weekly.data.wowDelta} />
-                <AdSetWeeklyTrendChart data={weeks.map(wk => ({ week: wk, ...(weekly.data.totalByWeek[wk] || { spend: 0, leads_count: 0, ctr: 0 }) }))} />
-                {(() => {
-                  const cur = weeks[weeks.length - 1];
-                  const prev = weeks[weeks.length - 2];
-                  const rows = Object.entries(weekly.data.byAdSet).map(([id, arr]) => {
-                    const name = arr[0]?.ad_set_name ?? '—';
-                    const curAgg = arr.find(a => a.week === cur);
-                    const prevAgg = arr.find(a => a.week === prev);
-                    return {
-                      ad_set_id: id,
-                      ad_set_name: name,
-                      current: curAgg ? { spend: curAgg.spend, leads_count: curAgg.leads_count, cpl: curAgg.cpl, ctr: curAgg.ctr } : { spend: 0, leads_count: 0, cpl: 0, ctr: 0 },
-                      previous: prevAgg ? { spend: prevAgg.spend, leads_count: prevAgg.leads_count, cpl: prevAgg.cpl, ctr: prevAgg.ctr } : undefined,
-                    };
-                  }).sort((a, b) => b.current.spend - a.current.spend);
-                  return <AdSetWeeklyComparisonTable rows={rows} />;
-                })()}
-              </div>
-            );
-          })()}
+          {adSetWeeklySummary && (
+            <div className="space-y-4">
+              <AdSetWeeklyCards
+                total={{
+                  spend: adSetWeeklySummary.total.spend,
+                  leads_count: adSetWeeklySummary.total.leads_count,
+                  ctr: adSetWeeklySummary.total.ctr,
+                  cpl: adSetWeeklySummary.total.cpl,
+                }}
+                wow={adSetWeeklySummary.wow}
+              />
+              <AdSetWeeklyTrendChart data={adSetWeeklySummary.trendData} />
+              <AdSetWeeklyComparisonTable rows={adSetWeeklySummary.rows} />
+            </div>
+          )}
 
           {/* Grid de Métricas de Conjuntos */}
           {adSetMetricsLoading ? (

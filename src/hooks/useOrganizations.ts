@@ -56,7 +56,9 @@ export function useSetActiveOrganization() {
         if (orgId) window.localStorage.setItem("activeOrgId", orgId);
         else window.localStorage.removeItem("activeOrgId");
       }
-    } catch (_e) {}
+    } catch (error) {
+      console.warn("Falha ao atualizar activeOrgId no localStorage", error);
+    }
 
     // Persistir preferência no servidor (perfil do usuário)
     if (user?.id) {

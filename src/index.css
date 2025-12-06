@@ -2,77 +2,73 @@
 @tailwind components;
 @tailwind utilities;
 
-/* InsightFy Design System - Modern Internal CRM */
+/* InsightFy Design System - Dark Modern Theme */
 
 @layer base {
   :root {
-    /* Main Brand Colors - InsightFy */
-    --background: 218 56% 14%;  /* #071D33 */
-    --foreground: 206 20% 92%;  /* #FFFFFF */
+    /* Main Brand Colors - Lighter/Open Deep Blue Universe */
+    /* Increased lightness from 11% to 18%, adjusted hue for royal blue feel */
+    --background: 224 45% 18%;   /* ~#192242 - Lighter Midnight Blue */
+    --foreground: 210 40% 98%;   /* #f8fafc - Slate 50 */
     
-    --card: 218 45% 18%;
-    --card-foreground: 206 20% 92%;
+    /* Adjusted card to be slightly lighter or complementary */
+    --card: 224 40% 23%;         /* Lighter than background */
+    --card-foreground: 210 40% 98%;
     
-    --popover: 218 45% 18%;
-    --popover-foreground: 206 20% 92%;
+    --popover: 224 40% 23%;
+    --popover-foreground: 210 40% 98%;
     
-    /* Primary Actions & CTAs */
-    --primary: 200 100% 56%;  /* #2DA7FF */
-    --primary-foreground: 0 0% 100%;
+    /* Primary - Light Neon Blue */
+    --primary: 195 100% 50%;     /* #00BFFF - Deep Sky Blue / Neon Cyan */
+    --primary-foreground: 222 47% 11%;
     
-    /* Highlights & Animations */
-    --secondary: 202 100% 52%;  /* #0D9DFF */
-    --secondary-foreground: 0 0% 100%;
+    /* Secondary - Electric Blue */
+    --secondary: 220 100% 60%;   /* #3385FF - Bright Blue */
+    --secondary-foreground: 222 47% 11%;
     
-    /* Muted Text & Surfaces */
-    --muted: 218 35% 25%;
-    --muted-foreground: 206 14% 80%;  /* #D9E1E8 */
+    /* Muted Surfaces - Adjusted to match new bg */
+    --muted: 224 30% 28%;        
+    --muted-foreground: 215 20% 75%; 
     
-    /* Accent Colors */
-    --accent: 202 100% 52%;  /* #0D9DFF */
-    --accent-foreground: 0 0% 100%;
+    /* Accents */
+    --accent: 195 100% 50%;      /* Matching Primary Neon */
+    --accent-foreground: 222 47% 11%;
     
-    /* Status Colors */
+    /* Status */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     
-    --success: 142 76% 36%;
+    --success: 150 100% 45%;     /* Neon Greenish */
     --success-foreground: 0 0% 100%;
     
-    --warning: 38 92% 50%;
+    --warning: 45 100% 50%;      /* Neon Yellow/Orange */
     --warning-foreground: 0 0% 100%;
     
-    /* Interactive Elements */
-    --border: 218 25% 30%;
-    --input: 218 25% 30%;
-    --ring: 200 100% 56%;
+    /* Interactive */
+    --border: 224 30% 30%;       
+    --input: 224 30% 30%;
+    --ring: 195 100% 50%;        /* Neon Ring */
     
     /* Layout */
     --radius: 0.75rem;
 
-    /* Sidebar Design */
-    --sidebar-background: 218 56% 12%;
-    --sidebar-foreground: 206 20% 92%;
-    --sidebar-primary: 200 100% 56%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 218 35% 25%;
-    --sidebar-accent-foreground: 206 20% 92%;
-    --sidebar-border: 218 25% 30%;
-    --sidebar-ring: 200 100% 56%;
+    /* Sidebar - keeping consistent with dark theme */
+    --sidebar-background: 224 45% 15%; /* Slightly darker than main bg */
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 195 100% 50%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 224 30% 28%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 224 30% 30%;
+    --sidebar-ring: 195 100% 50%;
     
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(200 100% 56%), hsl(202 100% 52%));
-    --gradient-card: linear-gradient(145deg, hsl(218 45% 18%), hsl(218 35% 25%));
-    --gradient-hero: linear-gradient(120deg, hsl(218 56% 14%), hsl(202 100% 52%));
+    --gradient-primary: linear-gradient(135deg, hsl(195 100% 50%), hsl(220 100% 60%));
+    --gradient-glow: radial-gradient(circle at center, hsl(195 100% 50% / 0.2) 0%, transparent 70%);
     
     /* Shadows */
-    --shadow-elegant: 0 10px 30px -10px hsl(218 56% 14% / 0.5);
-    --shadow-glow: 0 0 40px hsl(200 100% 56% / 0.3);
-    --shadow-card: 0 4px 20px hsl(218 56% 14% / 0.3);
-    
-    /* Animations */
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-bounce: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --shadow-glow: 0 0 30px -5px hsl(195 100% 50% / 0.4);
+    --shadow-neon: 0 0 10px hsl(195 100% 50% / 0.5), 0 0 20px hsl(195 100% 50% / 0.3);
   }
 }
 
@@ -83,6 +79,11 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    /* Ensure dark mode background persists */
+    background-image: 
+      radial-gradient(circle at 50% 0%, hsl(195 100% 50% / 0.08) 0%, transparent 45%),
+      radial-gradient(circle at 100% 20%, hsl(220 100% 60% / 0.08) 0%, transparent 40%);
+    background-attachment: fixed;
   }
   
   /* Custom Scrollbar */
@@ -91,72 +92,66 @@
   }
   
   ::-webkit-scrollbar-track {
-    background: hsl(var(--muted));
+    background: hsl(var(--background));
   }
   
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--primary));
+    background: hsl(var(--muted));
     border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary));
   }
 }
 
 @layer components {
-  /* Glass Effect */
-  .glass {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+  /* Glassmorphism */
+  .glass-card {
+    @apply bg-card/40 backdrop-blur-md border border-white/10 shadow-lg;
   }
   
-  /* Glow Effect */
-  .glow {
-    box-shadow: 0 0 20px hsl(var(--primary) / 0.3);
+  .glass-panel {
+    @apply bg-background/70 backdrop-blur-xl border-b border-white/5;
+  }
+
+  /* Text Gradients */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-[hsl(195,100%,50%)] to-[hsl(220,100%,70%)] drop-shadow-[0_0_15px_rgba(0,191,255,0.3)];
   }
   
-  /* Hover Scale */
-  .hover-lift {
-    transition: var(--transition-smooth);
+  /* Mesh Gradients */
+  .bg-mesh {
+    background-color: transparent;
+    background-image: 
+      radial-gradient(at 0% 0%, hsl(195 100% 50% / 0.15) 0px, transparent 50%),
+      radial-gradient(at 90% 10%, hsl(220 100% 60% / 0.15) 0px, transparent 50%),
+      radial-gradient(at 50% 90%, hsl(260 80% 60% / 0.1) 0px, transparent 50%);
   }
   
-  .hover-lift:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-glow);
+  /* Neon Border */
+  .border-neon {
+    @apply border-primary/50 shadow-[0_0_10px_rgba(0,191,255,0.2)];
   }
 }
 
 @layer utilities {
-  /* Subtle grid background used in hero and sections */
-  .bg-grid {
-    background-image:
-      linear-gradient(to right, hsl(var(--border) / 0.25) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--border) / 0.25) 1px, transparent 1px);
-    background-size: 24px 24px;
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
   }
-
-  /* Gradient mesh accents for contemporary look */
-  .mesh-gradient {
-    background-image:
-      radial-gradient(600px 300px at 90% -10%, hsl(var(--primary) / 0.25), transparent 60%),
-      radial-gradient(500px 250px at -10% 30%, hsl(var(--secondary) / 0.25), transparent 60%);
+  
+  @keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-20px); }
+    100% { transform: translateY(0px); }
   }
-
-  /* Text gradient utility */
-  .gradient-text {
-    background: var(--gradient-primary);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+  
+  .glow-hover {
+    transition: all 0.3s ease;
   }
-
-  /* Elevated card with gradient background */
-  .gradient-card {
-    background: linear-gradient(145deg, hsl(var(--card)), hsl(var(--muted) / 0.3));
-    border: 1px solid hsl(var(--border));
-    box-shadow: var(--shadow-card);
-  }
-
-  /* Accent ring on hover for interactive elements */
-  .accent-ring:hover {
-    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.25);
+  
+  .glow-hover:hover {
+    box-shadow: 0 0 25px hsl(var(--primary) / 0.4);
+    border-color: hsl(var(--primary) / 0.6);
   }
 }

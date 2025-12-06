@@ -416,7 +416,7 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
   useEffect(() => {
     if (!availableColumns.length) return
     setColumnMap((prev) => {
-      const next = { ...prev }
+      const next = { ...prev };
       (Object.keys(FIELD_GUESS_PATTERNS) as MappableLeadField[]).forEach(
         (field) => {
           if (next[field]) return
@@ -432,7 +432,7 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
         }
       )
       return next
-    })
+    });
   }, [availableColumns])
 
   const handleFileSelection = async (
@@ -460,11 +460,11 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
     }
   }
 
-  const getColumnValue = (field: MappableLeadField, row: Record<string, unknown>) => {
+  const getColumnValue = useCallback((field: MappableLeadField, row: Record<string, unknown>) => {
     const columnKey = columnMap[field]
     if (!columnKey) return undefined
     return row[columnKey]
-  }
+  }, [columnMap])
 
   const normalizedRows = useMemo(() => {
     if (!parsedRows.length) return []
@@ -583,7 +583,7 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
       .filter(Boolean) as LeadImportPayload[]
   }, [
     parsedRows,
-    columnMap,
+    getColumnValue,
     defaultStatus,
     defaultSource,
     org?.id,

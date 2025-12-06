@@ -89,11 +89,13 @@ serve(async (req) => {
     const body: SyncBody = await req.json().catch(() => ({} as SyncBody));
     const todayIso = new Date().toISOString().split("T")[0];
 
-    // Força o filtro de 30 dias, ignorando o que vier no body
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const since = thirtyDaysAgo.toISOString().split("T")[0];
-    const until = todayIso;
+    // Use provided dates or default to last 30 days
+    const since = body.since || (() => {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      return thirtyDaysAgo.toISOString().split("T")[0];
+    })();
+    const until = body.until || todayIso;
 
     const maxDays = Math.min(Math.max(body.maxDaysPerChunk ?? 30, 1), 90);
 
@@ -117,7 +119,7 @@ serve(async (req) => {
       .eq("is_active", true)
       .limit(1)
       .single();
-    let accessToken = connection?.access_token || Deno.env.get("META_ACCESS_TOKEN");
+    const accessToken = connection?.access_token || Deno.env.get("META_ACCESS_TOKEN");
     if (!accessToken) return new Response(JSON.stringify({ error: "No Meta access token available" }), { status: 401 });
 
     // Pré-carregar campanhas, ad sets e ads
@@ -234,34 +236,69 @@ serve(async (req) => {
             break;
           }
           const data = await res.json();
-          rows.push(...(data?.data || []));
+          const fetchedRows = data?.data || [];
+          if (fetchedRows.length > 0 && rows.length === 0) {
+            // Log first batch for debugging
+            console.log(`📥 First batch from Meta API: ${fetchedRows.length} rows`);
+            console.log(`📥 Sample row:`, {
+              ad_id: fetchedRows[0]?.ad_id,
+              date_start: fetchedRows[0]?.date_start,
+              spend: fetchedRows[0]?.spend,
+            });
+          }
+          rows.push(...fetchedRows);
           nextUrl = data?.paging?.next || null;
           await sleep(120);
         }
 
         totalRows += rows.length;
+        
+        // Debug: log mapping stats
+        if (rows.length > 0) {
+          console.log(`📊 Processing ${rows.length} ad insight rows for account ${account.external_id}`);
+          const sampleExternalIds = rows.slice(0, 3).map((r: any) => r.ad_id);
+          console.log(`📊 Sample ad external IDs from Meta:`, sampleExternalIds);
+          console.log(`📊 Total ads in DB: ${adByExternal.size}`);
+        }
 
         const upserts = rows.map((r) => {
           const adExternal = String(r.ad_id || "");
           const map = adByExternal.get(adExternal);
-          if (!map) return null;
+          if (!map) {
+            // Log unmapped ad for debugging
+            if (rows.length > 0 && rows.indexOf(r) < 5) {
+              console.warn(`⚠️ Ad external_id ${adExternal} not found in DB`);
+            }
+            return null;
+          }
           const leadsAction = (r.actions || []).find((a: any) => LEAD_ACTION_TYPES.has(a.action_type));
           const leads = leadsAction ? parseInt(String(leadsAction.value)) : 0;
+          
+          const spend = parseFloat(String(r.spend ?? "0")) || 0;
+          const impressions = parseInt(String(r.impressions ?? "0")) || 0;
+          const clicks = parseInt(String(r.clicks ?? "0")) || 0;
+          const leadsCount = Number.isFinite(leads) ? leads : 0;
+          
+          // Calculate derived metrics
+          const cpc = clicks > 0 ? spend / clicks : 0;
+          const cpm = impressions > 0 ? (spend / impressions) * 1000 : 0;
+          const cpl = leadsCount > 0 ? spend / leadsCount : 0;
+          
           return {
             ad_id: map.id,
             ad_set_id: map.ad_set_id,
             campaign_id: map.campaign_id,
             date: r.date_start,
-            spend: parseFloat(String(r.spend ?? "0")) || 0,
-            impressions: parseInt(String(r.impressions ?? "0")) || 0,
-            clicks: parseInt(String(r.clicks ?? "0")) || 0,
-            leads_count: Number.isFinite(leads) ? leads : 0,
+            spend,
+            impressions,
+            clicks,
+            leads_count: leadsCount,
             reach: parseInt(String(r.reach ?? "0")) || 0,
             frequency: parseFloat(String(r.frequency ?? "0")) || 0,
             actions: r.actions || null,
-            cpc: 0,
-            cpm: 0,
-            cpl: 0,
+            cpc,
+            cpm,
+            cpl,
             link_clicks: parseInt(String(r.link_clicks ?? "0")) || 0,
             post_engagement: parseInt(String(r.post_engagement ?? "0")) || 0,
             video_views: parseInt(String(r.video_views ?? "0")) || 0,
@@ -274,13 +311,19 @@ serve(async (req) => {
 
         // Upsert batches
         const batchSize = 500;
+        console.log(`💾 Attempting to upsert ${upserts.length} ad insights`);
         for (let i = 0; i < upserts.length; i += batchSize) {
           const slice = upserts.slice(i, i + batchSize);
           const { error: upErr } = await supabase
             .from("ad_daily_insights")
             .upsert(slice, { onConflict: "ad_id,date", ignoreDuplicates: false });
-          if (upErr) console.error("Upsert error (ad_daily_insights)", upErr);
-          else totalUpserts += slice.length;
+          if (upErr) {
+            console.error("❌ Upsert error (ad_daily_insights)", upErr);
+            console.error("❌ Sample data:", slice[0]);
+          } else {
+            totalUpserts += slice.length;
+            console.log(`✅ Upserted ${slice.length} ad insights (total: ${totalUpserts})`);
+          }
         }
       }
     }

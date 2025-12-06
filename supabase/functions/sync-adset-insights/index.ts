@@ -87,11 +87,13 @@ serve(async (req) => {
     const body: SyncBody = await req.json().catch(() => ({} as SyncBody));
     const todayIso = new Date().toISOString().split("T")[0];
 
-    // Força o filtro de 30 dias, ignorando o que vier no body
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const since = thirtyDaysAgo.toISOString().split("T")[0];
-    const until = todayIso;
+    // Use provided dates or default to last 30 days
+    const since = body.since || (() => {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      return thirtyDaysAgo.toISOString().split("T")[0];
+    })();
+    const until = body.until || todayIso;
 
     const maxDays = Math.min(Math.max(body.maxDaysPerChunk ?? 30, 1), 90);
 
@@ -115,7 +117,7 @@ serve(async (req) => {
       .eq("is_active", true)
       .limit(1)
       .single();
-    let accessToken = connection?.access_token || Deno.env.get("META_ACCESS_TOKEN");
+    const accessToken = connection?.access_token || Deno.env.get("META_ACCESS_TOKEN");
     if (!accessToken) return new Response(JSON.stringify({ error: "No Meta access token available" }), { status: 401 });
 
     // Pré-carregar campanhas e ad sets (mapas para id interno)
@@ -213,19 +215,43 @@ serve(async (req) => {
             break;
           }
           const data = await res.json();
-          rows.push(...(data?.data || []));
+          const fetchedRows = data?.data || [];
+          if (fetchedRows.length > 0 && rows.length === 0) {
+            // Log first batch for debugging
+            console.log(`📥 First batch from Meta API: ${fetchedRows.length} rows`);
+            console.log(`📥 Sample row:`, {
+              adset_id: fetchedRows[0]?.adset_id,
+              date_start: fetchedRows[0]?.date_start,
+              spend: fetchedRows[0]?.spend,
+            });
+          }
+          rows.push(...fetchedRows);
           nextUrl = data?.paging?.next || null;
           // Micro-backoff para reduzir risco de rate-limit
           await sleep(120);
         }
 
         totalRows += rows.length;
+        
+        // Debug: log mapping stats
+        if (rows.length > 0) {
+          console.log(`📊 Processing ${rows.length} adset insight rows for account ${account.external_id}`);
+          const sampleExternalIds = rows.slice(0, 3).map((r: any) => r.adset_id);
+          console.log(`📊 Sample adset external IDs from Meta:`, sampleExternalIds);
+          console.log(`📊 Total ad_sets in DB: ${adSetByExternal.size}`);
+        }
 
         // Map to upserts
         const upserts = rows.map((r) => {
           const adsetExternal = String(r.adset_id || "");
           const map = adSetByExternal.get(adsetExternal);
-          if (!map) return null;
+          if (!map) {
+            // Log unmapped adset for debugging
+            if (rows.length > 0 && rows.indexOf(r) < 5) {
+              console.warn(`⚠️ Adset external_id ${adsetExternal} not found in DB`);
+            }
+            return null;
+          }
           const leadsAction = (r.actions || []).find((a: any) => LEAD_ACTION_TYPES.has(a.action_type));
           const leads = leadsAction ? parseInt(String(leadsAction.value)) : 0;
           return {
@@ -246,13 +272,19 @@ serve(async (req) => {
 
         // Upsert batches
         const batchSize = 500;
+        console.log(`💾 Attempting to upsert ${upserts.length} adset insights`);
         for (let i = 0; i < upserts.length; i += batchSize) {
           const slice = upserts.slice(i, i + batchSize);
           const { error: upErr } = await supabase
             .from("ad_set_daily_insights")
             .upsert(slice, { onConflict: "ad_set_id,date", ignoreDuplicates: false });
-          if (upErr) console.error("Upsert error (ad_set_daily_insights)", upErr);
-          else totalUpserts += slice.length;
+          if (upErr) {
+            console.error("❌ Upsert error (ad_set_daily_insights)", upErr);
+            console.error("❌ Sample data:", slice[0]);
+          } else {
+            totalUpserts += slice.length;
+            console.log(`✅ Upserted ${slice.length} adset insights (total: ${totalUpserts})`);
+          }
         }
       }
     }

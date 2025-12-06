@@ -372,6 +372,12 @@ export function MetaAdsConnectionDialog({
                     <p className="text-xs text-muted-foreground">
                       Conectado em {new Date(primaryConnection.connected_at).toLocaleString()}
                     </p>
+                    {primaryConnection.token_expires_at && new Date(primaryConnection.token_expires_at) < new Date() && (
+                      <p className="text-xs text-destructive font-medium mt-1 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        Token expirado. Reconecte para continuar.
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">
@@ -382,10 +388,17 @@ export function MetaAdsConnectionDialog({
 
               <div className="flex items-center gap-2">
                 {hasActiveConnection ? (
-                  <Badge variant="secondary" className="gap-1">
-                    <CheckCircle2 className="h-4 w-4 text-success" />
-                    Ativo
-                  </Badge>
+                  primaryConnection?.token_expires_at && new Date(primaryConnection.token_expires_at) < new Date() ? (
+                    <Badge variant="destructive" className="gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      Expirado
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="gap-1">
+                      <CheckCircle2 className="h-4 w-4 text-success" />
+                      Ativo
+                    </Badge>
+                  )
                 ) : (
                   <Badge variant="outline" className="gap-1">
                     <AlertCircle className="h-4 w-4 text-muted-foreground" />
@@ -396,10 +409,10 @@ export function MetaAdsConnectionDialog({
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              {!hasActiveConnection ? (
-                <Button onClick={handleStartOAuth} disabled={isDialogBusy} className="gap-2">
+              {!hasActiveConnection || (primaryConnection?.token_expires_at && new Date(primaryConnection.token_expires_at) < new Date()) ? (
+                <Button onClick={handleStartOAuth} disabled={isDialogBusy} className="gap-2" variant={hasActiveConnection ? "destructive" : "default"}>
                   {isDialogBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Facebook className="h-4 w-4" />}
-                  Conectar ao Meta
+                  {hasActiveConnection ? "Reconectar ao Meta" : "Conectar ao Meta"}
                 </Button>
               ) : (
                 <Button

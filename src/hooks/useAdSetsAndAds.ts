@@ -452,8 +452,14 @@ export const useAdMetrics = (
               id,
               name,
               creative_type,
+              title,
+              body,
+              call_to_action,
+              link_url,
               image_url,
+              video_url,
               thumbnail_url,
+              creative_data,
               campaign_id,
               ad_set_id
             )
@@ -504,6 +510,7 @@ export const useAdMetrics = (
               ad_name: ad.name,
               creative_type: ad.creative_type,
               image_url: ad.image_url,
+              video_url: ad.video_url,
               thumbnail_url: ad.thumbnail_url,
               spend: 0,
               impressions: 0,
@@ -519,7 +526,7 @@ export const useAdMetrics = (
               _freqSum: 0,
               _freqCount: 0,
               _latestDate: undefined,
-            };
+            } as any;
           }
           aggregated[key].spend += Number(r.spend ?? 0);
           aggregated[key].impressions += Number(r.impressions ?? 0);
