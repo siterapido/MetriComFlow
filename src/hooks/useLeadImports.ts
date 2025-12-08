@@ -108,6 +108,9 @@ export function useImportLeadsWithReport() {
       mode?: 'basic_only' | 'full';
     }) => {
       if (!org?.id) throw new Error("Organização ativa não definida");
+      if (!params.rows || params.rows.length === 0) {
+        throw new Error("Nenhuma linha para importar. Verifique se o arquivo contém dados.");
+      }
       const { data, error } = await supabase.functions.invoke<ImportLeadsResponse>("import-leads", {
         body: {
           organization_id: org.id,
@@ -121,7 +124,30 @@ export function useImportLeadsWithReport() {
           mode: params.mode ?? 'full',
         },
       });
-      if (error) throw error;
+      if (error) {
+        // Extrair detalhes do erro do contexto
+        const ctx: any = (error as any)?.context;
+        let detail = '';
+        if (ctx) {
+          if (typeof ctx === 'string') detail = ctx;
+          else if (typeof ctx === 'object') {
+            const errorObj = ctx.error || ctx;
+            if (typeof errorObj === 'object') {
+              detail = errorObj.error || errorObj.message || JSON.stringify(errorObj);
+              // Incluir code, details, hint se disponíveis
+              if (errorObj.code) detail += ` (código: ${errorObj.code})`;
+              if (errorObj.details) detail += ` - Detalhes: ${errorObj.details}`;
+              if (errorObj.hint) detail += ` - Dica: ${errorObj.hint}`;
+            } else {
+              detail = String(errorObj);
+            }
+          }
+        }
+        const enhancedError = new Error(detail || error.message || 'Erro ao importar leads');
+        (enhancedError as any).originalError = error;
+        (enhancedError as any).errorDetails = ctx;
+        throw enhancedError;
+      }
       return data as ImportLeadsResponse;
     },
   });

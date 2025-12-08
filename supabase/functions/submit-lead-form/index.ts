@@ -484,7 +484,7 @@ Deno.serve(async (req: Request) => {
     hasCompany: typeof payload.company === "string" && payload.company.length > 0,
   });
 
-  const conversionProbability = Math.min(95, Math.round(leadScore * 0.7));
+  const conversion_probability = Math.min(95, Math.round(leadScore * 0.7));
   const priority = computePriority(leadScore);
 
   const description = buildLeadDescription(fields, payload, tracking);

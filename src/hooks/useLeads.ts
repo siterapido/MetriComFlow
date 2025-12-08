@@ -54,6 +54,7 @@ export interface LeadImportPayload {
   closed_lost_at?: string | null
   lost_reason?: string | null
   organization_id?: string | null
+  custom_fields?: Record<string, unknown> | null
 }
 
 // Novos tipos para CRM

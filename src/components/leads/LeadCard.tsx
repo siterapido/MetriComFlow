@@ -13,6 +13,9 @@ import {
   Users,
   Megaphone,
   Clock,
+  Building2,
+  MapPin,
+  Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, formatDistanceToNowStrict, addHours, addDays, isPast, isToday } from "date-fns";
@@ -49,6 +52,7 @@ type Lead = Tables<"leads"> & {
   // Optional fields that may exist in the schema
   phone?: string | null;
   contact_name?: string | null;
+  custom_fields?: Record<string, any> | null;
 };
 
 interface LeadCardProps {
@@ -96,9 +100,13 @@ export function LeadCard({ lead, onUpdate, className }: LeadCardProps) {
     return colors[name] || "bg-muted text-muted-foreground";
   };
 
-  // Best-effort phone resolution (supports upcoming `phone` field or attempts to extract from description)
+  // Best-effort phone resolution (supports upcoming `phone` field or attempts to extract from description or custom_fields)
   const resolvedPhone = useMemo(() => {
     if (lead.phone && validatePhone(lead.phone)) return lead.phone as string;
+    // Check custom_fields
+    if (lead.custom_fields?.phone && validatePhone(lead.custom_fields.phone)) return lead.custom_fields.phone as string;
+    if (lead.custom_fields?.["Telefone Principal"] && validatePhone(lead.custom_fields["Telefone Principal"])) 
+      return lead.custom_fields["Telefone Principal"] as string;
     // Try to extract a phone from description (10-11 digit sequences common in BR)
     if (lead.description) {
       const digits = (lead.description.match(/\d[\d\s().-]{8,}\d/g) || [])
@@ -107,7 +115,7 @@ export function LeadCard({ lead, onUpdate, className }: LeadCardProps) {
       if (digits) return digits;
     }
     return null;
-  }, [lead.phone, lead.description]);
+  }, [lead.phone, lead.description, lead.custom_fields]);
 
   const whatsappHref = useMemo(() => {
     if (!resolvedPhone) return null;
@@ -224,6 +232,74 @@ export function LeadCard({ lead, onUpdate, className }: LeadCardProps) {
           {/* Contact: Telefone / WhatsApp */}
           {/* Telefone ocultado por solicitação: manter apenas o botão de WhatsApp */}
 
+          {/* Custom Fields - Company Info */}
+          {lead.custom_fields && (
+            <div className="space-y-1.5 text-[11px]">
+              {/* Nome Fantasia / Razão Social */}
+              {(lead.custom_fields["Nome Fantasia"] || lead.custom_fields["Razão Social"]) && (
+                <div className="flex items-start gap-1.5">
+                  <Building2 className="w-3 h-3 shrink-0 mt-0.5 text-muted-foreground" />
+                  <div className="flex-1 min-w-0">
+                    {lead.custom_fields["Nome Fantasia"] && (
+                      <p className="font-medium text-foreground truncate">
+                        {lead.custom_fields["Nome Fantasia"]}
+                      </p>
+                    )}
+                    {lead.custom_fields["Razão Social"] && (
+                      <p className="text-muted-foreground truncate">
+                        {lead.custom_fields["Razão Social"]}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* CNPJ */}
+              {lead.custom_fields.CNPJ && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Briefcase className="w-3 h-3 shrink-0" />
+                  <span className="truncate">CNPJ: {lead.custom_fields.CNPJ}</span>
+                </div>
+              )}
+
+              {/* Endereço */}
+              {(lead.custom_fields.Cidade || lead.custom_fields.Estado) && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <MapPin className="w-3 h-3 shrink-0" />
+                  <span className="truncate">
+                    {[lead.custom_fields.Cidade, lead.custom_fields.Estado]
+                      .filter(Boolean)
+                      .join(", ")}
+                  </span>
+                </div>
+              )}
+
+              {/* Email */}
+              {(lead.custom_fields.email || lead.custom_fields["E-mail"]) && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Mail className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{lead.custom_fields.email || lead.custom_fields["E-mail"]}</span>
+                </div>
+              )}
+
+              {/* Porte / Capital Social */}
+              {(lead.custom_fields.Porte || lead.custom_fields["Capital Social"]) && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  {lead.custom_fields.Porte && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
+                      {lead.custom_fields.Porte}
+                    </Badge>
+                  )}
+                  {lead.custom_fields["Capital Social"] && (
+                    <span className="text-[10px]">
+                      Capital: {lead.custom_fields["Capital Social"]}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Description */}
           {lead.description && (
             <p className="text-xs text-muted-foreground line-clamp-2">
@@ -231,8 +307,8 @@ export function LeadCard({ lead, onUpdate, className }: LeadCardProps) {
             </p>
           )}
 
-          {/* Source Badge */}
-          <SourceBadge />
+          {/* Source Badge - Only show if not manual */}
+          {lead.source && lead.source !== 'manual' && <SourceBadge />}
 
           {/* Labels */}
           {lead.lead_labels && lead.lead_labels.length > 0 && (
@@ -277,10 +353,12 @@ export function LeadCard({ lead, onUpdate, className }: LeadCardProps) {
                   {format(new Date(lead.due_date), "dd/MM", { locale: ptBR })}
                 </div>
               )}
-              <div className="flex items-center gap-0.5">
-                <MessageSquare className="w-2.5 h-2.5" />
-                {lead.comments_count || 0}
-              </div>
+              {(lead.comments_count || 0) > 0 && (
+                <div className="flex items-center gap-0.5">
+                  <MessageSquare className="w-2.5 h-2.5" />
+                  {lead.comments_count}
+                </div>
+              )}
               {/* Mini contador e menu de Follow up (unificado quando não há data) */}
               {(() => {
                 const fu = lead.next_follow_up_date ? new Date(lead.next_follow_up_date) : null;

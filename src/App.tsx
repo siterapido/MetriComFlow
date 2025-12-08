@@ -12,8 +12,8 @@ import SetupAdmin from "./pages/SetupAdmin";
 import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
 import LeadsLinear from "./pages/LeadsLinear";
-import LeadImports from "./pages/LeadImports";
-import LeadImportDetails from "./pages/LeadImportDetails";
+// import LeadImports from "./pages/LeadImports"; // Desabilitado temporariamente
+// import LeadImportDetails from "./pages/LeadImportDetails"; // Desabilitado temporariamente
 import Users from "./pages/Users";
 import LeadForms from "./pages/LeadForms";
 import NotFound from "./pages/NotFound";
@@ -71,8 +71,9 @@ const App = () => (
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/leads" element={<LeadsLinear />} />
                 <Route path="/leads/kanban" element={<Leads />} />
-                <Route path="/leads/importacoes" element={<LeadImports />} />
-                <Route path="/leads/importacoes/:batchId" element={<LeadImportDetails />} />
+                {/* Rotas de importação desabilitadas temporariamente */}
+                {/* <Route path="/leads/importacoes" element={<LeadImports />} /> */}
+                {/* <Route path="/leads/importacoes/:batchId" element={<LeadImportDetails />} /> */}
                 <Route path="/formularios" element={<LeadForms />} />
                 {/* Rota /metas desabilitada temporariamente */}
                 <Route path="/metas" element={<Navigate to="/dashboard" replace />} />

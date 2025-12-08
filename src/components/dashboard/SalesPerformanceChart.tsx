@@ -71,3 +71,5 @@ export function SalesPerformanceChart({ data, className, height = "300px" }: Sal
   );
 }
 
+
+

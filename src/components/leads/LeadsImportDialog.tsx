@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Loader2 } from "lucide-react"
+import { Check, ChevronsUpDown, Loader2, Plus, Trash2, Wand2 } from "lucide-react"
 import * as XLSX from "xlsx"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command"
 import {
   Dialog,
   DialogContent,
@@ -15,6 +24,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -34,6 +48,7 @@ import {
 import { useActiveOrganization } from "@/hooks/useActiveOrganization"
 import { type LeadImportPayload } from "@/hooks/useLeads"
 import { useLeadImportMappings, useImportLeadsWithReport, useUndoLeadImport } from "@/hooks/useLeadImports"
+import { findBestMatch } from "@/lib/string-matching"
 
 const STATUS_OPTIONS = [
   { value: "novo_lead", label: "Novo lead" },
@@ -89,39 +104,39 @@ const MAPPING_FIELDS = [
   { id: "due_date", label: "Data de vencimento" },
 ] as const
 
-type MappableLeadField = (typeof MAPPING_FIELDS)[number]["id"]
+type MappableLeadField = (typeof MAPPING_FIELDS)[number]["id"] | string
 
-type ColumnMapping = Partial<Record<MappableLeadField, string>>
+type ColumnMapping = Record<string, string | undefined>
 
 const FIELD_GUESS_PATTERNS: Record<MappableLeadField, string[]> = {
-  title: ["nome", "titulo", "title", "lead"],
-  email: ["email", "e-mail", "mail"],
-  phone: ["telefone", "phone", "celular", "whatsapp"],
-  description: ["descricao", "description", "notes", "context"],
-  status: ["status", "etapa", "fase", "stage"],
-  value: ["valor", "value", "amount", "investment"],
-  contract_value: ["contract_value", "valor contrato", "contrato valor"],
-  contract_months: ["contract_months", "meses", "months"],
-  contract_type: ["tipo contrato", "contract_type"],
-  priority: ["prioridade", "priority"],
-  source: ["origem", "source"],
-  product_interest: ["produto", "product_interest"],
-  lead_source_detail: ["lead_source_detail", "origem detalhe", "channel"],
-  expected_close_date: ["expected_close_date", "previsao", "fechamento"],
-  next_follow_up_date: ["next_follow_up_date", "follow"],
-  last_contact_date: ["last_contact_date", "ultimo contato"],
-  lead_score: ["lead_score", "score"],
-  conversion_probability: ["conversion_probability", "probabilidade", "conversion"],
-  campaign_id: ["campaign_id", "campanha", "campaign"],
-  external_lead_id: ["external_lead_id", "id externo", "external"],
-  adset_id: ["adset_id"],
-  adset_name: ["adset_name", "nome adset", "conjunto"],
-  ad_id: ["ad_id"],
-  ad_name: ["ad_name", "nome ad", "anuncio"],
-  closed_won_at: ["closed_won_at", "ganho", "win"],
-  closed_lost_at: ["closed_lost_at", "perdido", "lost"],
-  lost_reason: ["lost_reason", "motivo", "reason"],
-  due_date: ["due_date", "vencimento"],
+  title: ["nome", "titulo", "title", "lead", "name", "full name", "nome completo", "cliente", "customer"],
+  email: ["email", "e-mail", "mail", "endereço de email", "correio eletronico", "contact email"],
+  phone: ["telefone", "phone", "celular", "whatsapp", "mobile", "cel", "tel", "contato", "contact phone"],
+  description: ["descricao", "description", "notes", "context", "observacao", "obs", "detalhes", "details"],
+  status: ["status", "etapa", "fase", "stage", "situacao", "estado"],
+  value: ["valor", "value", "amount", "investment", "valor total", "receita", "revenue"],
+  contract_value: ["contract_value", "valor contrato", "contrato valor", "valor mensal", "mrr"],
+  contract_months: ["contract_months", "meses", "months", "duracao", "vigencia"],
+  contract_type: ["tipo contrato", "contract_type", "recorrencia"],
+  priority: ["prioridade", "priority", "urgencia"],
+  source: ["origem", "source", "canal", "channel", "fonte"],
+  product_interest: ["produto", "product_interest", "interesse", "servico", "service"],
+  lead_source_detail: ["lead_source_detail", "origem detalhe", "channel", "meio", "midia"],
+  expected_close_date: ["expected_close_date", "previsao", "fechamento", "data fechamento", "close date"],
+  next_follow_up_date: ["next_follow_up_date", "follow", "proximo contato", "agendamento"],
+  last_contact_date: ["last_contact_date", "ultimo contato", "ultima interacao"],
+  lead_score: ["lead_score", "score", "pontuacao"],
+  conversion_probability: ["conversion_probability", "probabilidade", "conversion", "chance"],
+  campaign_id: ["campaign_id", "campanha", "campaign", "id campanha"],
+  external_lead_id: ["external_lead_id", "id externo", "external", "id"],
+  adset_id: ["adset_id", "id conjunto", "ad set id"],
+  adset_name: ["adset_name", "nome adset", "conjunto", "ad set name"],
+  ad_id: ["ad_id", "id anuncio", "ad id"],
+  ad_name: ["ad_name", "nome ad", "anuncio", "ad name"],
+  closed_won_at: ["closed_won_at", "ganho", "win", "data venda", "data ganho"],
+  closed_lost_at: ["closed_lost_at", "perdido", "lost", "data perda"],
+  lost_reason: ["lost_reason", "motivo", "reason", "motivo perda"],
+  due_date: ["due_date", "vencimento", "validade"],
 }
 
 const STATUS_ALIAS: Record<string, string> = {
@@ -308,6 +323,7 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
   const [availableColumns, setAvailableColumns] = useState<string[]>([])
   const [columnMap, setColumnMap] = useState<ColumnMapping>({})
   const [parseError, setParseError] = useState<string | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
   const [defaultStatus, setDefaultStatus] = useState(STATUS_OPTIONS[0].value)
   const [defaultSource, setDefaultSource] = useState(SOURCE_OPTIONS[0].value)
   const [isParsing, setIsParsing] = useState(false)
@@ -316,6 +332,10 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
   const [mappingName, setMappingName] = useState("")
   const [selectedMappingId, setSelectedMappingId] = useState<string | null>(null)
   const [importReport, setImportReport] = useState<{ batch_id: string; imported: number; skipped: number; error_count: number } | null>(null)
+  const [customFields, setCustomFields] = useState<{ id: string; label: string }[]>([])
+  const [newCustomFieldName, setNewCustomFieldName] = useState("")
+  const [pendingSuggestions, setPendingSuggestions] = useState<ColumnMapping>({})
+  const [openComboboxId, setOpenComboboxId] = useState<string | null>(null)
 
   const sheetNames = useMemo(() => workbook?.SheetNames ?? [], [workbook])
   const [step, setStep] = useState<number>(1)
@@ -336,6 +356,7 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
     setSheetName("")
     setSelectedFileName(null)
     setParseError(null)
+    setImportError(null)
     setDefaultStatus(STATUS_OPTIONS[0].value)
     setDefaultSource(SOURCE_OPTIONS[0].value)
     setIsParsing(false)
@@ -415,25 +436,119 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
 
   useEffect(() => {
     if (!availableColumns.length) return
-    setColumnMap((prev) => {
-      const next = { ...prev };
-      (Object.keys(FIELD_GUESS_PATTERNS) as MappableLeadField[]).forEach(
-        (field) => {
-          if (next[field]) return
-          const patterns = FIELD_GUESS_PATTERNS[field] ?? []
-          const match = availableColumns.find((column) =>
+    
+    // Reset mappings when columns change (new file)
+    setColumnMap({})
+    setPendingSuggestions({})
+
+    const suggestions: ColumnMapping = {};
+    (Object.keys(FIELD_GUESS_PATTERNS) as MappableLeadField[]).forEach(
+      (field) => {
+        const patterns = FIELD_GUESS_PATTERNS[field] ?? []
+        // First try exact matches or pattern matches
+        let match = availableColumns.find((column) =>
+          patterns.some((pattern) =>
+            column.toLowerCase() === pattern.toLowerCase()
+          )
+        )
+
+        // If no exact match, try partial inclusion
+        if (!match) {
+           match = availableColumns.find((column) =>
             patterns.some((pattern) =>
               column.toLowerCase().includes(pattern.toLowerCase())
             )
           )
-          if (match) {
-            next[field] = match
-          }
         }
-      )
-      return next
-    });
+
+        if (match) {
+          suggestions[field] = match
+        }
+      }
+    )
+    
+    if (Object.keys(suggestions).length > 0) {
+      setPendingSuggestions(suggestions)
+    }
   }, [availableColumns])
+
+  const acceptAllSuggestions = () => {
+    setColumnMap(prev => ({ ...prev, ...pendingSuggestions }))
+    setPendingSuggestions({})
+  }
+
+  const rejectAllSuggestions = () => {
+    setPendingSuggestions({})
+  }
+
+  const unmappedColumns = useMemo(() => {
+    const mappedValues = Object.values(columnMap).filter(Boolean)
+    return availableColumns.filter(col => !mappedValues.includes(col))
+  }, [availableColumns, columnMap])
+
+  // Remover mapeamentos salvos daqui e colocar no final
+  // Mover lógica de smart suggestions para dentro do render se necessário, ou manter aqui
+  const smartSuggestions = useMemo(() => {
+    const suggestions: Record<string, MappableLeadField> = {}
+    unmappedColumns.forEach(col => {
+      // Find unused system fields
+      const unusedFields = MAPPING_FIELDS.filter(f => !columnMap[f.id])
+      const match = findBestMatch(col, unusedFields.map(f => f.label)) // Match against Labels
+      
+      if (match) {
+        const field = MAPPING_FIELDS.find(f => f.label === match.target)
+        if (field) suggestions[col] = field.id
+      }
+    })
+    return suggestions
+  }, [unmappedColumns, columnMap])
+
+  const handleSmartMap = (column: string, fieldId: MappableLeadField) => {
+    setColumnMap(prev => ({ ...prev, [fieldId]: column }))
+  }
+
+  const handleCreateCustomFromColumn = (column: string) => {
+    const id = `custom_fields.${normalizeKey(column)}`
+    if (!customFields.find(f => f.id === id)) {
+      setCustomFields(prev => [...prev, { id, label: column }])
+      setColumnMap(prev => ({ ...prev, [id]: column }))
+    }
+  }
+
+  const handleAddAllUnmappedAsCustom = () => {
+    const newCustomFields: { id: string; label: string }[] = []
+    const newMappings: ColumnMapping = {}
+    
+    // Rastrear IDs já existentes para evitar colisões
+    const usedIds = new Set([
+      ...customFields.map(f => f.id),
+      ...Object.keys(columnMap)
+    ])
+
+    unmappedColumns.forEach(col => {
+      // Garante uma chave válida mesmo para caracteres especiais
+      const baseKey = normalizeKey(col) || `col_${Math.random().toString(36).substr(2, 5)}`
+      let id = `custom_fields.${baseKey}`
+      
+      // Se o ID já existe (ex: duas colunas similares), adiciona sufixo numérico
+      let counter = 1
+      while (usedIds.has(id) || newMappings[id]) {
+        id = `custom_fields.${baseKey}_${counter}`
+        counter++
+      }
+
+      // Registra o ID como usado
+      usedIds.add(id)
+      
+      newCustomFields.push({ id, label: col })
+      newMappings[id] = col
+    })
+    
+    if (newCustomFields.length > 0) {
+      setCustomFields(prev => [...prev, ...newCustomFields])
+      setColumnMap(prev => ({ ...prev, ...newMappings }))
+    }
+  }
 
   const handleFileSelection = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -578,6 +693,24 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
         const lostReason = toText(getColumnValue("lost_reason", row))
         if (lostReason) payload.lost_reason = lostReason
 
+        // Custom fields
+        if (customFields.length > 0) {
+           const custom: Record<string, unknown> = {}
+           customFields.forEach(field => {
+             const col = columnMap[field.id]
+             if (col) {
+               const val = row[col]
+               if (val !== undefined && val !== null && val !== "") {
+                 // Flatten for preview table
+                 ;(payload as any)[field.id] = val
+                 // Nested for structure (though backend re-parses from raw)
+                 custom[field.label] = val 
+               }
+             }
+           })
+           if (Object.keys(custom).length > 0) payload.custom_fields = custom
+        }
+
         return payload
       })
       .filter(Boolean) as LeadImportPayload[]
@@ -587,12 +720,18 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
     defaultStatus,
     defaultSource,
     org?.id,
+    customFields,
+    columnMap // added columnMap dependency
   ])
 
   const previewFields = useMemo(
-    () =>
-      MAPPING_FIELDS.filter((field) => columnMap[field.id] && ["title","email","phone","source","campaign_id","adset_id","ad_id"].includes(field.id)).slice(0, 6),
-    [columnMap]
+    () => {
+      const systemFields = MAPPING_FIELDS.filter((field) => columnMap[field.id] && ["title","email","phone","source","campaign_id","adset_id","ad_id"].includes(field.id))
+      const customMapped = customFields.filter(f => columnMap[f.id]).map(f => ({ id: f.id, label: f.label }))
+      
+      return [...systemFields, ...customMapped].slice(0, 6)
+    },
+    [columnMap, customFields]
   )
 
   const previewRows = normalizedRows.slice(0, 3)
@@ -603,6 +742,7 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
 
   const handleImport = () => {
     if (!canImport) return
+    setImportError(null)
     const mapping_json: Record<string, string> = {}
     Object.entries(columnMap).forEach(([field, col]) => {
       if (col) mapping_json[field] = col as string
@@ -618,6 +758,12 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
       {
         onSuccess: (data) => {
           setImportReport({ batch_id: data.batch_id, imported: data.imported, skipped: data.skipped, error_count: data.error_count })
+          setImportError(null)
+        },
+        onError: (error: any) => {
+          const message = error?.message || error?.originalError?.message || "Erro ao importar leads. Verifique os dados e tente novamente."
+          setImportError(message)
+          console.error("[LeadsImportDialog] Erro na importação:", error)
         },
       }
     )
@@ -625,6 +771,7 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
 
   const handleImportAndAdvance = () => {
     if (!canImport) return
+    setImportError(null)
     const mapping_json: Record<string, string> = {}
     Object.entries(columnMap).forEach(([field, col]) => {
       if (col) mapping_json[field] = col as string
@@ -640,6 +787,12 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
       {
         onSuccess: (data) => {
           setImportReport({ batch_id: data.batch_id, imported: data.imported, skipped: data.skipped, error_count: data.error_count })
+          setImportError(null)
+        },
+        onError: (error: any) => {
+          const message = error?.message || error?.originalError?.message || "Erro ao importar leads. Verifique os dados e tente novamente."
+          setImportError(message)
+          console.error("[LeadsImportDialog] Erro na importação:", error)
         },
       }
     )
@@ -658,8 +811,13 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
         </DialogHeader>
 
         {parseError ? (
-          <Alert className="mb-4">
+          <Alert className="mb-4" variant="destructive">
             <AlertDescription>{parseError}</AlertDescription>
+          </Alert>
+        ) : null}
+        {importError ? (
+          <Alert className="mb-4" variant="destructive">
+            <AlertDescription>{importError}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -721,6 +879,40 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
                 </span>
               </div>
             )}
+
+            {parsedRows.length > 0 && availableColumns.length > 0 && (
+              <div className="mt-4 rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {availableColumns.slice(0, 5).map((col) => (
+                        <TableHead key={col}>{col}</TableHead>
+                      ))}
+                      {availableColumns.length > 5 && (
+                        <TableHead>...</TableHead>
+                      )}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {parsedRows.slice(0, 5).map((row, i) => (
+                      <TableRow key={i}>
+                        {availableColumns.slice(0, 5).map((col) => (
+                          <TableCell key={col}>
+                            {formatPreviewValue(row[col])}
+                          </TableCell>
+                        ))}
+                        {availableColumns.length > 5 && (
+                          <TableCell>...</TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="bg-muted/50 p-2 text-center text-xs text-muted-foreground">
+                  Pré-visualização das 5 primeiras linhas da planilha original
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
         )}
@@ -779,72 +971,33 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Mapeamentos salvos</Label>
-                  <Select
-                    value={selectedMappingId ?? "__none__"}
-                    onValueChange={(value) => {
-                      const id = value === "__none__" ? null : value
-                      setSelectedMappingId(id)
-                      const found = mappings.list.data?.find((m) => m.id === id)
-                      if (found) {
-                        const next: ColumnMapping = {}
-                        Object.entries(found.mapping_json).forEach(([field, col]) => {
-                          next[field as MappableLeadField] = col as string
-                        })
-                        setColumnMap(next)
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um mapeamento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Nenhum</SelectItem>
-                      {(mappings.list.data ?? []).map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Salvar mapeamento</Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    className="flex-1 rounded-md border px-3 py-2 text-sm"
-                    placeholder="Nome do mapeamento"
-                    value={mappingName}
-                    onChange={(e) => setMappingName(e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      if (!mappingName || !Object.keys(columnMap).length) return
-                      const mapping_json: Record<string, string> = {}
-                      Object.entries(columnMap).forEach(([field, col]) => {
-                        if (col) mapping_json[field] = col as string
-                      })
-                      mappings.save.mutate({ name: mappingName, mapping_json })
-                      setMappingName("")
-                    }}
-                  >
-                    Salvar
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">Armazena mapeamentos usados com frequência para futuras importações.</p>
-              </div>
-            </div>
+            {/* Sugestões Automáticas Pendentes */}
+            {Object.keys(pendingSuggestions).length > 0 && (
+              <Alert className="bg-primary/5 border-primary/20">
+                <Wand2 className="h-4 w-4 text-primary" />
+                <AlertDescription className="flex items-center justify-between flex-wrap gap-2">
+                  <span>
+                    Identificamos {Object.keys(pendingSuggestions).length} campos automaticamente 
+                    (Nome, Email, Telefone, etc).
+                  </span>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="ghost" onClick={rejectAllSuggestions}>
+                      Ignorar
+                    </Button>
+                    <Button size="sm" onClick={acceptAllSuggestions}>
+                      Aceitar Sugestões
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
 
             <div className="grid gap-4 md:grid-cols-2">
               {MAPPING_FIELDS.filter((f)=>["title","email","phone","source"].includes(f.id)).map((field) => (
                 <div key={field.id} className="space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <Label className="text-sm font-semibold">
-                      {field.label}
+                      {field.id === 'source' ? 'Coluna de Origem' : field.label}
                       {field.required && " *"}
                     </Label>
                     {field.hint && (
@@ -863,7 +1016,7 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
                     }
                     disabled={!availableColumns.length}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={columnMap[field.id] ? "border-primary/50 bg-primary/5" : ""}>
                       <SelectValue
                         placeholder={
                           field.required ? "Selecione a coluna" : "Ignorar"
@@ -943,6 +1096,297 @@ export function LeadsImportDialog({ open, onOpenChange }: LeadsImportDialogProps
                       </Select>
                     </div>
                   ))}
+                </div>
+
+                <div className="mt-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Label className="text-sm font-semibold">Campos Personalizados</Label>
+                    <Badge variant="outline" className="text-xs font-normal">Ad-hoc</Badge>
+                  </div>
+                  
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {customFields.map((field) => (
+                      <div key={field.id} className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <Label className="text-sm font-medium truncate" title={field.label}>
+                            {field.label}
+                          </Label>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => {
+                              setCustomFields(prev => prev.filter(f => f.id !== field.id))
+                              setColumnMap(prev => {
+                                const next = { ...prev }
+                                delete next[field.id]
+                                return next
+                              })
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3 text-muted-foreground" />
+                          </Button>
+                        </div>
+                        <Select
+                          value={columnMap[field.id] ?? "__ignore__"}
+                          onValueChange={(value) =>
+                            setColumnMap((prev) => ({
+                              ...prev,
+                              [field.id]: value === "__ignore__" ? undefined : (value as string),
+                            }))
+                          }
+                          disabled={!availableColumns.length}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a coluna" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__ignore__">Não importar</SelectItem>
+                            {availableColumns.map((column) => (
+                              <SelectItem key={column} value={column}>
+                                {column}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 flex items-end gap-2 max-w-md">
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-xs text-muted-foreground">Adicionar novo campo</Label>
+                      <input
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                        placeholder="Ex: CPF, Data Nascimento..."
+                        value={newCustomFieldName}
+                        onChange={(e) => setNewCustomFieldName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            if (!newCustomFieldName.trim()) return
+                            const id = `custom_fields.${normalizeKey(newCustomFieldName)}`
+                            if (customFields.find(f => f.id === id)) return
+                            setCustomFields(prev => [...prev, { id, label: newCustomFieldName }])
+                            setNewCustomFieldName("")
+                          }
+                        }}
+                      />
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        if (!newCustomFieldName.trim()) return
+                        const id = `custom_fields.${normalizeKey(newCustomFieldName)}`
+                        if (customFields.find(f => f.id === id)) return
+                        setCustomFields(prev => [...prev, { id, label: newCustomFieldName }])
+                        setNewCustomFieldName("")
+                      }}
+                    >
+                      <Plus className="mr-2 h-3 w-3" />
+                      Adicionar
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {unmappedColumns.length > 0 && (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm font-semibold">Colunas não mapeadas detectadas</Label>
+                      <Badge variant="secondary" className="text-xs">{unmappedColumns.length}</Badge>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleAddAllUnmappedAsCustom}
+                      className="gap-2"
+                    >
+                      <Plus className="h-3 w-3" />
+                      Adicionar todas como campos personalizados
+                    </Button>
+                  </div>
+                  
+                  <div className="rounded-md border divide-y">
+                    {unmappedColumns.slice(0, 5).map(col => {
+                      const suggestion = smartSuggestions[col]
+                      const suggestedField = suggestion ? MAPPING_FIELDS.find(f => f.id === suggestion) : null
+
+                      return (
+                        <div key={col} className="p-3 flex items-center justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm truncate" title={col}>{col}</span>
+                              {suggestedField && (
+                                <Badge variant="outline" className="text-[10px] gap-1 text-primary border-primary/30 bg-primary/5">
+                                  <Wand2 className="h-3 w-3" /> Sugestão: {suggestedField.label}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 truncate">
+                              Ex: {formatPreviewValue(parsedRows[0]?.[col])}
+                            </p>
+                          </div>
+                          
+                          <div className="flex items-center gap-2 shrink-0">
+                            {suggestedField ? (
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleSmartMap(col, suggestedField.id)}
+                              >
+                                Aceitar sugestão
+                              </Button>
+                            ) : (
+                              <Popover open={openComboboxId === col} onOpenChange={(open) => setOpenComboboxId(open ? col : null)}>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    aria-expanded={openComboboxId === col}
+                                    className="w-[200px] justify-between h-8 text-xs"
+                                  >
+                                    Ação...
+                                    <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[240px] p-0" align="end">
+                                  <Command>
+                                    <CommandInput placeholder="Pesquisar campo do CRM..." />
+                                    <CommandList>
+                                      <CommandEmpty>Nenhum campo encontrado.</CommandEmpty>
+                                      <CommandGroup heading="Ações">
+                                        <CommandItem
+                                          onSelect={() => {
+                                            handleCreateCustomFromColumn(col)
+                                            setOpenComboboxId(null)
+                                          }}
+                                          className="text-primary font-medium"
+                                        >
+                                          <Plus className="mr-2 h-3 w-3" />
+                                          Criar campo "{col}"
+                                        </CommandItem>
+                                      </CommandGroup>
+                                      <CommandSeparator />
+                                      <CommandGroup heading="Campos do Sistema">
+                                        {MAPPING_FIELDS.filter(f => !columnMap[f.id]).map(f => (
+                                          <CommandItem
+                                            key={f.id}
+                                            value={f.label}
+                                            onSelect={() => {
+                                              handleSmartMap(col, f.id as MappableLeadField)
+                                              setOpenComboboxId(null)
+                                            }}
+                                          >
+                                            <Check
+                                              className="mr-2 h-3 w-3 opacity-0"
+                                            />
+                                            {f.label}
+                                          </CommandItem>
+                                        ))}
+                                      </CommandGroup>
+                                    </CommandList>
+                                  </Command>
+                                </PopoverContent>
+                              </Popover>
+                            )}
+                             {!suggestedField && (
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  onClick={() => handleCreateCustomFromColumn(col)}
+                                  title="Criar como campo personalizado"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                             )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {unmappedColumns.length > 5 && (
+                      <div className="p-2 text-center text-xs text-muted-foreground bg-muted/50">
+                        E mais {unmappedColumns.length - 5} colunas... (mapeie as acima primeiro)
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <Separator className="my-6" />
+
+                <div className="grid gap-4 md:grid-cols-2 items-start bg-muted/30 p-4 rounded-lg">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Mapeamentos salvos</Label>
+                      <Select
+                        value={selectedMappingId ?? "__none__"}
+                        onValueChange={(value) => {
+                          const id = value === "__none__" ? null : value
+                          setSelectedMappingId(id)
+                          const found = mappings.list.data?.find((m) => m.id === id)
+                          if (found) {
+                            const next: ColumnMapping = {}
+                            const recoveredCustomFields: { id: string; label: string }[] = []
+                            Object.entries(found.mapping_json).forEach(([field, col]) => {
+                              if (field.startsWith("custom_fields.")) {
+                                 const label = field.replace("custom_fields.", "")
+                                 // Check if already exists to avoid duplicates if mixed
+                                 if (!recoveredCustomFields.find(f => f.id === field)) {
+                                   recoveredCustomFields.push({ id: field, label })
+                                 }
+                              }
+                              next[field] = col as string
+                            })
+                            setCustomFields(recoveredCustomFields)
+                            setColumnMap(next)
+                          }
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um mapeamento" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Nenhum</SelectItem>
+                          {(mappings.list.data ?? []).map((m) => (
+                            <SelectItem key={m.id} value={m.id}>
+                              {m.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">Carregue um padrão de colunas definido anteriormente.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Salvar mapeamento atual</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="flex-1 rounded-md border px-3 py-2 text-sm"
+                        placeholder="Nome do novo mapeamento"
+                        value={mappingName}
+                        onChange={(e) => setMappingName(e.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          if (!mappingName || !Object.keys(columnMap).length) return
+                          const mapping_json: Record<string, string> = {}
+                          Object.entries(columnMap).forEach(([field, col]) => {
+                            if (col) mapping_json[field] = col as string
+                          })
+                          mappings.save.mutate({ name: mappingName, mapping_json })
+                          setMappingName("")
+                        }}
+                      >
+                        Salvar
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Salva a configuração atual para reutilizar depois.</p>
+                  </div>
                 </div>
               </>
             )}

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, Search, Loader2, LayoutList, Filter, Upload } from "lucide-react";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
-import { LeadsImportDialog } from "@/components/leads/LeadsImportDialog";
+import { SpreadsheetImporter } from "@/components/leads/SpreadsheetImporter";
 import { LeadCard } from "@/components/leads/LeadCard";
 import { StageValueCard } from "@/components/leads/StageValueCard";
 import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
@@ -376,7 +376,7 @@ export default function LeadsLinear() {
     onOpenChange={setIsNewLeadModalOpen}
     onSave={handleNewLead}
   />
-  <LeadsImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} />
+  <SpreadsheetImporter open={isImportOpen} onOpenChange={setIsImportOpen} />
   </div>
   );
 }

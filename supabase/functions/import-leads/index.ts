@@ -1,16 +1,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Read env with fallback names (CLI forbids SUPABASE_* in secrets sometimes)
+const SUPABASE_URL = Deno.env.get("PROJECT_URL") ?? Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Content-Type": "application/json",
-  };
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-application-name",
+  "Content-Type": "application/json",
+};
+
+function handleCorsOptions(req: Request) {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+  return null;
 }
 
 type LeadImportPayload = {
@@ -39,6 +45,7 @@ type LeadImportPayload = {
   closed_lost_at?: string | null;
   lost_reason?: string | null;
   organization_id?: string | null;
+  custom_fields?: Record<string, unknown> | null;
 };
 
 type MappingJson = Record<string, string | undefined>;
@@ -130,6 +137,11 @@ const clampPercentage = (value: number) => {
   if (Number.isNaN(value)) return undefined;
   return Math.max(0, Math.min(100, value));
 };
+const toIsoDate = (value?: string) => {
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+};
 const toText = (value: unknown): string | undefined => {
   if (value === undefined || value === null) return undefined;
   const text = String(value).trim();
@@ -187,14 +199,14 @@ function normalizeRow(row: Record<string, unknown>, mapping: MappingJson, defaul
   if (contractType) payload.contract_type = contractType;
   const priority = normalizePriority(toText(get("priority")));
   if (priority) payload.priority = priority;
-  const expectedClose = toText(get("expected_close_date"));
-  if (expectedClose) payload.expected_close_date = new Date(expectedClose).toISOString();
-  const nextFollowUp = toText(get("next_follow_up_date"));
-  if (nextFollowUp) payload.next_follow_up_date = new Date(nextFollowUp).toISOString();
-  const lastContact = toText(get("last_contact_date"));
-  if (lastContact) payload.last_contact_date = new Date(lastContact).toISOString();
-  const dueDate = toText(get("due_date"));
-  if (dueDate) payload.due_date = new Date(dueDate).toISOString();
+  const expectedClose = toIsoDate(toText(get("expected_close_date")));
+  if (expectedClose) payload.expected_close_date = expectedClose;
+  const nextFollowUp = toIsoDate(toText(get("next_follow_up_date")));
+  if (nextFollowUp) payload.next_follow_up_date = nextFollowUp;
+  const lastContact = toIsoDate(toText(get("last_contact_date")));
+  if (lastContact) payload.last_contact_date = lastContact;
+  const dueDate = toIsoDate(toText(get("due_date")));
+  if (dueDate) payload.due_date = dueDate;
   const leadScore = parseInteger(get("lead_score"));
   if (leadScore !== undefined) payload.lead_score = clampPercentage(leadScore) ?? null;
   const conversion = parseNumber(get("conversion_probability"));
@@ -211,21 +223,44 @@ function normalizeRow(row: Record<string, unknown>, mapping: MappingJson, defaul
   if (adset) payload.adset_id = adset;
   const ad = toText(get("ad_id"));
   if (ad) payload.ad_id = ad;
-  const closedWon = toText(get("closed_won_at"));
-  if (closedWon) payload.closed_won_at = new Date(closedWon).toISOString();
-  const closedLost = toText(get("closed_lost_at"));
-  if (closedLost) payload.closed_lost_at = new Date(closedLost).toISOString();
+  const closedWon = toIsoDate(toText(get("closed_won_at")));
+  if (closedWon) payload.closed_won_at = closedWon;
+  const closedLost = toIsoDate(toText(get("closed_lost_at")));
+  if (closedLost) payload.closed_lost_at = closedLost;
   const lostReason = toText(get("lost_reason"));
   if (lostReason) payload.lost_reason = lostReason;
+
+  // Extract custom fields
+  const customFields: Record<string, unknown> = {};
+  Object.keys(mapping).forEach((key) => {
+    if (key.startsWith("custom_fields.")) {
+      const fieldName = key.replace("custom_fields.", "");
+      const value = get(key);
+      if (value !== undefined && value !== null && value !== "") {
+         customFields[fieldName] = value;
+      }
+    }
+  });
+  if (Object.keys(customFields).length > 0) {
+    payload.custom_fields = customFields;
+  }
+
   return { payload, errors };
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders() });
-  }
+  const corsResponse = handleCorsOptions(req);
+  if (corsResponse) return corsResponse;
+
   const t0 = Date.now();
   try {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return new Response(
+        JSON.stringify({ error: "Configuração do Supabase ausente. Verifique PROJECT_URL e SERVICE_ROLE_KEY.", reason: "missing_config" }),
+        { status: 500, headers: corsHeaders },
+      );
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
@@ -247,7 +282,22 @@ serve(async (req) => {
     if (!organization_id || !mapping_json) {
       return new Response(
         JSON.stringify({ error: "Parâmetros obrigatórios ausentes.", reason: "missing_params" }),
-        { status: 400, headers: corsHeaders() },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Nenhuma linha para importar.", reason: "empty_rows" }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    const MAX_ROWS = 5000;
+    if (rows.length > MAX_ROWS) {
+      return new Response(
+        JSON.stringify({ error: `Limite de ${MAX_ROWS} linhas excedido. Divida o arquivo.`, reason: "rows_limit_exceeded" }),
+        { status: 400, headers: corsHeaders },
       );
     }
 
@@ -273,7 +323,7 @@ serve(async (req) => {
       .select("id")
       .single();
     if (batchInsert.error) {
-      return new Response(JSON.stringify({ error: batchInsert.error.message, reason: "batch_insert_failed" }), { status: 500, headers: corsHeaders() });
+      return new Response(JSON.stringify({ error: batchInsert.error.message, reason: "batch_insert_failed" }), { status: 500, headers: corsHeaders });
     }
     const batch_id = batchInsert.data.id as string;
 
@@ -329,6 +379,14 @@ serve(async (req) => {
         .insert(finalPayload)
         .select("id");
       if (error) {
+        const errPayload = {
+          error: error.message,
+          code: (error as any)?.code,
+          details: (error as any)?.details,
+          hint: (error as any)?.hint,
+          reason: "bulk_insert_failed",
+        };
+        console.error(JSON.stringify({ event: "import_leads_insert_failed", batch_id, ...errPayload, payload_count: finalPayload.length }));
         // Mark whole batch as skipped if insert fails at bulk-level
         const rowsAudit = normalized.map((n) => ({
           batch_id,
@@ -349,7 +407,7 @@ serve(async (req) => {
             completed_at: new Date().toISOString(),
           })
           .eq("id", batch_id);
-        return new Response(JSON.stringify({ success: false, batch_id, imported: 0, skipped: inputRows.length, errors: [error.message] }), { status: 500, headers: corsHeaders() });
+        return new Response(JSON.stringify({ success: false, batch_id, imported: 0, skipped: inputRows.length, ...errPayload }), { status: 500, headers: corsHeaders });
       }
       insertedIds = (data ?? []).map((r: any) => r.id as string);
     }
@@ -384,11 +442,11 @@ serve(async (req) => {
     console.log(JSON.stringify({ event: "import_leads", batch_id, rows: normalized.length, imported: importedCount, skipped: skippedCount, durationMs: t1 - t0 }));
     return new Response(
       JSON.stringify({ success: true, batch_id, imported: importedCount, skipped: skippedCount, error_count: errorCount, lead_ids: insertedIds }),
-      { status: 200, headers: corsHeaders() },
+      { status: 200, headers: corsHeaders },
     );
   } catch (e) {
     const msg = (e as Error)?.message ?? String(e);
     console.error(JSON.stringify({ event: "import_leads_error", message: msg }));
-    return new Response(JSON.stringify({ error: msg, reason: "unexpected" }), { status: 500, headers: corsHeaders() });
+    return new Response(JSON.stringify({ error: msg, reason: "unexpected" }), { status: 500, headers: corsHeaders });
   }
 });
