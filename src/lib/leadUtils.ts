@@ -58,3 +58,4 @@ export function buildLeadTitleFromCustomFields(
   return fallbackTitle || "Lead sem nome";
 }
 
+

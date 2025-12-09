@@ -44,3 +44,4 @@ CREATE POLICY "Users can view leads in their organization"
 COMMIT;
 
 
+
