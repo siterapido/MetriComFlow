@@ -15,6 +15,7 @@ import { useCreateTask, useUpdateTask, useTaskTypes, useTaskPriorities } from '@
 import { useTeamMembers } from '@/hooks/useTeamMembers'
 import { useLeads } from '@/hooks/useLeads'
 import { cn } from '@/lib/utils'
+import { getLeadDisplayName } from '@/lib/leadUtils'
 
 const taskSchema = z.object({
   title: z.string().min(1, 'Título é obrigatório'),
@@ -290,7 +291,10 @@ export function TaskForm({ task, leadId, onClose, onSuccess }: TaskFormProps) {
                         <div className="flex items-center gap-2">
                           <Tag className="h-4 w-4" />
                           <span>
-                            {leads.find(l => l.id === watchedValues.lead_id)?.title || 'Lead'}
+                            {(() => {
+                              const lead = leads.find(l => l.id === watchedValues.lead_id);
+                              return lead ? getLeadDisplayName(lead) : 'Lead';
+                            })()}
                           </span>
                         </div>
                       )}
@@ -302,7 +306,7 @@ export function TaskForm({ task, leadId, onClose, onSuccess }: TaskFormProps) {
                       <SelectItem key={lead.id} value={lead.id}>
                         <div className="flex items-center gap-2">
                           <Tag className="h-4 w-4" />
-                          <span>{lead.title}</span>
+                          <span>{getLeadDisplayName(lead)}</span>
                         </div>
                       </SelectItem>
                     ))}

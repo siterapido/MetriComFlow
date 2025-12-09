@@ -11,6 +11,7 @@ export interface UserPermissions {
   isOwner: boolean;
   hasCRMAccess: boolean;
   hasMetricsAccess: boolean;
+  hasFormsAccess: boolean;
   canManageUsers: boolean;
   canManageGoals: boolean;
   canDeleteLeads: boolean;
@@ -34,6 +35,7 @@ export const useUserPermissions = () => {
           isOwner: false,
           hasCRMAccess: false,
           hasMetricsAccess: false,
+          hasFormsAccess: false,
           canManageUsers: false,
           canManageGoals: false,
           canDeleteLeads: false,
@@ -72,6 +74,7 @@ export const useUserPermissions = () => {
       const isOrgAdmin = orgRole === "admin";
       const isTrafficManager = userType === "traffic_manager";
       const isSales = userType === "sales";
+      const isCRMUser = userType === "crm_user";
 
       // Fetch organization plan limits (if org exists)
       let planLimits = null;
@@ -86,18 +89,22 @@ export const useUserPermissions = () => {
       }
 
       // Determine CRM access (user_type + plan)
-      const userHasCRMAccess = isOwner || isSales;
+      const userHasCRMAccess = isOwner || isSales || isCRMUser;
       const subscriptionStatus = planLimits?.subscription_status ?? "active";
       const planAllowsCRM = planLimits?.has_crm_access ?? true;
       const planHasCRMAccess =
         planAllowsCRM && ["active", "trial"].includes(subscriptionStatus ?? "inactive");
       const hasCRMAccess = userHasCRMAccess && planHasCRMAccess;
 
+      // Determine Forms access (only owner and sales, NOT crm_user)
+      const hasFormsAccess = (isOwner || isSales) && planHasCRMAccess;
+
       return {
         userType,
         isOwner,
         hasCRMAccess,
         hasMetricsAccess: isOwner || isTrafficManager,
+        hasFormsAccess,
         canManageUsers: isOwner,
         canManageGoals: isOwner,
         canDeleteLeads: isOwner || isOrgAdmin,
@@ -140,19 +147,22 @@ export const USER_TYPE_LABELS: Record<UserType, string> = {
   owner: "Proprietário",
   traffic_manager: "Gestor de Tráfego",
   sales: "Vendedor",
+  crm_user: "Usuário CRM",
 };
 
 // User type descriptions
 export const USER_TYPE_DESCRIPTIONS: Record<UserType, string> = {
   owner: "Acesso completo a todas as funcionalidades do sistema",
   traffic_manager: "Acesso exclusivo às métricas e análises, sem permissão para acessar o CRM",
-  sales: "Acesso completo ao CRM, porém sem permissão para visualizar métricas e análises",
+  sales: "Acesso completo ao CRM e formulários, porém sem permissão para visualizar métricas e análises",
+  crm_user: "Acesso ao CRM e pipeline de vendas, sem permissão para formulários, métricas ou análises",
 };
 
 // User type permissions breakdown
 export const USER_TYPE_PERMISSIONS: Record<UserType, string[]> = {
   owner: [
     "Acesso total ao CRM",
+    "Acesso total aos formulários",
     "Acesso total às métricas e análises",
     "Gerenciar usuários",
     "Gerenciar metas e objetivos",
@@ -166,13 +176,24 @@ export const USER_TYPE_PERMISSIONS: Record<UserType, string[]> = {
     "Visualizar metas e objetivos",
     "Configurar integrações de anúncios",
     "SEM acesso ao CRM",
+    "SEM acesso aos formulários",
   ],
   sales: [
     "Criar e gerenciar leads",
     "Visualizar pipeline de vendas",
+    "Criar e gerenciar formulários",
     "Adicionar comentários e anexos",
     "Atualizar status de leads",
     "Visualizar membros da equipe",
+    "SEM acesso às métricas",
+  ],
+  crm_user: [
+    "Visualizar leads",
+    "Visualizar pipeline de vendas",
+    "Adicionar comentários",
+    "Atualizar status de leads",
+    "Visualizar membros da equipe",
+    "SEM acesso aos formulários",
     "SEM acesso às métricas",
   ],
 };

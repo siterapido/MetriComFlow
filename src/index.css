@@ -6,33 +6,31 @@
 
 @layer base {
   :root {
-    /* Main Brand Colors - Lighter/Open Deep Blue Universe */
-    /* Increased lightness from 11% to 18%, adjusted hue for royal blue feel */
-    --background: 224 45% 18%;   /* ~#192242 - Lighter Midnight Blue */
-    --foreground: 210 40% 98%;   /* #f8fafc - Slate 50 */
+    /* Light Theme - Azul Claro (Default) */
+    --background: 210 40% 98%;   /* #f8fafc - Slate 50 - Fundo claro */
+    --foreground: 222 47% 11%;   /* Texto escuro */
     
-    /* Adjusted card to be slightly lighter or complementary */
-    --card: 224 40% 23%;         /* Lighter than background */
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 100%;           /* Branco para cards */
+    --card-foreground: 222 47% 11%;
     
-    --popover: 224 40% 23%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
     
     /* Primary - Light Neon Blue */
     --primary: 195 100% 50%;     /* #00BFFF - Deep Sky Blue / Neon Cyan */
-    --primary-foreground: 222 47% 11%;
+    --primary-foreground: 0 0% 100%; /* Branco para texto em botões primários */
     
     /* Secondary - Electric Blue */
     --secondary: 220 100% 60%;   /* #3385FF - Bright Blue */
-    --secondary-foreground: 222 47% 11%;
+    --secondary-foreground: 0 0% 100%;
     
-    /* Muted Surfaces - Adjusted to match new bg */
-    --muted: 224 30% 28%;        
-    --muted-foreground: 215 20% 75%; 
+    /* Muted Surfaces */
+    --muted: 210 40% 96%;        
+    --muted-foreground: 215 16% 47%; 
     
     /* Accents */
     --accent: 195 100% 50%;      /* Matching Primary Neon */
-    --accent-foreground: 222 47% 11%;
+    --accent-foreground: 0 0% 100%;
     
     /* Status */
     --destructive: 0 84% 60%;
@@ -45,15 +43,69 @@
     --warning-foreground: 0 0% 100%;
     
     /* Interactive */
-    --border: 224 30% 30%;       
-    --input: 224 30% 30%;
+    --border: 214 32% 91%;       /* Bordas claras */
+    --input: 214 32% 91%;
     --ring: 195 100% 50%;        /* Neon Ring */
     
     /* Layout */
     --radius: 0.75rem;
 
-    /* Sidebar - keeping consistent with dark theme */
-    --sidebar-background: 224 45% 15%; /* Slightly darker than main bg */
+    /* Sidebar - Light theme */
+    --sidebar-background: 210 40% 96%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 195 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 92%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 195 100% 50%;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(195 100% 50%), hsl(220 100% 60%));
+    --gradient-glow: radial-gradient(circle at center, hsl(195 100% 50% / 0.1) 0%, transparent 70%);
+    
+    /* Shadows */
+    --shadow-glow: 0 0 30px -5px hsl(195 100% 50% / 0.2);
+    --shadow-neon: 0 0 10px hsl(195 100% 50% / 0.3), 0 0 20px hsl(195 100% 50% / 0.2);
+  }
+
+  .dark {
+    /* Dark Theme - Mantido para compatibilidade */
+    --background: 224 45% 18%;   /* ~#192242 - Lighter Midnight Blue */
+    --foreground: 210 40% 98%;   /* #f8fafc - Slate 50 */
+    
+    --card: 224 40% 23%;         
+    --card-foreground: 210 40% 98%;
+    
+    --popover: 224 40% 23%;
+    --popover-foreground: 210 40% 98%;
+    
+    --primary: 195 100% 50%;     
+    --primary-foreground: 222 47% 11%;
+    
+    --secondary: 220 100% 60%;   
+    --secondary-foreground: 222 47% 11%;
+    
+    --muted: 224 30% 28%;        
+    --muted-foreground: 215 20% 75%; 
+    
+    --accent: 195 100% 50%;      
+    --accent-foreground: 222 47% 11%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --success: 150 100% 45%;     
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 45 100% 50%;      
+    --warning-foreground: 0 0% 100%;
+    
+    --border: 224 30% 30%;       
+    --input: 224 30% 30%;
+    --ring: 195 100% 50%;        
+    
+    --sidebar-background: 224 45% 15%;
     --sidebar-foreground: 210 40% 98%;
     --sidebar-primary: 195 100% 50%;
     --sidebar-primary-foreground: 222 47% 11%;
@@ -62,11 +114,9 @@
     --sidebar-border: 224 30% 30%;
     --sidebar-ring: 195 100% 50%;
     
-    /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(195 100% 50%), hsl(220 100% 60%));
     --gradient-glow: radial-gradient(circle at center, hsl(195 100% 50% / 0.2) 0%, transparent 70%);
     
-    /* Shadows */
     --shadow-glow: 0 0 30px -5px hsl(195 100% 50% / 0.4);
     --shadow-neon: 0 0 10px hsl(195 100% 50% / 0.5), 0 0 20px hsl(195 100% 50% / 0.3);
   }
@@ -79,11 +129,18 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    /* Ensure dark mode background persists */
+    /* Light theme background - subtle blue gradients */
+    background-image: 
+      radial-gradient(circle at 50% 0%, hsl(195 100% 50% / 0.05) 0%, transparent 45%),
+      radial-gradient(circle at 100% 20%, hsl(220 100% 60% / 0.05) 0%, transparent 40%);
+    background-attachment: fixed;
+  }
+
+  .dark body {
+    /* Dark theme background */
     background-image: 
       radial-gradient(circle at 50% 0%, hsl(195 100% 50% / 0.08) 0%, transparent 45%),
       radial-gradient(circle at 100% 20%, hsl(220 100% 60% / 0.08) 0%, transparent 40%);
-    background-attachment: fixed;
   }
   
   /* Custom Scrollbar */

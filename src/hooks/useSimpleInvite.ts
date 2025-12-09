@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 interface SimpleInvitePayload {
   email: string;
   role?: "owner" | "admin" | "manager" | "member";
-  user_type?: "owner" | "traffic_manager" | "sales";
+  user_type?: "owner" | "traffic_manager" | "sales" | "crm_user";
 }
 
 /**

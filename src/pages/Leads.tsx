@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Search, Loader2, Upload, CheckSquare, Square } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
 import { SpreadsheetImporter } from "@/components/leads/SpreadsheetImporter";
 import { LeadFiltersCompact, CustomFieldsFilters } from "@/components/leads/LeadFiltersCompact";
@@ -207,74 +208,71 @@ export default function Leads() {
           <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[100px] opacity-40" />
        </div>
 
-      <div className="space-y-6 animate-fade-in relative z-10">
+      <div className="space-y-4 animate-fade-in relative z-10">
         {/* Header Section Compacto */}
-        <div className="flex flex-col gap-4 border-b border-white/5 pb-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                  CRM - Pipeline
-              </h1>
-              <p className="text-muted-foreground text-sm">
-                  Gestão horizontal de oportunidades e contratos
-              </p>
+        <div className="flex flex-col gap-2 border-b border-white/5 pb-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            {/* Barra de busca */}
+            <div className="relative flex-shrink-0 w-48 group">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors w-3.5 h-3.5" />
+              <Input
+                placeholder="Buscar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 pr-2 bg-white/5 border-white/10 focus:border-primary/50 transition-all text-sm h-7"
+              />
             </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 items-center w-full sm:w-auto">
-                <div className="relative w-full sm:w-64 group">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors w-4 h-4" />
-                  <Input
-                    placeholder="Buscar leads..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 bg-white/5 border-white/10 focus:border-primary/50 transition-all text-sm h-9"
-                  />
-                </div>
-                
-                <div className="flex gap-2 w-full sm:w-auto">
-                   <Button
-                    size="sm"
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 backdrop-blur-sm transition-all flex-1 sm:flex-initial"
+            
+            {/* Botões de ação */}
+            <div className="flex gap-1 items-center flex-shrink-0">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    className="h-7 w-7 bg-primary hover:bg-primary/90 text-primary-foreground"
                     onClick={() => setIsNewLeadModalOpen(true)}
                   >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Novo Lead
+                    <Plus className="w-3.5 h-3.5" />
                   </Button>
+                </TooltipTrigger>
+                <TooltipContent>Novo Lead</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <Button
                     variant="outline"
-                    size="sm"
-                    className="border-white/10 bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white transition-colors"
+                    size="icon"
+                    className="h-7 w-7 border-white/10 bg-white/5 hover:bg-white/10"
                     onClick={() => setIsImportOpen(true)}
-                    title="Importar Leads"
                   >
-                    <Upload className="w-4 h-4" />
+                    <Upload className="w-3.5 h-3.5" />
                   </Button>
-                </div>
+                </TooltipTrigger>
+                <TooltipContent>Importar Leads</TooltipContent>
+              </Tooltip>
             </div>
-          </div>
 
-          <div className="flex gap-3 overflow-x-auto pb-2 sm:pb-0 items-center">
-              {/* Filtros Minimalistas */}
+            {/* Filtros */}
+            <div className="flex gap-1.5 items-center flex-shrink-0">
               <LeadsFiltersMinimal
                 filters={filters}
                 onFiltersChange={setFilters}
               />
-
-              {/* Filtros de Campos Customizados */}
               <LeadFiltersCompact
                 filters={customFieldsFilters}
                 onFiltersChange={setCustomFieldsFilters}
               />
+            </div>
           </div>
 
           {/* Seleção em Massa - Header */}
           {selectionMode && (
-            <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-lg p-2 mt-2">
+            <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-lg px-2 py-1 mt-1">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleSelectAll}
-                className="h-8 px-3"
+                className="h-6 px-2 text-xs"
               >
                 {allSelected ? (
                   <CheckSquare className="w-4 h-4 mr-2" />

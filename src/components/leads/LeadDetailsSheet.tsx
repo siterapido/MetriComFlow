@@ -25,21 +25,21 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  CalendarIcon, 
-  X, 
-  Loader2, 
-  Facebook, 
-  Trash2, 
-  MessageCircle, 
-  Phone, 
-  Mail, 
-  MessageSquare, 
-  ArrowRightLeft, 
-  User as UserIcon, 
-  DollarSign, 
-  Clock, 
-  AlertCircle, 
+import {
+  CalendarIcon,
+  X,
+  Loader2,
+  Facebook,
+  Trash2,
+  MessageCircle,
+  Phone,
+  Mail,
+  MessageSquare,
+  ArrowRightLeft,
+  User as UserIcon,
+  DollarSign,
+  Clock,
+  AlertCircle,
   Plus,
   Building2,
   MapPin,
@@ -62,6 +62,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAssignableUsers } from "@/hooks/useAssignableUsers";
 import { useUserPermissions, USER_TYPE_LABELS } from "@/hooks/useUserPermissions";
 import type { Tables } from "@/lib/database.types";
+import { buildLeadTitleFromCustomFields } from "@/lib/leadUtils";
 import {
   Dialog,
   DialogContent,
@@ -149,6 +150,9 @@ export function LeadDetailsSheet({ lead, open, onOpenChange }: LeadDetailsSheetP
     campaign_id: lead.campaign_id || undefined,
   });
 
+  // Estado para campos personalizados editáveis
+  const [customFields, setCustomFields] = useState<Record<string, any>>(lead.custom_fields || {});
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newLabelName, setNewLabelName] = useState("");
 
@@ -162,6 +166,13 @@ export function LeadDetailsSheet({ lead, open, onOpenChange }: LeadDetailsSheetP
       setFormData((prev) => ({ ...prev, contractValue: formatted }));
     }
   }, [lead.contract_value]);
+
+  // Atualizar título quando o lead mudar (quando abrir um lead diferente)
+  useEffect(() => {
+    const newTitle = buildLeadTitleFromCustomFields(lead.custom_fields, lead.title);
+    setFormData((prev) => ({ ...prev, title: newTitle }));
+    setCustomFields(lead.custom_fields || {});
+  }, [lead.id]);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -185,10 +196,13 @@ export function LeadDetailsSheet({ lead, open, onOpenChange }: LeadDetailsSheetP
       const selectedAssigneeName =
         assignableUsers?.find((user) => user.id === formData.assigneeId)?.full_name ?? null;
 
+      // Atualizar título automaticamente se houver nome fantasia ou razão social
+      const finalTitle = buildLeadTitleFromCustomFields(customFields, formData.title);
+
       await updateLead.mutateAsync({
         id: lead.id,
         updates: {
-          title: formData.title,
+          title: finalTitle,
           description: formData.description || null,
           status: formData.status,
           contract_value: contractValueNumber,
@@ -203,6 +217,7 @@ export function LeadDetailsSheet({ lead, open, onOpenChange }: LeadDetailsSheetP
           assignee_name: selectedAssigneeName,
           source: formData.source,
           campaign_id: formData.source === "meta_ads" ? (formData.campaign_id ?? null) : null,
+          custom_fields: customFields,
         },
       });
 
@@ -412,164 +427,225 @@ export function LeadDetailsSheet({ lead, open, onOpenChange }: LeadDetailsSheetP
 
             {/* Tab: Visão Geral */}
             <TabsContent value="overview" className="space-y-6 mt-6">
-              {/* Card: Dados da Empresa */}
-              {lead.custom_fields && Object.keys(lead.custom_fields).length > 0 && (
-                <div className="rounded-lg border bg-card p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <Building2 className="w-4 h-4" />
-                    Dados da Empresa
+              {/* Card: Dados da Empresa - Editável */}
+              <div className="rounded-lg border bg-card p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Building2 className="w-4 h-4" />
+                  Dados da Empresa
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <Label className="text-xs text-muted-foreground">Nome Fantasia</Label>
+                    <Input
+                      value={customFields["Nome Fantasia"] || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, "Nome Fantasia": e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="Nome fantasia da empresa"
+                    />
                   </div>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    {lead.custom_fields["Nome Fantasia"] && (
-                      <div className="col-span-2">
-                        <div className="text-xs text-muted-foreground">Nome Fantasia</div>
-                        <div className="font-medium">{lead.custom_fields["Nome Fantasia"]}</div>
-                      </div>
-                    )}
-                    {lead.custom_fields["Razão Social"] && (
-                      <div className="col-span-2">
-                        <div className="text-xs text-muted-foreground">Razão Social</div>
-                        <div className="font-medium">{lead.custom_fields["Razão Social"]}</div>
-                      </div>
-                    )}
-                    {lead.custom_fields.CNPJ && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">CNPJ</div>
-                        <div className="font-medium">{lead.custom_fields.CNPJ}</div>
-                      </div>
-                    )}
-                    {lead.custom_fields.Porte && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">Porte</div>
-                        <div className="font-medium">{lead.custom_fields.Porte}</div>
-                      </div>
-                    )}
-                    {lead.custom_fields["Capital Social"] && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">Capital Social</div>
-                        <div className="font-medium">{lead.custom_fields["Capital Social"]}</div>
-                      </div>
-                    )}
-                    {lead.custom_fields["Data de Abertura"] && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">Data de Abertura</div>
-                        <div className="font-medium">{lead.custom_fields["Data de Abertura"]}</div>
-                      </div>
-                    )}
-                    {lead.custom_fields["Atividade Principal"] && (
-                      <div className="col-span-2">
-                        <div className="text-xs text-muted-foreground">Atividade Principal</div>
-                        <div className="font-medium">{lead.custom_fields["Atividade Principal"]}</div>
-                      </div>
-                    )}
+                  <div className="col-span-2">
+                    <Label className="text-xs text-muted-foreground">Razão Social</Label>
+                    <Input
+                      value={customFields["Razão Social"] || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, "Razão Social": e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="Razão social da empresa"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">CNPJ</Label>
+                    <Input
+                      value={customFields.CNPJ || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, CNPJ: e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="00.000.000/0000-00"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Porte</Label>
+                    <Input
+                      value={customFields.Porte || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, Porte: e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="MEI, ME, EPP, etc."
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Capital Social</Label>
+                    <Input
+                      value={customFields["Capital Social"] || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, "Capital Social": e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="R$ 0,00"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Data de Abertura</Label>
+                    <Input
+                      value={customFields["Data de Abertura"] || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, "Data de Abertura": e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="DD/MM/AAAA"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-xs text-muted-foreground">Atividade Principal</Label>
+                    <Input
+                      value={customFields["Atividade Principal"] || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, "Atividade Principal": e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="Atividade principal da empresa"
+                    />
                   </div>
                 </div>
-              )}
+              </div>
 
-              {/* Card: Contato */}
+              {/* Card: Contato - Editável */}
               <div className="rounded-lg border bg-card p-4 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-semibold">
                   <Phone className="w-4 h-4" />
                   Contato
                 </div>
-                <div className="space-y-2 text-sm">
-                  {resolvedPhone && (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-xs text-muted-foreground">Telefone Principal</div>
-                        <div className="font-medium">{resolvedPhone}</div>
-                      </div>
-                      {whatsappHref && (
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Telefone Principal</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={customFields["Telefone Principal"] || customFields.phone || ""}
+                        onChange={(e) => setCustomFields({ ...customFields, "Telefone Principal": e.target.value })}
+                        className="h-9"
+                        disabled={isSubmitting}
+                        placeholder="(00) 00000-0000"
+                      />
+                      {(customFields["Telefone Principal"] || customFields.phone) && (
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-8"
-                          onClick={() => window.open(whatsappHref, "_blank")}
+                          className="h-9 shrink-0"
+                          onClick={() => {
+                            const phone = customFields["Telefone Principal"] || customFields.phone;
+                            const raw = phone.replace(/\D/g, "");
+                            const withCC = raw.startsWith("55") ? raw : `55${raw}`;
+                            window.open(`https://wa.me/${withCC}`, "_blank");
+                          }}
                         >
                           <MessageCircle className="w-3 h-3 mr-1" />
                           WhatsApp
                         </Button>
                       )}
                     </div>
-                  )}
-                  {lead.custom_fields?.["Telefone Secundário"] && (
-                    <div>
-                      <div className="text-xs text-muted-foreground">Telefone Secundário</div>
-                      <div className="font-medium">{lead.custom_fields["Telefone Secundário"]}</div>
-                    </div>
-                  )}
-                  {(() => {
-                    const extractEmail = (text?: string | null) => {
-                      if (!text) return null;
-                      const m = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-                      return m ? m[0] : null;
-                    };
-                    const email = lead.custom_fields?.["E-mail"] || (lead as any).email || extractEmail(lead.description);
-                    return email ? (
-                      <div>
-                        <div className="text-xs text-muted-foreground">E-mail</div>
-                        <a href={`mailto:${email}`} className="font-medium hover:underline">
-                          {email}
-                        </a>
-                      </div>
-                    ) : null;
-                  })()}
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Telefone Secundário</Label>
+                    <Input
+                      value={customFields["Telefone Secundário"] || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, "Telefone Secundário": e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="(00) 00000-0000"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">E-mail</Label>
+                    <Input
+                      type="email"
+                      value={customFields["E-mail"] || customFields.email || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, "E-mail": e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="email@exemplo.com"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Card: Endereço */}
-              {(lead.custom_fields?.Logradouro || lead.custom_fields?.Cidade || lead.custom_fields?.Estado) && (
-                <div className="rounded-lg border bg-card p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <MapPin className="w-4 h-4" />
-                    Endereço
+              {/* Card: Endereço - Editável */}
+              <div className="rounded-lg border bg-card p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <MapPin className="w-4 h-4" />
+                  Endereço
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <Label className="text-xs text-muted-foreground">Logradouro</Label>
+                    <Input
+                      value={customFields.Logradouro || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, Logradouro: e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="Rua, Avenida, etc."
+                    />
                   </div>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    {lead.custom_fields.Logradouro && (
-                      <div className="col-span-2">
-                        <div className="text-xs text-muted-foreground">Logradouro</div>
-                        <div className="font-medium">{lead.custom_fields.Logradouro}</div>
-                      </div>
-                    )}
-                    {lead.custom_fields.Número && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">Número</div>
-                        <div className="font-medium">{lead.custom_fields.Número}</div>
-                      </div>
-                    )}
-                    {lead.custom_fields.Complemento && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">Complemento</div>
-                        <div className="font-medium">{lead.custom_fields.Complemento}</div>
-                      </div>
-                    )}
-                    {lead.custom_fields.Bairro && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">Bairro</div>
-                        <div className="font-medium">{lead.custom_fields.Bairro}</div>
-                      </div>
-                    )}
-                    {lead.custom_fields.Cidade && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">Cidade</div>
-                        <div className="font-medium">{lead.custom_fields.Cidade}</div>
-                      </div>
-                    )}
-                    {lead.custom_fields.Estado && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">Estado</div>
-                        <div className="font-medium">{lead.custom_fields.Estado}</div>
-                      </div>
-                    )}
-                    {lead.custom_fields.CEP && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">CEP</div>
-                        <div className="font-medium">{lead.custom_fields.CEP}</div>
-                      </div>
-                    )}
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Número</Label>
+                    <Input
+                      value={customFields.Número || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, Número: e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="123"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Complemento</Label>
+                    <Input
+                      value={customFields.Complemento || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, Complemento: e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="Apto, Sala, etc."
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Bairro</Label>
+                    <Input
+                      value={customFields.Bairro || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, Bairro: e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="Nome do bairro"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Cidade</Label>
+                    <Input
+                      value={customFields.Cidade || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, Cidade: e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="Nome da cidade"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Estado</Label>
+                    <Input
+                      value={customFields.Estado || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, Estado: e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="UF"
+                      maxLength={2}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">CEP</Label>
+                    <Input
+                      value={customFields.CEP || ""}
+                      onChange={(e) => setCustomFields({ ...customFields, CEP: e.target.value })}
+                      className="h-9"
+                      disabled={isSubmitting}
+                      placeholder="00000-000"
+                    />
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Card: Descrição */}
               <div className="rounded-lg border bg-card p-4 space-y-3">
@@ -775,7 +851,7 @@ export function LeadDetailsSheet({ lead, open, onOpenChange }: LeadDetailsSheetP
                   <Clock className="w-4 h-4" />
                   Próximo Follow-up
                 </div>
-                
+
                 {(() => {
                   const d = formData.followUpDate || (lead.next_follow_up_date ? new Date(lead.next_follow_up_date) : undefined);
                   if (d) {
@@ -796,7 +872,7 @@ export function LeadDetailsSheet({ lead, open, onOpenChange }: LeadDetailsSheetP
                             try {
                               await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: null } });
                               setFormData({ ...formData, followUpDate: undefined });
-                            } catch {}
+                            } catch { }
                           }}
                         >
                           Limpar
@@ -841,7 +917,7 @@ export function LeadDetailsSheet({ lead, open, onOpenChange }: LeadDetailsSheetP
                             if (date) {
                               try {
                                 await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: date.toISOString().split('T')[0] } });
-                              } catch {}
+                              } catch { }
                             }
                           }}
                           initialFocus
@@ -871,7 +947,7 @@ export function LeadDetailsSheet({ lead, open, onOpenChange }: LeadDetailsSheetP
                           try {
                             await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: d.toISOString().split('T')[0] } });
                             toast({ title: 'Follow-up agendado', description: format(d, 'dd/MM/yyyy', { locale: ptBR }) });
-                          } catch {}
+                          } catch { }
                         }}
                       >
                         {opt.label}
@@ -918,10 +994,10 @@ export function LeadDetailsSheet({ lead, open, onOpenChange }: LeadDetailsSheetP
               </div>
 
               {/* Comentários */}
-              <CommentsSection 
-                leadId={lead.id} 
-                currentUserId={user?.id || undefined} 
-                nextFollowUpDate={formData.followUpDate || (lead.next_follow_up_date ? new Date(lead.next_follow_up_date) : undefined)} 
+              <CommentsSection
+                leadId={lead.id}
+                currentUserId={user?.id || undefined}
+                nextFollowUpDate={formData.followUpDate || (lead.next_follow_up_date ? new Date(lead.next_follow_up_date) : undefined)}
               />
 
               {/* Timeline */}
@@ -1164,10 +1240,10 @@ function FollowupTimeline({ lead, followUpDate, dueDate }: { lead: any; followUp
     const label = a.action_type === 'status_change'
       ? `Mudança: ${a.from_status || '—'} → ${a.to_status || '—'}`
       : a.action_type === 'assignment'
-      ? `Responsável: ${a.description || ''}`
-      : a.action_type === 'value_update'
-      ? `Valor atualizado`
-      : a.description || a.action_type;
+        ? `Responsável: ${a.description || ''}`
+        : a.action_type === 'value_update'
+          ? `Valor atualizado`
+          : a.description || a.action_type;
     items.push({ date: new Date(a.created_at), title: label, kind: a.action_type || "activity" });
   });
   (interactions || []).forEach((it: any) => {

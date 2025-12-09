@@ -32,12 +32,12 @@ const createUserSchema = z.object({
   password: z.string().min(6, "A senha deve ter no mínimo 6 caracteres"),
   full_name: z.string().min(1, "Nome é obrigatório"),
   // Restrição: proprietários não podem criar outros proprietários
-  user_type: z.enum(["traffic_manager", "sales"]),
+  user_type: z.enum(["traffic_manager", "sales", "crm_user"]),
 });
 
 const updateUserSchema = z.object({
   full_name: z.string().min(1, "Nome é obrigatório"),
-  user_type: z.enum(["owner", "traffic_manager", "sales"]),
+  user_type: z.enum(["owner", "traffic_manager", "sales", "crm_user"]),
 });
 
 interface UserFormDialogProps {
@@ -55,21 +55,21 @@ export function UserFormDialog({ open, onOpenChange, user, mode }: UserFormDialo
   const isEdit = mode === "edit";
   const schema = isEdit ? updateUserSchema : createUserSchema;
   // Limitar opções disponíveis no seletor (não permitir 'owner')
-  const allowedUserTypes: UserType[] = ["traffic_manager", "sales"];
+  const allowedUserTypes: UserType[] = ["traffic_manager", "sales", "crm_user"];
 
   const form = useForm({
     resolver: zodResolver(schema),
     defaultValues: isEdit && user
       ? {
-          full_name: user.full_name,
-          user_type: user.user_type,
-        }
+        full_name: user.full_name,
+        user_type: user.user_type,
+      }
       : {
-          email: "",
-          password: "",
-          full_name: "",
-          user_type: "sales" as UserType,
-        },
+        email: "",
+        password: "",
+        full_name: "",
+        user_type: "sales" as UserType,
+      },
   });
 
   useEffect(() => {
@@ -259,8 +259,8 @@ export function UserFormDialog({ open, onOpenChange, user, mode }: UserFormDialo
               {(createUser.isPending || updateUser.isPending)
                 ? "Salvando..."
                 : isEdit
-                ? "Atualizar Usuário"
-                : "Criar Usuário"}
+                  ? "Atualizar Usuário"
+                  : "Criar Usuário"}
             </Button>
           </div>
         </form>

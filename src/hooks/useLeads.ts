@@ -71,6 +71,7 @@ export interface LeadFilters {
   product_interest?: string
   lead_source_detail?: string
   campaign_id?: string
+  account_id?: string // ID da conta Meta Ads para filtrar leads por conta
   date_range?: {
     start: string
     end: string
@@ -217,8 +218,9 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
           .lte('created_at', filters.date_range.end)
       }
 
-      // Nota: Filtros de custom_fields serão aplicados no cliente após buscar os dados
-      // devido a limitações do Supabase com filtros OR em campos JSONB aninhados
+      // Nota: Filtros de custom_fields e account_id serão aplicados no cliente após buscar os dados
+      // devido a limitações do Supabase com filtros OR em campos JSONB aninhados e necessidade
+      // de buscar campanhas relacionadas à conta
 
       if (campaignId) {
         query = query.eq('campaign_id', campaignId)

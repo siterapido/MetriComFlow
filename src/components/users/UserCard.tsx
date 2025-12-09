@@ -19,7 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MoreVertical, Edit, Trash2, Shield, BarChart3, ShoppingCart } from "lucide-react";
+import { MoreVertical, Edit, Trash2, Shield, BarChart3, ShoppingCart, Users } from "lucide-react";
 import { USER_TYPE_LABELS } from "@/hooks/useUserPermissions";
 import { useDeleteUser, type User } from "@/hooks/useUsers";
 import { format } from "date-fns";
@@ -46,6 +46,8 @@ export function UserCard({ user, onEdit, canManage, currentUserId }: UserCardPro
         return <BarChart3 className="h-4 w-4" />;
       case "sales":
         return <ShoppingCart className="h-4 w-4" />;
+      case "crm_user":
+        return <Users className="h-4 w-4" />;
       default:
         return null;
     }
@@ -59,6 +61,8 @@ export function UserCard({ user, onEdit, canManage, currentUserId }: UserCardPro
         return "bg-gradient-to-br from-blue-500 to-cyan-500 text-white";
       case "sales":
         return "bg-gradient-to-br from-green-500 to-emerald-500 text-white";
+      case "crm_user":
+        return "bg-gradient-to-br from-purple-500 to-pink-500 text-white";
       default:
         return "bg-muted text-muted-foreground";
     }

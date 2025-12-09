@@ -9,12 +9,6 @@ export function AppLayout() {
   const { data: settings } = useUserSettings();
 
   useEffect(() => {
-    // Force dark mode as the base for the new theme
-    document.documentElement.classList.add("dark");
-    document.documentElement.dataset.theme = "dark";
-  }, []);
-
-  useEffect(() => {
     if (settings?.ui.language) {
       document.documentElement.lang = settings.ui.language;
     }

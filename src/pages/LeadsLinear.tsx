@@ -2,27 +2,19 @@ import { useState, useMemo } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Plus, Search, Loader2, LayoutList, Upload, CheckSquare, Square, CheckCircle2 } from "lucide-react";
+import { Plus, Search, Loader2, Upload, CheckSquare, Square, CheckCircle2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
 import { SpreadsheetImporter } from "@/components/leads/SpreadsheetImporter";
-import { LeadCard } from "@/components/leads/LeadCard";
+import { ModernLeadCard } from "@/components/leads/ModernLeadCard";
 import { StageValueCard } from "@/components/leads/StageValueCard";
-import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
 import { LeadsFiltersMinimal } from "@/components/leads/LeadsFiltersMinimal";
 import { LeadsBulkActions } from "@/components/leads/LeadsBulkActions";
 import { BulkEditModal } from "@/components/leads/BulkEditModal";
 import { useToast } from "@/hooks/use-toast";
 import { useLeads, useUpdateLead, type Lead, type LeadFilters } from "@/hooks/useLeads";
 import { useBulkDeleteLeads } from "@/hooks/useBulkLeadsActions";
-import { useAdAccounts, useAdCampaigns } from "@/hooks/useMetaMetrics";
-import type { FilterValues } from "@/components/meta-ads/MetaAdsFiltersV2";
+import { useAdCampaigns } from "@/hooks/useMetaMetrics";
 import { cn } from "@/lib/utils";
 
 // Define board stages
@@ -47,23 +39,22 @@ export default function LeadsLinear() {
   const { toast } = useToast();
   const bulkDelete = useBulkDeleteLeads();
 
-  // Filters state - novos filtros minimalistas
+  // Filters state unificado
   const [leadFilters, setLeadFilters] = useState<LeadFilters>({});
-  
-  // Filters state antigos (para os filtros de Meta Ads)
-  const [metaFilters, setMetaFilters] = useState<FilterValues>({
-    dateRange: undefined, // Sem filtro de data - mostra todos os leads
-  });
 
-  // Fetch data com os novos filtros (custom_fields já estão inclusos em leadFilters)
+  // Fetch data com os filtros unificados
   const { data: leads, isLoading, error } = useLeads(leadFilters);
   const updateLead = useUpdateLead();
-  const { data: accounts } = useAdAccounts();
-  const { data: campaigns } = useAdCampaigns(metaFilters.accountId);
+  const { data: campaigns } = useAdCampaigns(leadFilters.account_id);
 
   // Group leads by stage and calculate values
   const stageMetrics = useMemo(() => {
     if (!leads) return {};
+
+    // Obter IDs das campanhas da conta selecionada para filtro
+    const campaignIds = leadFilters.account_id && campaigns
+      ? campaigns.map(c => c.id)
+      : [];
 
     const filteredLeads = leads.filter((lead) => {
       // Filtro de busca
@@ -81,24 +72,24 @@ export default function LeadsLinear() {
           })()
         : true;
 
-      // Filtro de data Meta Ads (verifica created_at) - mantém compatibilidade com filtros antigos
+      // Filtro de data (já aplicado no hook useLeads, mas mantemos aqui para busca)
       const matchesDate = (() => {
-        if (metaFilters.dateRange && lead.created_at) {
+        if (leadFilters.date_range && lead.created_at) {
           const createdAt = new Date(lead.created_at);
           const createdDateStr = createdAt.toISOString().split('T')[0];
-          return createdDateStr >= metaFilters.dateRange.start && createdDateStr <= metaFilters.dateRange.end;
+          return createdDateStr >= leadFilters.date_range.start && createdDateStr <= leadFilters.date_range.end;
         }
         return true;
       })();
 
-      // Filtro de conta Meta Ads
-      const matchesAccount = metaFilters.accountId
-        ? lead.source === "meta_ads"
+      // Filtro de conta Meta Ads - filtra por campanhas da conta
+      const matchesAccount = leadFilters.account_id
+        ? lead.source === "meta_ads" && lead.campaign_id && campaignIds.includes(lead.campaign_id)
         : true;
 
-      // Filtro de campanha Meta Ads (apenas para filtros antigos)
-      const matchesCampaign = metaFilters.campaignId
-        ? lead.campaign_id === metaFilters.campaignId
+      // Filtro de campanha Meta Ads
+      const matchesCampaign = leadFilters.campaign_id
+        ? lead.campaign_id === leadFilters.campaign_id
         : true;
 
       return matchesSearch && matchesDate && matchesAccount && matchesCampaign;
@@ -118,7 +109,7 @@ export default function LeadsLinear() {
 
       return acc;
     }, {} as Record<StageId, { leads: Lead[]; totalValue: number; averageValue: number; count: number }>);
-  }, [leads, searchTerm, metaFilters]);
+  }, [leads, searchTerm, leadFilters, campaigns]);
 
   // Seleção em massa
   const selectionMode = isSelectionModeActive;
@@ -243,124 +234,78 @@ export default function LeadsLinear() {
   return (
     <div className="h-screen flex flex-col animate-fade-in">
       {/* Header */}
-      <div className="flex-shrink-0 space-y-4 pb-4">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-md">
-              <LayoutList className="w-7 h-7 text-white" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-foreground">CRM - Pipeline</h2>
-              <p className="text-muted-foreground mt-1">
-                Gestão horizontal de oportunidades e contratos
-              </p>
-            </div>
+      <div className="flex-shrink-0 space-y-2 pb-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto border-b border-white/5 pb-2">
+          {/* Barra de busca */}
+          <div className="relative flex-shrink-0 w-48">
+            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-muted-foreground w-3.5 h-3.5" />
+            <Input
+              placeholder="Buscar..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 pr-2 h-7 text-sm bg-input border-border"
+            />
           </div>
 
-          {/* Filters inline - Dashboard style */}
-          <div className="flex flex-wrap gap-2">
-            {/* Filtros minimalistas - unificado */}
+          {/* Botões de ação */}
+          <div className="flex gap-1 items-center flex-shrink-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  className="h-7 w-7 bg-primary hover:bg-primary/90"
+                  onClick={() => setIsNewLeadModalOpen(true)}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Novo Lead</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setIsImportOpen(true)}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Importar planilha</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={isSelectionModeActive ? "default" : "outline"}
+                  size="icon"
+                  className={cn("h-7 w-7", isSelectionModeActive && "bg-primary text-primary-foreground")}
+                  onClick={handleToggleSelectionMode}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{isSelectionModeActive ? "Sair da Seleção" : "Selecionar"}</TooltipContent>
+            </Tooltip>
+          </div>
+
+          {/* Filtros */}
+          <div className="flex gap-1.5 items-center flex-shrink-0">
             <LeadsFiltersMinimal
               filters={leadFilters}
               onFiltersChange={setLeadFilters}
             />
-
-            {/* Filtros Meta Ads (mantidos para compatibilidade) */}
-            <DateRangeFilter
-              value={metaFilters.dateRange}
-              onChange={(dateRange) => setMetaFilters({ ...metaFilters, dateRange })}
-            />
-
-            <Select
-              value={metaFilters.accountId || 'all'}
-              onValueChange={(value) => setMetaFilters({
-                ...metaFilters,
-                accountId: value === 'all' ? undefined : value,
-                campaignId: undefined
-              })}
-            >
-              <SelectTrigger className="w-[180px] bg-background">
-                <SelectValue placeholder="Todas as contas" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as contas</SelectItem>
-                {accounts?.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    {account.business_name || account.external_id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {metaFilters.accountId && (
-              <Select
-                value={metaFilters.campaignId || 'all'}
-                onValueChange={(value) => setMetaFilters({
-                  ...metaFilters,
-                  campaignId: value === 'all' ? undefined : value
-                })}
-              >
-                <SelectTrigger className="w-[200px] bg-background">
-                  <SelectValue placeholder="Todas as campanhas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as campanhas</SelectItem>
-                  {campaigns?.map((campaign) => (
-                    <SelectItem key={campaign.id} value={campaign.id}>
-                      {campaign.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
           </div>
-        </div>
-
-        {/* Search and New Lead Button */}
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder="Buscar leads..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-input border-border"
-            />
-          </div>
-
-          <Button
-            className="gap-2 bg-primary hover:bg-primary/90"
-            onClick={() => setIsNewLeadModalOpen(true)}
-          >
-            <Plus className="w-4 h-4" />
-            Novo Lead
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setIsImportOpen(true)}
-          >
-            <Upload className="w-4 h-4" />
-            Importar planilha
-          </Button>
-          <Button
-            variant={isSelectionModeActive ? "default" : "outline"}
-            className={cn("gap-2", isSelectionModeActive && "bg-primary text-primary-foreground")}
-            onClick={handleToggleSelectionMode}
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            {isSelectionModeActive ? "Sair da Seleção" : "Selecionar"}
-          </Button>
         </div>
 
         {/* Seleção em Massa - Header */}
         {isSelectionModeActive && (
-          <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-lg p-3">
+          <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-lg px-2 py-1">
             <Button
               variant="ghost"
               size="sm"
               onClick={handleSelectAll}
-              className="h-8 px-3"
+              className="h-6 px-2 text-xs"
             >
               {allSelected ? (
                 <CheckSquare className="w-4 h-4 mr-2" />
@@ -369,14 +314,14 @@ export default function LeadsLinear() {
               )}
               {allSelected ? "Desmarcar todos" : "Selecionar todos"}
             </Button>
-            <span className="text-sm text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {selectedLeadIds.size} {selectedLeadIds.size === 1 ? "lead selecionado" : "leads selecionados"}
             </span>
             <Button
               variant="ghost"
               size="sm"
               onClick={handleToggleSelectionMode}
-              className="h-8 px-3 ml-auto"
+              className="h-6 px-2 text-xs ml-auto"
             >
               Cancelar
             </Button>
@@ -458,8 +403,9 @@ export default function LeadsLinear() {
                                         snapshot.isDragging && "ring-2 ring-primary shadow-2xl scale-105 rotate-2"
                                       )}
                                     >
-                                      <LeadCard
+                                      <ModernLeadCard
                                         lead={lead}
+                                        index={index}
                                         isSelected={selectedLeadIds.has(lead.id)}
                                         onToggleSelection={handleToggleSelection}
                                         selectionMode={selectionMode}

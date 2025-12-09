@@ -158,9 +158,16 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
       if (formData.estado) customFields.Estado = formData.estado;
       if (formData.cep) customFields.CEP = formData.cep;
 
+      // Construir título baseado em nome fantasia ou razão social
+      const leadTitle = formData.nomeFantasia?.trim() 
+        ? formData.nomeFantasia.trim() 
+        : formData.razaoSocial?.trim() 
+        ? formData.razaoSocial.trim() 
+        : formData.title || "Lead sem nome";
+
       // Create lead
       const newLead = await createLead.mutateAsync({
-        title: formData.title,
+        title: leadTitle,
         description: formData.description || null,
         status: formData.status,
         value: totalContractValue,

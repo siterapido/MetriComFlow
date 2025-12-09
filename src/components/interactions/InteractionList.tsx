@@ -28,6 +28,7 @@ import { useInteractions, useDeleteInteraction, useInteractionTypes } from '@/ho
 import { useLeads } from '@/hooks/useLeads';
 import { InteractionForm } from './InteractionForm';
 import { Tables } from '@/lib/database.types';
+import { getLeadDisplayName } from '@/lib/leadUtils';
 
 type Interaction = Tables<'interactions'>;
 
@@ -123,7 +124,7 @@ export function InteractionList({ leadId }: InteractionListProps) {
 
   const getLeadName = (leadId: string) => {
     const lead = leads?.find(l => l.id === leadId);
-    return lead ? lead.title || 'Lead sem título' : 'Lead não encontrado';
+    return lead ? getLeadDisplayName(lead) : 'Lead não encontrado';
   };
 
   if (isLoading) {

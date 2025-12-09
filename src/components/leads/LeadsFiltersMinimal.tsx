@@ -19,7 +19,7 @@ import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useAssignableUsers } from "@/hooks/useAssignableUsers";
-import { useAdCampaigns } from "@/hooks/useMetaMetrics";
+import { useAdAccounts, useAdCampaigns } from "@/hooks/useMetaMetrics";
 import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
 import { useQuery } from "@tanstack/react-query";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
@@ -67,7 +67,8 @@ export function LeadsFiltersMinimal({ filters, onFiltersChange }: LeadsFiltersMi
   const { data: org } = useActiveOrganization();
   const { data: assignableUsers } = useAssignableUsers();
   const { hasActiveConnection } = useMetaConnectionStatus();
-  const { data: campaigns } = useAdCampaigns(undefined, { enabled: hasActiveConnection });
+  const { data: accounts } = useAdAccounts();
+  const { data: campaigns } = useAdCampaigns(filters.account_id, { enabled: hasActiveConnection });
 
   // Buscar valores únicos dos campos customizados
   const { data: customFieldsOptions } = useQuery({
@@ -120,6 +121,7 @@ export function LeadsFiltersMinimal({ filters, onFiltersChange }: LeadsFiltersMi
     !!filters.source ||
     !!filters.assignee_id ||
     !!filters.campaign_id ||
+    !!filters.account_id ||
     (filters.date_range?.start && filters.date_range?.end) ||
     (filters.custom_fields && Object.keys(filters.custom_fields).length > 0);
 
@@ -180,7 +182,9 @@ export function LeadsFiltersMinimal({ filters, onFiltersChange }: LeadsFiltersMi
               filters.source ? 1 : 0,
               filters.assignee_id ? 1 : 0,
               filters.campaign_id ? 1 : 0,
+              filters.account_id ? 1 : 0,
               filters.date_range ? 1 : 0,
+              filters.custom_fields ? Object.keys(filters.custom_fields).length : 0,
             ].reduce((a, b) => a + b, 0)}
           </Badge>
         )}
@@ -207,6 +211,7 @@ export function LeadsFiltersMinimal({ filters, onFiltersChange }: LeadsFiltersMi
                     filters.source ? 1 : 0,
                     filters.assignee_id ? 1 : 0,
                     filters.campaign_id ? 1 : 0,
+                    filters.account_id ? 1 : 0,
                     filters.date_range ? 1 : 0,
                     filters.custom_fields ? Object.keys(filters.custom_fields).length : 0,
                   ].reduce((a, b) => a + b, 0)} filtro(s) ativo(s)
@@ -329,71 +334,100 @@ export function LeadsFiltersMinimal({ filters, onFiltersChange }: LeadsFiltersMi
                     </div>
                   </div>
 
-                  {/* Campanha e Data */}
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Campanha */}
-                    {hasActiveConnection && campaigns && campaigns.length > 0 && (
+                  {/* Conta Meta Ads e Campanha */}
+                  {hasActiveConnection && accounts && accounts.length > 0 && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Conta Meta Ads */}
                       <div className="space-y-1.5">
-                        <label className="text-xs text-muted-foreground font-medium">Campanha</label>
+                        <label className="text-xs text-muted-foreground font-medium">Conta Meta Ads</label>
                         <Select
-                          value={filters.campaign_id || "all"}
-                          onValueChange={(value) => handleFilterChange('campaign_id', value === 'all' ? undefined : value)}
+                          value={filters.account_id || "all"}
+                          onValueChange={(value) => {
+                            handleFilterChange('account_id', value === 'all' ? undefined : value);
+                            // Limpar campanha quando mudar a conta
+                            if (value === 'all' || value !== filters.account_id) {
+                              handleFilterChange('campaign_id', undefined);
+                            }
+                          }}
                         >
                           <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Todas" />
+                            <SelectValue placeholder="Todas as contas" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="all">Todas</SelectItem>
-                            {campaigns.map((campaign) => (
-                              <SelectItem key={campaign.id} value={campaign.id}>
-                                <span className="truncate max-w-[150px]">{campaign.name}</span>
+                            <SelectItem value="all">Todas as contas</SelectItem>
+                            {accounts.map((account) => (
+                              <SelectItem key={account.id} value={account.id}>
+                                <span className="truncate max-w-[150px]">{account.business_name || account.external_id}</span>
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
-                    )}
 
-                    {/* Data de Criação */}
-                    <div className={cn("space-y-1.5", !hasActiveConnection && "col-span-2")}>
-                      <label className="text-xs text-muted-foreground font-medium">Data</label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full h-8 justify-start text-left font-normal text-xs",
-                              !dateRangeStart && !dateRangeEnd && "text-muted-foreground"
-                            )}
+                      {/* Campanha */}
+                      {filters.account_id && campaigns && campaigns.length > 0 && (
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-muted-foreground font-medium">Campanha</label>
+                          <Select
+                            value={filters.campaign_id || "all"}
+                            onValueChange={(value) => handleFilterChange('campaign_id', value === 'all' ? undefined : value)}
                           >
-                            <Calendar className="mr-2 h-3 w-3" />
-                            {dateRangeStart && dateRangeEnd
-                              ? `${format(dateRangeStart, "dd/MM", { locale: ptBR })} - ${format(dateRangeEnd, "dd/MM", { locale: ptBR })}`
-                              : "Período"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <CalendarPicker
-                            mode="range"
-                            selected={{
-                              from: dateRangeStart,
-                              to: dateRangeEnd,
-                            }}
-                            onSelect={(range) => {
-                              if (range?.from && range?.to) {
-                                handleDateRangeChange(range.from, range.to);
-                              } else if (range?.from) {
-                                handleDateRangeChange(range.from, undefined);
-                              } else {
-                                handleDateRangeChange(undefined, undefined);
-                              }
-                            }}
-                            locale={ptBR}
-                            numberOfMonths={2}
-                          />
-                        </PopoverContent>
-                      </Popover>
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Todas" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todas</SelectItem>
+                              {campaigns.map((campaign) => (
+                                <SelectItem key={campaign.id} value={campaign.id}>
+                                  <span className="truncate max-w-[150px]">{campaign.name}</span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </div>
+                  )}
+
+                  {/* Data de Criação */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground font-medium">Período</label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full h-8 justify-start text-left font-normal text-xs",
+                            !dateRangeStart && !dateRangeEnd && "text-muted-foreground"
+                          )}
+                        >
+                          <Calendar className="mr-2 h-3 w-3" />
+                          {dateRangeStart && dateRangeEnd
+                            ? `${format(dateRangeStart, "dd/MM", { locale: ptBR })} - ${format(dateRangeEnd, "dd/MM", { locale: ptBR })}`
+                            : "Todo o período"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarPicker
+                          mode="range"
+                          selected={{
+                            from: dateRangeStart,
+                            to: dateRangeEnd,
+                          }}
+                          onSelect={(range) => {
+                            if (range?.from && range?.to) {
+                              handleDateRangeChange(range.from, range.to);
+                            } else if (range?.from) {
+                              handleDateRangeChange(range.from, undefined);
+                            } else {
+                              handleDateRangeChange(undefined, undefined);
+                            }
+                          }}
+                          locale={ptBR}
+                          numberOfMonths={2}
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </TabsContent>
 

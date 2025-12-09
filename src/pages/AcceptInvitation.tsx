@@ -18,7 +18,7 @@ interface InvitationDetails {
   organization_name: string;
   invited_by: string;
   role: "owner" | "admin" | "manager" | "member";
-  user_type: "owner" | "traffic_manager" | "sales";
+  user_type: "owner" | "traffic_manager" | "sales" | "crm_user";
   status: "pending" | "accepted" | "expired" | "revoked";
   expires_at: string;
 }

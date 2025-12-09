@@ -42,3 +42,4 @@ A funcionalidade de importação de leads foi desabilitada temporariamente para 
 - A edge function `import-leads` ainda existe e pode ser chamada diretamente se necessário
 - As tabelas do banco de dados (`lead_import_batches`, `lead_import_rows`, `lead_import_mappings`) foram mantidas
 
+

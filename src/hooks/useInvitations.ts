@@ -9,7 +9,7 @@ export interface TeamInvitation {
   id: string;
   email: string;
   role: "owner" | "admin" | "manager" | "member";
-  user_type: "owner" | "traffic_manager" | "sales";
+  user_type: "owner" | "traffic_manager" | "sales" | "crm_user";
   status: InvitationStatus;
   created_at: string;
   expires_at: string;
@@ -24,7 +24,7 @@ export interface InvitationPayload {
   email?: string;
   // role is optional; defaults to 'member' server-side
   role?: "owner" | "admin" | "manager" | "member";
-  user_type?: "owner" | "traffic_manager" | "sales"; // optional; server defaults
+  user_type?: "owner" | "traffic_manager" | "sales" | "crm_user"; // optional; server defaults
   organization_id?: string;
 }
 
