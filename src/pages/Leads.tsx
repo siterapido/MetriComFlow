@@ -3,21 +3,19 @@ import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Plus, Search, Filter, Loader2, Facebook, LayoutGrid, List, Upload } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, Search, Loader2, Upload, CheckSquare, Square } from "lucide-react";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
 import { SpreadsheetImporter } from "@/components/leads/SpreadsheetImporter";
+import { LeadFiltersCompact, CustomFieldsFilters } from "@/components/leads/LeadFiltersCompact";
+import { LeadsFiltersMinimal } from "@/components/leads/LeadsFiltersMinimal";
+import { LeadsBulkActions } from "@/components/leads/LeadsBulkActions";
+import { BulkEditModal } from "@/components/leads/BulkEditModal";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { useLeads, useUpdateLead } from "@/hooks/useLeads";
+import { useLeads, useUpdateLead, type LeadFilters } from "@/hooks/useLeads";
 import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
-import { useAdCampaigns } from "@/hooks/useMetaMetrics";
+import { useBulkDeleteLeads } from "@/hooks/useBulkLeadsActions";
 import { ModernLeadCard } from "@/components/leads/ModernLeadCard";
 import { CelebrationOverlay } from "@/components/leads/CelebrationOverlay";
 import { motion } from "framer-motion";
@@ -43,10 +41,13 @@ export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'meta_ads' | 'manual'>('all');
-  const [campaignFilter, setCampaignFilter] = useState<string>('all');
+  const [customFieldsFilters, setCustomFieldsFilters] = useState<CustomFieldsFilters>({});
+  const [filters, setFilters] = useState<LeadFilters>({});
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const { toast } = useToast();
+  const bulkDelete = useBulkDeleteLeads();
 
   const {
     hasActiveConnection: hasMetaConnection,
@@ -57,37 +58,36 @@ export default function Leads() {
   const metaStatusPending = metaStatusLoading || metaStatusFetching;
   const hideMetaLeads = !metaStatusPending && !hasMetaConnection;
 
-  useEffect(() => {
-    if (hideMetaLeads && sourceFilter === 'meta_ads') {
-      setSourceFilter('all');
-    }
-  }, [hideMetaLeads, sourceFilter]);
-
-  const { data: leads, isLoading, error } = useLeads();
-  const { data: campaigns } = useAdCampaigns(undefined, { enabled: hasMetaConnection });
+  const { data: leads, isLoading, error } = useLeads({
+    ...filters,
+    custom_fields: Object.keys(customFieldsFilters).length > 0 ? customFieldsFilters : undefined,
+  });
   const updateLead = useUpdateLead();
 
   const boards = useMemo(() => {
     if (!leads) return BOARD_CONFIG.map(config => ({ ...config, cards: [] }));
 
     const filteredLeads = leads.filter(lead => {
+      // Busca por título e campos customizados
       const matchesSearch = searchTerm
-        ? lead.title.toLowerCase().includes(searchTerm.toLowerCase())
+        ? (() => {
+            const searchLower = searchTerm.toLowerCase();
+            const titleMatch = lead.title.toLowerCase().includes(searchLower);
+            const customFields = lead.custom_fields as Record<string, any> | null;
+            if (customFields) {
+              const nomeFantasia = customFields["Nome Fantasia"]?.toLowerCase() || "";
+              const razaoSocial = customFields["Razão Social"]?.toLowerCase() || "";
+              return titleMatch || nomeFantasia.includes(searchLower) || razaoSocial.includes(searchLower);
+            }
+            return titleMatch;
+          })()
         : true;
-
-      const matchesSource = sourceFilter === 'all'
-        ? true
-        : lead.source === sourceFilter;
-
-      const matchesCampaign = campaignFilter === 'all'
-        ? true
-        : lead.campaign_id === campaignFilter;
 
       const matchesVisibility = hideMetaLeads
         ? (lead.source !== 'meta_ads' && !lead.campaign_id)
         : true;
 
-      return matchesSearch && matchesSource && matchesCampaign && matchesVisibility;
+      return matchesSearch && matchesVisibility;
     });
 
     // Ordenar por posição ou data (exemplo simples)
@@ -97,7 +97,50 @@ export default function Leads() {
       ...config,
       cards: sortedLeads.filter(lead => lead.status === config.id)
     }));
-  }, [leads, searchTerm, sourceFilter, campaignFilter, hideMetaLeads]);
+  }, [leads, searchTerm, hideMetaLeads]);
+
+  // Seleção em massa
+  const selectionMode = selectedLeadIds.size > 0;
+  const allLeadIds = useMemo(() => {
+    return boards.flatMap(board => board.cards.map(card => card.id));
+  }, [boards]);
+  const allSelected = allLeadIds.length > 0 && allLeadIds.every(id => selectedLeadIds.has(id));
+  const someSelected = Array.from(selectedLeadIds).some(id => allLeadIds.includes(id));
+
+  const handleToggleSelection = (leadId: string) => {
+    setSelectedLeadIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(leadId)) {
+        newSet.delete(leadId);
+      } else {
+        newSet.add(leadId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (allSelected) {
+      setSelectedLeadIds(new Set());
+    } else {
+      setSelectedLeadIds(new Set(allLeadIds));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedLeadIds.size === 0) return;
+    
+    if (!confirm(`Tem certeza que deseja mover ${selectedLeadIds.size} lead(s) para a lixeira?`)) {
+      return;
+    }
+
+    try {
+      await bulkDelete.mutateAsync(Array.from(selectedLeadIds));
+      setSelectedLeadIds(new Set());
+    } catch (error) {
+      // Error já é tratado no hook
+    }
+  };
 
   const handleNewLead = () => {
     setIsNewLeadModalOpen(false);
@@ -164,86 +207,87 @@ export default function Leads() {
           <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[100px] opacity-40" />
        </div>
 
-      <div className="space-y-8 animate-fade-in relative z-10">
-        {/* Header Section */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/5 pb-6">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
-                Gestão de Leads
-            </h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-                Gerencie suas oportunidades com inteligência e agilidade.
-            </p>
-          </div>
+      <div className="space-y-6 animate-fade-in relative z-10">
+        {/* Header Section Compacto */}
+        <div className="flex flex-col gap-4 border-b border-white/5 pb-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                  CRM - Pipeline
+              </h1>
+              <p className="text-muted-foreground text-sm">
+                  Gestão horizontal de oportunidades e contratos
+              </p>
+            </div>
 
-          <div className="flex gap-3">
-             <Button
-              className="bg-primary/90 hover:bg-primary text-primary-foreground shadow-lg shadow-primary/20 backdrop-blur-sm transition-all hover:scale-105"
-              onClick={() => setIsNewLeadModalOpen(true)}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Lead
-            </Button>
-            <Button
-              variant="outline"
-              className="border-white/10 bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white transition-colors"
-              onClick={() => setIsImportOpen(true)}
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Importar
-            </Button>
-          </div>
-        </div>
-
-        {/* Filters Section */}
-        <div className="flex flex-col sm:flex-row gap-4 items-center bg-white/5 p-4 rounded-xl border border-white/5 backdrop-blur-sm">
-          <div className="relative flex-1 w-full max-w-md group">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors w-4 h-4" />
-            <Input
-              placeholder="Buscar por nome, empresa..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-black/20 border-white/10 focus:border-primary/50 transition-all text-sm h-10"
-            />
-          </div>
-
-          <div className="flex gap-3 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
-            <Select
-              value={sourceFilter}
-              onValueChange={(value) => setSourceFilter(value as any)}
-            >
-              <SelectTrigger className="w-[180px] bg-black/20 border-white/10 h-10">
-                <div className="flex items-center gap-2">
-                    <Filter className="w-3.5 h-3.5 text-muted-foreground" />
-                    <SelectValue placeholder="Origem" />
+            <div className="flex flex-col sm:flex-row gap-3 items-center w-full sm:w-auto">
+                <div className="relative w-full sm:w-64 group">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors w-4 h-4" />
+                  <Input
+                    placeholder="Buscar leads..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 bg-white/5 border-white/10 focus:border-primary/50 transition-all text-sm h-9"
+                  />
                 </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as Origens</SelectItem>
-                <SelectItem value="meta_ads" disabled={hideMetaLeads}>Meta Ads</SelectItem>
-                <SelectItem value="manual">Manual</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {hasMetaConnection && campaigns && campaigns.length > 0 && (
-              <Select
-                value={campaignFilter}
-                onValueChange={setCampaignFilter}
-              >
-                <SelectTrigger className="w-[200px] bg-black/20 border-white/10 h-10">
-                   <SelectValue placeholder="Campanha" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as Campanhas</SelectItem>
-                  {campaigns.map((campaign) => (
-                    <SelectItem key={campaign.id} value={campaign.id}>
-                      <span className="truncate max-w-[160px]">{campaign.name}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+                
+                <div className="flex gap-2 w-full sm:w-auto">
+                   <Button
+                    size="sm"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 backdrop-blur-sm transition-all flex-1 sm:flex-initial"
+                    onClick={() => setIsNewLeadModalOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Novo Lead
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-white/10 bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white transition-colors"
+                    onClick={() => setIsImportOpen(true)}
+                    title="Importar Leads"
+                  >
+                    <Upload className="w-4 h-4" />
+                  </Button>
+                </div>
+            </div>
           </div>
+
+          <div className="flex gap-3 overflow-x-auto pb-2 sm:pb-0 items-center">
+              {/* Filtros Minimalistas */}
+              <LeadsFiltersMinimal
+                filters={filters}
+                onFiltersChange={setFilters}
+              />
+
+              {/* Filtros de Campos Customizados */}
+              <LeadFiltersCompact
+                filters={customFieldsFilters}
+                onFiltersChange={setCustomFieldsFilters}
+              />
+          </div>
+
+          {/* Seleção em Massa - Header */}
+          {selectionMode && (
+            <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-lg p-2 mt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSelectAll}
+                className="h-8 px-3"
+              >
+                {allSelected ? (
+                  <CheckSquare className="w-4 h-4 mr-2" />
+                ) : (
+                  <Square className="w-4 h-4 mr-2" />
+                )}
+                {allSelected ? "Desmarcar todos" : "Selecionar todos"}
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {selectedLeadIds.size} {selectedLeadIds.size === 1 ? "lead selecionado" : "leads selecionados"}
+              </span>
+            </div>
+          )}
         </div>
 
         {hideMetaLeads && (
@@ -299,21 +343,18 @@ export default function Leads() {
                                 style={{ ...provided.draggableProps.style }}
                                 className="mb-3"
                               >
-                                <ModernLeadCard lead={lead} index={index} />
+                                <ModernLeadCard 
+                                  lead={lead} 
+                                  index={index}
+                                  isSelected={selectedLeadIds.has(lead.id)}
+                                  onToggleSelection={handleToggleSelection}
+                                  selectionMode={selectionMode}
+                                />
                               </div>
                             )}
                           </Draggable>
                         ))}
                         {provided.placeholder}
-                        
-                        {/* Quick Add Button per Column (Optional) */}
-                         <button
-                          onClick={() => setIsNewLeadModalOpen(true)}
-                          className="w-full py-3 rounded-xl border border-dashed border-white/10 text-muted-foreground/50 hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all flex items-center justify-center gap-2 text-xs group"
-                        >
-                            <Plus className="w-3 h-3 group-hover:scale-110 transition-transform" />
-                            Adicionar
-                        </button>
                       </div>
                     )}
                   </Droppable>
@@ -333,6 +374,23 @@ export default function Leads() {
       <CelebrationOverlay 
         isVisible={showCelebration} 
         onComplete={() => setShowCelebration(false)} 
+      />
+
+      {/* Barra de Ações em Massa */}
+      <LeadsBulkActions
+        selectedCount={selectedLeadIds.size}
+        onEdit={() => setIsBulkEditOpen(true)}
+        onDelete={handleBulkDelete}
+        onClearSelection={() => setSelectedLeadIds(new Set())}
+        isLoading={bulkDelete.isPending}
+      />
+
+      {/* Modal de Edição em Massa */}
+      <BulkEditModal
+        open={isBulkEditOpen}
+        onOpenChange={setIsBulkEditOpen}
+        selectedLeadIds={Array.from(selectedLeadIds)}
+        selectedCount={selectedLeadIds.size}
       />
     </div>
   );

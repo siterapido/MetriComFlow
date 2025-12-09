@@ -249,9 +249,9 @@ export function NewLeadModalSupabase({ open, onOpenChange, onSave }: NewLeadModa
               </Select>
             </div>
 
-            {/* Valor do Contrato */}
+            {/* Valor da Proposta */}
             <div className="space-y-2">
-              <Label htmlFor="value" className="text-foreground">Valor do Contrato</Label>
+              <Label htmlFor="value" className="text-foreground">Valor da Proposta</Label>
               <Input
                 id="value"
                 placeholder="R$ 0,00"

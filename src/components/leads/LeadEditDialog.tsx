@@ -563,10 +563,10 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
                   </Select>
                 </div>
 
-                {/* Valor do Contrato */}
+                {/* Valor da Proposta */}
                 <div className="space-y-2">
                   <Label htmlFor="contractValue" className="text-foreground">
-                    Valor do Contrato {formData.contractType === "monthly" ? "(mensal)" : ""}
+                    Valor da Proposta
                   </Label>
                   <Input
                     id="contractValue"

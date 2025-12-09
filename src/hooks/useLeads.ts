@@ -58,8 +58,8 @@ export interface LeadImportPayload {
 }
 
 // Novos tipos para CRM
-export type LeadStatus = 'novo' | 'contato_inicial' | 'qualificado' | 'proposta' | 'negociacao' | 'fechado_ganho' | 'fechado_perdido' | 'follow_up' | 'aguardando_resposta'
-export type LeadPriority = 'baixa' | 'media' | 'alta' | 'urgente'
+export type LeadStatus = 'novo_lead' | 'qualificacao' | 'proposta' | 'negociacao' | 'fechado_ganho' | 'fechado_perdido' | 'follow_up' | 'aguardando_resposta'
+export type LeadPriority = 'low' | 'medium' | 'high' | 'urgent'
 export type LeadSource = 'meta_ads' | 'google_ads' | 'whatsapp' | 'indicacao' | 'site' | 'telefone' | 'email' | 'evento' | 'manual'
 
 // Filtros para leads
@@ -74,6 +74,12 @@ export interface LeadFilters {
   date_range?: {
     start: string
     end: string
+  }
+  custom_fields?: {
+    Cidade?: string[]
+    Estado?: string[]
+    Porte?: string[]
+    "Nome Fantasia"?: string
   }
 }
 
@@ -173,6 +179,7 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
           )
         `)
         .eq('organization_id', org.id)
+        .is('deleted_at', null) // Filtrar leads deletados (soft delete)
         .order('position')
 
       // Aplicar filtros
@@ -210,6 +217,9 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
           .lte('created_at', filters.date_range.end)
       }
 
+      // Nota: Filtros de custom_fields serão aplicados no cliente após buscar os dados
+      // devido a limitações do Supabase com filtros OR em campos JSONB aninhados
+
       if (campaignId) {
         query = query.eq('campaign_id', campaignId)
       }
@@ -229,14 +239,54 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
         throw error
       }
 
-      logDebug('[useLeads] ✅ Leads encontrados:', data?.length || 0)
-      logDebug('[useLeads] Agrupados por status:', data?.reduce((acc, lead) => {
+      // Aplicar filtros de custom_fields no cliente
+      let filteredData = data || [];
+      if (filters?.custom_fields && filteredData.length > 0) {
+        const cf = filters.custom_fields;
+        
+        filteredData = filteredData.filter((lead) => {
+          const customFields = lead.custom_fields as Record<string, any> | null;
+          if (!customFields) return false;
+          
+          // Filtro por Cidade
+          if (cf.Cidade && cf.Cidade.length > 0) {
+            const cidade = customFields.Cidade;
+            if (!cidade || !cf.Cidade.includes(cidade)) return false;
+          }
+          
+          // Filtro por Estado
+          if (cf.Estado && cf.Estado.length > 0) {
+            const estado = customFields.Estado;
+            if (!estado || !cf.Estado.includes(estado)) return false;
+          }
+          
+          // Filtro por Porte
+          if (cf.Porte && cf.Porte.length > 0) {
+            const porte = customFields.Porte;
+            if (!porte || !cf.Porte.includes(porte)) return false;
+          }
+          
+          // Filtro por Nome Fantasia (busca por texto - case insensitive)
+          if (cf["Nome Fantasia"]) {
+            const nomeFantasia = customFields["Nome Fantasia"];
+            if (!nomeFantasia || 
+                !String(nomeFantasia).toLowerCase().includes(cf["Nome Fantasia"].toLowerCase())) {
+              return false;
+            }
+          }
+          
+          return true;
+        });
+      }
+
+      logDebug('[useLeads] ✅ Leads encontrados:', filteredData?.length || 0)
+      logDebug('[useLeads] Agrupados por status:', filteredData?.reduce((acc, lead) => {
         acc[lead.status] = (acc[lead.status] || 0) + 1
         return acc
       }, {} as Record<string, number>))
 
-      if (data && data.length > 0) {
-        logDebug('[useLeads] Primeiros 3 leads:', data.slice(0, 3).map(l => ({
+      if (filteredData && filteredData.length > 0) {
+        logDebug('[useLeads] Primeiros 3 leads:', filteredData.slice(0, 3).map(l => ({
           id: l.id,
           title: l.title,
           status: l.status,
@@ -251,7 +301,7 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
         })))
       }
 
-      return data as Lead[]
+      return filteredData as Lead[]
     },
     staleTime: 0, // sempre fresco para refletir mudanças imediatas
     refetchOnMount: true,

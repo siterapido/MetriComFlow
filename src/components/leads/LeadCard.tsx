@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,7 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format, formatDistanceToNowStrict, addHours, addDays, isPast, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { LeadEditDialog } from "./LeadEditDialog";
+import { LeadDetailsSheet } from "./LeadDetailsSheet";
 import type { Tables } from "@/lib/database.types";
 import { stripNonNumeric, validatePhone } from "@/lib/cpf-cnpj-validator";
 import { useUpdateLead } from "@/hooks/useLeads";
@@ -59,9 +60,19 @@ interface LeadCardProps {
   lead: Lead;
   onUpdate?: (id: string, data: Partial<Lead>) => void;
   className?: string;
+  isSelected?: boolean;
+  selectionMode?: boolean;
+  onToggleSelection?: (leadId: string) => void;
 }
 
-export function LeadCard({ lead, onUpdate, className }: LeadCardProps) {
+export function LeadCard({ 
+  lead, 
+  onUpdate, 
+  className,
+  isSelected = false,
+  selectionMode = false,
+  onToggleSelection
+}: LeadCardProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const updateLead = useUpdateLead();
   const { toast } = useToast();
@@ -200,16 +211,121 @@ export function LeadCard({ lead, onUpdate, className }: LeadCardProps) {
 
   return (
     <>
-      <Card
-        className={cn(
-          "bg-card border-border hover:border-primary/50 transition-all duration-200 cursor-pointer",
-          className
-        )}
-        onClick={() => setIsEditOpen(true)}
+      <motion.div
+        initial={false}
+        animate={{
+          scale: isSelected ? 1.02 : 1,
+        }}
+        transition={{
+          duration: 0.2,
+          ease: "easeOut"
+        }}
+        className="relative"
       >
-        <CardHeader className="pb-2 p-3">
+        <Card
+          className={cn(
+            "bg-card border-border transition-all duration-300 relative overflow-hidden",
+            selectionMode 
+              ? "cursor-pointer" 
+              : "cursor-pointer hover:border-primary/50",
+            isSelected && [
+              "bg-gradient-to-br from-blue-500/15 via-cyan-500/10 to-blue-500/15",
+              "border-blue-500 border-2",
+              "shadow-[0_0_20px_rgba(59,130,246,0.4)]",
+              "ring-1 ring-blue-400/50"
+            ],
+            !isSelected && selectionMode && "hover:bg-accent/30 hover:border-primary/30",
+            className
+          )}
+        onClick={(e) => {
+          // Se estiver em modo de seleção, permitir clicar no card inteiro para selecionar
+          if (selectionMode && onToggleSelection) {
+            // Não selecionar se clicar no checkbox (ele cuida da seleção)
+            if ((e.target as HTMLElement).closest('[role="checkbox"]') || 
+                (e.target as HTMLElement).closest('.checkbox-container')) {
+              return;
+            }
+            // Não selecionar se clicar em botões/ações dentro do card
+            if ((e.target as HTMLElement).closest('button') ||
+                (e.target as HTMLElement).closest('a') ||
+                (e.target as HTMLElement).closest('[role="button"]')) {
+              return;
+            }
+            onToggleSelection(lead.id);
+            return;
+          }
+          // Se clicar no checkbox ou em elementos dentro dele, não abrir o modal
+          if ((e.target as HTMLElement).closest('[role="checkbox"]') || 
+              (e.target as HTMLElement).closest('.checkbox-container')) {
+            return;
+          }
+          setIsEditOpen(true);
+        }}
+      >
+        {/* Efeito de glow animado quando selecionado */}
+        {isSelected && (
+          <>
+            <motion.div 
+              className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-cyan-400/5 to-blue-500/10 rounded-lg pointer-events-none"
+              animate={{
+                opacity: [0.3, 0.6, 0.3],
+              }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                ease: "easeInOut"
+              }}
+            />
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-blue-400 to-transparent pointer-events-none shadow-[0_0_10px_rgba(59,130,246,0.8)]" />
+          </>
+        )}
+
+        {/* Checkbox de Seleção */}
+        {selectionMode && onToggleSelection && (
+          <div 
+            className="absolute top-3 left-3 z-30 pointer-events-auto checkbox-container"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onToggleSelection(lead.id);
+            }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+            }}
+          >
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={(checked) => {
+                onToggleSelection(lead.id);
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+              className={cn(
+                "h-5 w-5 border-2 cursor-pointer transition-all duration-200 rounded-md",
+                isSelected 
+                  ? "border-blue-500 bg-blue-500 text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
+                  : "border-muted-foreground/30 hover:border-blue-400/50 bg-background/50"
+              )}
+            />
+          </div>
+        )}
+        
+        <CardHeader className={cn(
+          "pb-2 p-3 relative z-10 transition-colors duration-200",
+          selectionMode && onToggleSelection && "pl-10",
+          isSelected && "text-blue-100"
+        )}>
           <div className="flex items-start justify-between gap-2">
-            <CardTitle className="text-sm font-semibold text-foreground line-clamp-2 leading-tight">
+            <CardTitle className={cn(
+              "text-sm font-semibold line-clamp-2 leading-tight transition-colors duration-200",
+              isSelected ? "text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.3)]" : "text-foreground"
+            )}>
               {lead.title}
             </CardTitle>
             {whatsappHref && (
@@ -228,41 +344,29 @@ export function LeadCard({ lead, onUpdate, className }: LeadCardProps) {
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-2 p-3 pt-0">
+        <CardContent className={cn(
+          "space-y-2 p-3 pt-0 relative z-10 transition-colors duration-200",
+          isSelected && "text-foreground"
+        )}>
           {/* Contact: Telefone / WhatsApp */}
           {/* Telefone ocultado por solicitação: manter apenas o botão de WhatsApp */}
 
           {/* Custom Fields - Company Info */}
           {lead.custom_fields && (
             <div className="space-y-1.5 text-[11px]">
-              {/* Nome Fantasia / Razão Social */}
-              {(lead.custom_fields["Nome Fantasia"] || lead.custom_fields["Razão Social"]) && (
+              {/* Nome Fantasia */}
+              {lead.custom_fields["Nome Fantasia"] && (
                 <div className="flex items-start gap-1.5">
                   <Building2 className="w-3 h-3 shrink-0 mt-0.5 text-muted-foreground" />
                   <div className="flex-1 min-w-0">
-                    {lead.custom_fields["Nome Fantasia"] && (
-                      <p className="font-medium text-foreground truncate">
-                        {lead.custom_fields["Nome Fantasia"]}
-                      </p>
-                    )}
-                    {lead.custom_fields["Razão Social"] && (
-                      <p className="text-muted-foreground truncate">
-                        {lead.custom_fields["Razão Social"]}
-                      </p>
-                    )}
+                    <p className="font-medium text-foreground truncate">
+                      {lead.custom_fields["Nome Fantasia"]}
+                    </p>
                   </div>
                 </div>
               )}
 
-              {/* CNPJ */}
-              {lead.custom_fields.CNPJ && (
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Briefcase className="w-3 h-3 shrink-0" />
-                  <span className="truncate">CNPJ: {lead.custom_fields.CNPJ}</span>
-                </div>
-              )}
-
-              {/* Endereço */}
+              {/* Endereço - Cidade / Estado */}
               {(lead.custom_fields.Cidade || lead.custom_fields.Estado) && (
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <MapPin className="w-3 h-3 shrink-0" />
@@ -274,27 +378,13 @@ export function LeadCard({ lead, onUpdate, className }: LeadCardProps) {
                 </div>
               )}
 
-              {/* Email */}
-              {(lead.custom_fields.email || lead.custom_fields["E-mail"]) && (
+              {/* Capital Social */}
+              {lead.custom_fields["Capital Social"] && (
                 <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Mail className="w-3 h-3 shrink-0" />
-                  <span className="truncate">{lead.custom_fields.email || lead.custom_fields["E-mail"]}</span>
-                </div>
-              )}
-
-              {/* Porte / Capital Social */}
-              {(lead.custom_fields.Porte || lead.custom_fields["Capital Social"]) && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  {lead.custom_fields.Porte && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
-                      {lead.custom_fields.Porte}
-                    </Badge>
-                  )}
-                  {lead.custom_fields["Capital Social"] && (
-                    <span className="text-[10px]">
-                      Capital: {lead.custom_fields["Capital Social"]}
-                    </span>
-                  )}
+                  <Briefcase className="w-3 h-3 shrink-0" />
+                  <span className="text-[10px]">
+                    Capital: {lead.custom_fields["Capital Social"]}
+                  </span>
                 </div>
               )}
             </div>
@@ -519,8 +609,10 @@ export function LeadCard({ lead, onUpdate, className }: LeadCardProps) {
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
-      <LeadEditDialog lead={lead} open={isEditOpen} onOpenChange={setIsEditOpen} />
+      </motion.div>
+
+      {/* Edit Sheet */}
+      <LeadDetailsSheet lead={lead} open={isEditOpen} onOpenChange={setIsEditOpen} />
     </>
   );
 }

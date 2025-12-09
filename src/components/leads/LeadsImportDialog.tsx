@@ -80,7 +80,7 @@ const MAPPING_FIELDS = [
   { id: "description", label: "Descrição", hint: "Notas ou contexto" },
   { id: "status", label: "Status", hint: "Etapas do funil" },
   { id: "value", label: "Valor total", hint: "Usado nos dashboards" },
-  { id: "contract_value", label: "Valor do contrato" },
+  { id: "contract_value", label: "Valor da Proposta" },
   { id: "contract_months", label: "Meses (contratos mensais)" },
   { id: "contract_type", label: "Tipo de contrato" },
   { id: "priority", label: "Prioridade" },

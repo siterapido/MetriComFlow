@@ -1,41 +1,24 @@
-import { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react";
+import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import {
-  MessageSquare,
+  MessageCircle,
   Calendar,
   User,
-  Facebook,
-  Phone,
-  MessageCircle,
-  Mail,
-  Globe,
-  Megaphone,
   Clock,
-  MoreHorizontal,
   Edit2,
   Building2,
   MapPin,
   Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format, formatDistanceToNowStrict, addDays, isPast, isToday } from "date-fns";
+import { format, formatDistanceToNowStrict } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Tables } from "@/lib/database.types";
-import { stripNonNumeric, validatePhone } from "@/lib/cpf-cnpj-validator";
-import { useUpdateLead } from "@/hooks/useLeads";
-import { useToast } from "@/hooks/use-toast";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { LeadEditDialog } from "./LeadEditDialog";
-import { useAuth } from "@/hooks/useAuth";
+import { Checkbox } from "@/components/ui/checkbox";
+import { LeadDetailsSheet } from "./LeadDetailsSheet";
 
-// Tipos trazidos do componente original
 type Lead = Tables<"leads"> & {
   lead_labels?: Array<{
     labels: Tables<"labels">;
@@ -53,18 +36,24 @@ type Lead = Tables<"leads"> & {
 interface ModernLeadCardProps {
   lead: Lead;
   index: number;
+  isSelected?: boolean;
+  onToggleSelection?: (leadId: string) => void;
+  selectionMode?: boolean;
 }
 
-export function ModernLeadCard({ lead, index }: ModernLeadCardProps) {
+export function ModernLeadCard({ 
+  lead, 
+  index, 
+  isSelected = false, 
+  onToggleSelection,
+  selectionMode = false 
+}: ModernLeadCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const updateLead = useUpdateLead();
-  const { toast } = useToast();
-  const { user } = useAuth();
   
   const isWon = lead.status === 'fechado_ganho';
 
-  // Cores modernas e vibrantes para labels
+  // Cores modernas para labels
   const getLabelColor = (name: string) => {
     const colors: { [key: string]: string } = {
       Urgente: "bg-red-500/10 text-red-400 border-red-500/20",
@@ -82,29 +71,24 @@ export function ModernLeadCard({ lead, index }: ModernLeadCardProps) {
     return colors[name] || "bg-white/5 text-muted-foreground border-white/10";
   };
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-      maximumFractionDigits: 0, 
-    }).format(value);
-  };
+  // Resolve phone for WhatsApp
+  const resolvedPhone: string | null = (() => {
+    const p = (lead as any).phone as string | undefined;
+    const extractPhone = (text?: string | null) => {
+      if (!text) return null;
+      const match = (text.match(/\d[\d\s().-]{8,}\d/g) || [])
+        .map((m) => m.replace(/\D/g, ""))
+        .find((n) => n.length >= 10 && n.length <= 13);
+      return match || null;
+    };
+    const fromDesc = extractPhone(lead.description);
+    const fromCustom = lead.custom_fields?.["Telefone Principal"] || lead.custom_fields?.phone;
+    return p || fromCustom || fromDesc || null;
+  })();
 
-  // Ícones de origem minimalistas
-  const SourceIcon = () => {
-    const source = lead.source || "manual";
-    const iconClass = "w-3 h-3";
-    
-    switch (source) {
-      case "meta_ads": return <Facebook className={cn(iconClass, "text-blue-400")} />;
-      case "whatsapp": return <MessageCircle className={cn(iconClass, "text-emerald-400")} />;
-      case "google_ads": return <Megaphone className={cn(iconClass, "text-yellow-400")} />;
-      case "site": return <Globe className={cn(iconClass, "text-slate-400")} />;
-      case "email": return <Mail className={cn(iconClass, "text-indigo-400")} />;
-      case "telefone": return <Phone className={cn(iconClass, "text-zinc-400")} />;
-      default: return <User className={cn(iconClass, "text-muted-foreground")} />;
-    }
-  };
+  const whatsappHref = resolvedPhone
+    ? `https://wa.me/${String(resolvedPhone).replace(/\D/g, "").replace(/^((?!55).*)$/, "55$1")}`
+    : null;
 
   return (
     <>
@@ -116,16 +100,24 @@ export function ModernLeadCard({ lead, index }: ModernLeadCardProps) {
         className="relative group mb-3"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
-        onClick={() => setIsEditOpen(true)}
+        onClick={(e) => {
+          // Se estiver em modo de seleção e clicar no checkbox, não abrir o modal
+          if ((e.target as HTMLElement).closest('[role="checkbox"]')) {
+            return;
+          }
+          if (!selectionMode) {
+            setIsEditOpen(true);
+          }
+        }}
       >
-        {/* Victory/Achievement Glow Effect - Only for Won Leads */}
+        {/* Victory Glow Effect - Only for Won Leads */}
         {isWon && (
           <>
             <motion.div
               className="absolute -inset-[3px] rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 opacity-75 blur-md z-[-1]"
               animate={{
                 opacity: [0.5, 0.8, 0.5],
-                rotate: [0, 1, 0, -1, 0], // Slight wobble
+                rotate: [0, 1, 0, -1, 0],
               }}
               transition={{
                 duration: 4,
@@ -148,7 +140,7 @@ export function ModernLeadCard({ lead, index }: ModernLeadCardProps) {
           </>
         )}
 
-        {/* Glow Effect no Hover (Only if not won to avoid conflict) */}
+        {/* Glow Effect on Hover (Only if not won) */}
         {!isWon && (
           <div 
             className={cn(
@@ -160,11 +152,30 @@ export function ModernLeadCard({ lead, index }: ModernLeadCardProps) {
 
         {/* Card Content */}
         <div className={cn(
-            "relative bg-[#0f0f12]/90 backdrop-blur-md rounded-xl p-4 shadow-xl overflow-hidden transition-all duration-300",
+            "relative bg-card backdrop-blur-md rounded-xl p-4 shadow-lg overflow-hidden transition-all duration-300",
             isWon 
-              ? "border border-emerald-500/40 shadow-[0_0_15px_-3px_rgba(16,185,129,0.3)]" 
-              : "border border-white/5 hover:border-primary/20"
+              ? "border-2 border-emerald-500/40 shadow-[0_0_15px_-3px_rgba(16,185,129,0.3)]" 
+              : "border border-border hover:border-primary/30 hover:shadow-xl",
+            isSelected && "ring-2 ring-primary ring-offset-2",
+            selectionMode ? "cursor-default" : "cursor-pointer"
           )}>
+          
+          {/* Checkbox de Seleção */}
+          {selectionMode && onToggleSelection && (
+            <div 
+              className="absolute top-3 left-3 z-20"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleSelection(lead.id);
+              }}
+            >
+              <Checkbox
+                checked={isSelected}
+                onCheckedChange={() => onToggleSelection(lead.id)}
+                className="h-5 w-5 border-2"
+              />
+            </div>
+          )}
           
           {/* Victory Shine Effect */}
           {isWon && (
@@ -186,59 +197,32 @@ export function ModernLeadCard({ lead, index }: ModernLeadCardProps) {
             />
           )}
           
-          {/* Header: Title & Value */}
-          <div className="flex justify-between items-start gap-3 mb-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="font-medium text-sm text-gray-100 truncate leading-tight group-hover:text-primary transition-colors">
-                {lead.title}
-              </h3>
-              {lead.description && (
-                <p className="text-[11px] text-gray-500 truncate mt-0.5">
-                  {lead.description}
-                </p>
-              )}
-            </div>
-            {lead.value > 0 && (
-              <div className="shrink-0 font-semibold text-emerald-400 text-xs bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20">
-                {formatCurrency(lead.value)}
-              </div>
-            )}
+          {/* Header: Title */}
+          <div className={cn("mb-3 relative z-10", selectionMode && onToggleSelection && "pl-8")}>
+            <h3 className="font-semibold text-sm text-foreground truncate leading-tight group-hover:text-primary transition-colors">
+              {lead.title}
+            </h3>
           </div>
 
-          {/* Custom Fields - Company Info */}
+          {/* Body: Custom Fields - Company Info */}
           {lead.custom_fields && (
-            <div className="space-y-1 mb-2 text-[11px]">
-              {/* Nome Fantasia / Razão Social */}
-              {(lead.custom_fields["Nome Fantasia"] || lead.custom_fields["Razão Social"]) && (
-                <div className="flex items-start gap-1.5">
-                  <Building2 className="w-3 h-3 shrink-0 mt-0.5 text-gray-500" />
+            <div className="space-y-2 mb-3 text-[11px] relative z-10">
+              {/* Nome Fantasia */}
+              {lead.custom_fields["Nome Fantasia"] && (
+                <div className="flex items-start gap-2">
+                  <Building2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
                   <div className="flex-1 min-w-0">
-                    {lead.custom_fields["Nome Fantasia"] && (
-                      <p className="font-medium text-gray-300 truncate">
-                        {lead.custom_fields["Nome Fantasia"]}
-                      </p>
-                    )}
-                    {lead.custom_fields["Razão Social"] && (
-                      <p className="text-gray-500 truncate">
-                        {lead.custom_fields["Razão Social"]}
-                      </p>
-                    )}
+                    <p className="font-medium text-foreground/90 truncate">
+                      {lead.custom_fields["Nome Fantasia"]}
+                    </p>
                   </div>
                 </div>
               )}
 
-              {/* CNPJ */}
-              {lead.custom_fields.CNPJ && (
-                <div className="flex items-center gap-1.5 text-gray-500">
-                  <Briefcase className="w-3 h-3 shrink-0" />
-                  <span className="truncate">CNPJ: {lead.custom_fields.CNPJ}</span>
-                </div>
-              )}
-
-              {/* Endereço */}
+              {/* Cidade / Estado */}
               {(lead.custom_fields.Cidade || lead.custom_fields.Estado) && (
-                <div className="flex items-center gap-1.5 text-gray-500">
-                  <MapPin className="w-3 h-3 shrink-0" />
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <MapPin className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate">
                     {[lead.custom_fields.Cidade, lead.custom_fields.Estado]
                       .filter(Boolean)
@@ -247,66 +231,30 @@ export function ModernLeadCard({ lead, index }: ModernLeadCardProps) {
                 </div>
               )}
 
-              {/* Email */}
-              {(lead.custom_fields.email || lead.custom_fields["E-mail"]) && (
-                <div className="flex items-center gap-1.5 text-gray-500">
-                  <Mail className="w-3 h-3 shrink-0" />
-                  <span className="truncate">{lead.custom_fields.email || lead.custom_fields["E-mail"]}</span>
-                </div>
-              )}
-
-              {/* Porte / Capital Social */}
-              {(lead.custom_fields.Porte || lead.custom_fields["Capital Social"]) && (
-                <div className="flex items-center gap-2 text-gray-500">
-                  {lead.custom_fields.Porte && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 bg-white/5 border-white/10">
-                      {lead.custom_fields.Porte}
-                    </Badge>
-                  )}
-                  {lead.custom_fields["Capital Social"] && (
-                    <span className="text-[10px]">
-                      Capital: {lead.custom_fields["Capital Social"]}
-                    </span>
-                  )}
+              {/* Capital Social */}
+              {lead.custom_fields["Capital Social"] && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Briefcase className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-[10px]">
+                    Capital: {lead.custom_fields["Capital Social"]}
+                  </span>
                 </div>
               )}
             </div>
           )}
 
-          {/* Badges & Source */}
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-             <div className="flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded-full border border-white/5" title={`Origem: ${lead.source}`}>
-                <SourceIcon />
-                <span className="text-[10px] text-gray-400 capitalize">{lead.source?.replace('_', ' ') || 'Manual'}</span>
-             </div>
-             
-             {lead.lead_labels?.slice(0, 2).map((labelRel, idx) => (
-               <Badge 
-                 key={idx} 
-                 variant="outline" 
-                 className={cn("text-[10px] h-5 px-2 border font-normal", getLabelColor(labelRel.labels.name))}
-               >
-                 {labelRel.labels.name}
-               </Badge>
-             ))}
-             {(lead.lead_labels?.length || 0) > 2 && (
-               <span className="text-[10px] text-gray-500">+{ (lead.lead_labels?.length || 0) - 2}</span>
-             )}
-          </div>
-
-          {/* Footer Secundário (Reveal on Hover) */}
-          <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
-            {/* Sempre visível: Data ou Assignee */}
-            <div className="flex items-center gap-3 text-[10px] text-gray-500">
-               {lead.assignee_name && (
-                 <div className="flex items-center gap-1">
-                   <div className="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center text-primary text-[8px]">
+          {/* Footer */}
+          <div className="flex items-center justify-between pt-3 border-t border-border/50 relative z-10">
+            {/* Left: Assignee or Date */}
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+               {lead.assignee_name ? (
+                 <div className="flex items-center gap-1.5">
+                   <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-primary text-[8px] font-semibold">
                      {lead.assignee_name.charAt(0).toUpperCase()}
                    </div>
-                   <span className="max-w-[60px] truncate">{lead.assignee_name}</span>
+                   <span className="max-w-[80px] truncate font-medium">{lead.assignee_name}</span>
                  </div>
-               )}
-               {!lead.assignee_name && (
+               ) : (
                  <span className="flex items-center gap-1">
                    <Clock className="w-3 h-3" />
                    {formatDistanceToNowStrict(new Date(lead.created_at), { locale: ptBR, addSuffix: true })}
@@ -314,35 +262,67 @@ export function ModernLeadCard({ lead, index }: ModernLeadCardProps) {
                )}
             </div>
 
-            {/* Ações Secundárias (Visíveis apenas no hover) */}
-            <div className={cn(
-              "flex items-center gap-1 transition-opacity duration-200",
-              isHovered ? "opacity-100" : "opacity-0"
-            )}>
-               <Button 
-                 variant="ghost" 
-                 size="icon" 
-                 className="h-6 w-6 rounded-full hover:bg-white/10 hover:text-white"
-                 onClick={(e) => {
-                   e.stopPropagation();
-                   setIsEditOpen(true);
-                 }}
-               >
-                 <Edit2 className="w-3 h-3" />
-               </Button>
-               {/* Mais ações podem ser adicionadas aqui */}
+            {/* Right: Badges & Actions */}
+            <div className="flex items-center gap-2">
+              {/* Badges (max 2) */}
+              <div className="flex items-center gap-1">
+                {lead.lead_labels?.slice(0, 2).map((labelRel, idx) => (
+                  <Badge 
+                    key={idx} 
+                    variant="outline" 
+                    className={cn("text-[9px] h-5 px-1.5 border font-normal", getLabelColor(labelRel.labels.name))}
+                  >
+                    {labelRel.labels.name}
+                  </Badge>
+                ))}
+                {(lead.lead_labels?.length || 0) > 2 && (
+                  <span className="text-[9px] text-muted-foreground">+{(lead.lead_labels?.length || 0) - 2}</span>
+                )}
+              </div>
+
+              {/* Actions (visible on hover) */}
+              <div className={cn(
+                "flex items-center gap-1 transition-opacity duration-200",
+                isHovered ? "opacity-100" : "opacity-0"
+              )}>
+                {whatsappHref && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-7 w-7 rounded-full hover:bg-emerald-500/10 hover:text-emerald-500"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(whatsappHref, "_blank");
+                    }}
+                    title="WhatsApp"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-7 w-7 rounded-full hover:bg-primary/10 hover:text-primary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsEditOpen(true);
+                  }}
+                  title="Editar"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
             </div>
           </div>
-          
-          {/* Indicador de Meta Ads sutil (faixa lateral) */}
-          {lead.source === 'meta_ads' && (
-            <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-500/50" />
-          )}
         </div>
       </motion.div>
 
-      <LeadEditDialog lead={lead} open={isEditOpen} onOpenChange={setIsEditOpen} />
+      <LeadDetailsSheet lead={lead} open={isEditOpen} onOpenChange={setIsEditOpen} />
     </>
   );
 }
+
+
+
+
 

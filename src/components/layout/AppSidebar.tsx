@@ -79,12 +79,12 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-white/5 bg-sidebar/80 backdrop-blur-xl shadow-2xl">
       <SidebarContent>
-        <div className="px-4 py-6 flex items-center justify-between">
+        <div className={`py-6 flex items-center justify-between transition-all duration-300 ${isCollapsed ? 'px-2' : 'px-4'}`}>
           <div className={`flex items-center gap-3 transition-all duration-300 ${isCollapsed ? 'justify-center w-full' : ''}`}>
              <div className="relative">
                 <div className="absolute inset-0 bg-primary blur-md opacity-40 rounded-lg"></div>
-                <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center relative z-10 shadow-lg border border-white/10">
-                  <img src="/favicon.ico" alt="Logo" className="w-6 h-6 brightness-200" />
+                <div className={`bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center relative z-10 shadow-lg border border-white/10 transition-all duration-300 ${isCollapsed ? 'w-8 h-8' : 'w-10 h-10'}`}>
+                  <img src="/favicon.ico" alt="Logo" className={`brightness-200 transition-all duration-300 ${isCollapsed ? 'w-5 h-5' : 'w-6 h-6'}`} />
                 </div>
              </div>
              
@@ -99,7 +99,7 @@ export function AppSidebar() {
 
         <SidebarGroup className="mt-4">
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-2 px-2">
+            <SidebarMenu className={`space-y-2 transition-all duration-300 ${isCollapsed ? 'px-1' : 'px-2'}`}>
               {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton 
@@ -107,7 +107,8 @@ export function AppSidebar() {
                     isActive={isActive(item.url)}
                     tooltip={item.title}
                     className={`
-                        group relative overflow-hidden transition-all duration-300 rounded-xl px-3 py-3 h-auto
+                        group relative overflow-hidden transition-all duration-300 rounded-xl h-auto
+                        ${isCollapsed ? 'px-2 py-2' : 'px-3 py-3'}
                         ${isActive(item.url) 
                             ? "bg-primary/10 text-primary font-semibold shadow-[0_0_15px_rgba(0,191,255,0.15)] border border-primary/20" 
                             : "text-muted-foreground hover:text-foreground hover:bg-white/5 hover:border-white/10 border border-transparent"

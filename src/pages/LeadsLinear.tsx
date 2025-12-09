@@ -9,15 +9,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Loader2, LayoutList, Filter, Upload } from "lucide-react";
+import { Plus, Search, Loader2, LayoutList, Upload, CheckSquare, Square, CheckCircle2 } from "lucide-react";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
 import { SpreadsheetImporter } from "@/components/leads/SpreadsheetImporter";
 import { LeadCard } from "@/components/leads/LeadCard";
 import { StageValueCard } from "@/components/leads/StageValueCard";
 import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
+import { LeadsFiltersMinimal } from "@/components/leads/LeadsFiltersMinimal";
+import { LeadsBulkActions } from "@/components/leads/LeadsBulkActions";
+import { BulkEditModal } from "@/components/leads/BulkEditModal";
 import { useToast } from "@/hooks/use-toast";
-import { useLeads, useUpdateLead, type Lead } from "@/hooks/useLeads";
-import { useAdAccounts, useAdCampaigns, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
+import { useLeads, useUpdateLead, type Lead, type LeadFilters } from "@/hooks/useLeads";
+import { useBulkDeleteLeads } from "@/hooks/useBulkLeadsActions";
+import { useAdAccounts, useAdCampaigns } from "@/hooks/useMetaMetrics";
 import type { FilterValues } from "@/components/meta-ads/MetaAdsFiltersV2";
 import { cn } from "@/lib/utils";
 
@@ -37,18 +41,25 @@ export default function LeadsLinear() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
+  const [isSelectionModeActive, setIsSelectionModeActive] = useState(false);
   const { toast } = useToast();
+  const bulkDelete = useBulkDeleteLeads();
 
-  // Filters state (sem filtro de data por padrão - mostra todos os leads)
-  const [filters, setFilters] = useState<FilterValues>({
+  // Filters state - novos filtros minimalistas
+  const [leadFilters, setLeadFilters] = useState<LeadFilters>({});
+  
+  // Filters state antigos (para os filtros de Meta Ads)
+  const [metaFilters, setMetaFilters] = useState<FilterValues>({
     dateRange: undefined, // Sem filtro de data - mostra todos os leads
   });
 
-  // Fetch data
-  const { data: leads, isLoading, error } = useLeads();
+  // Fetch data com os novos filtros (custom_fields já estão inclusos em leadFilters)
+  const { data: leads, isLoading, error } = useLeads(leadFilters);
   const updateLead = useUpdateLead();
   const { data: accounts } = useAdAccounts();
-  const { data: campaigns } = useAdCampaigns(filters.accountId);
+  const { data: campaigns } = useAdCampaigns(metaFilters.accountId);
 
   // Group leads by stage and calculate values
   const stageMetrics = useMemo(() => {
@@ -57,29 +68,37 @@ export default function LeadsLinear() {
     const filteredLeads = leads.filter((lead) => {
       // Filtro de busca
       const matchesSearch = searchTerm
-        ? lead.title.toLowerCase().includes(searchTerm.toLowerCase())
+        ? (() => {
+            const searchLower = searchTerm.toLowerCase();
+            const titleMatch = lead.title.toLowerCase().includes(searchLower);
+            const customFields = lead.custom_fields as Record<string, any> | null;
+            if (customFields) {
+              const nomeFantasia = customFields["Nome Fantasia"]?.toLowerCase() || "";
+              const razaoSocial = customFields["Razão Social"]?.toLowerCase() || "";
+              return titleMatch || nomeFantasia.includes(searchLower) || razaoSocial.includes(searchLower);
+            }
+            return titleMatch;
+          })()
         : true;
 
-      // Filtro de data (verifica created_at)
+      // Filtro de data Meta Ads (verifica created_at) - mantém compatibilidade com filtros antigos
       const matchesDate = (() => {
-        if (filters.dateRange && lead.created_at) {
-          // Comparar apenas a parte da data (YYYY-MM-DD) para evitar problemas de fuso horário
+        if (metaFilters.dateRange && lead.created_at) {
           const createdAt = new Date(lead.created_at);
           const createdDateStr = createdAt.toISOString().split('T')[0];
-
-          return createdDateStr >= filters.dateRange.start && createdDateStr <= filters.dateRange.end;
+          return createdDateStr >= metaFilters.dateRange.start && createdDateStr <= metaFilters.dateRange.end;
         }
         return true;
       })();
 
       // Filtro de conta Meta Ads
-      const matchesAccount = filters.accountId
+      const matchesAccount = metaFilters.accountId
         ? lead.source === "meta_ads"
         : true;
 
-      // Filtro de campanha Meta Ads
-      const matchesCampaign = filters.campaignId
-        ? lead.campaign_id === filters.campaignId
+      // Filtro de campanha Meta Ads (apenas para filtros antigos)
+      const matchesCampaign = metaFilters.campaignId
+        ? lead.campaign_id === metaFilters.campaignId
         : true;
 
       return matchesSearch && matchesDate && matchesAccount && matchesCampaign;
@@ -99,7 +118,59 @@ export default function LeadsLinear() {
 
       return acc;
     }, {} as Record<StageId, { leads: Lead[]; totalValue: number; averageValue: number; count: number }>);
-  }, [leads, searchTerm, filters]);
+  }, [leads, searchTerm, metaFilters]);
+
+  // Seleção em massa
+  const selectionMode = isSelectionModeActive;
+  const allLeadIds = useMemo(() => {
+    return Object.values(stageMetrics).flatMap(metrics => metrics.leads.map(lead => lead.id));
+  }, [stageMetrics]);
+  const allSelected = allLeadIds.length > 0 && allLeadIds.every(id => selectedLeadIds.has(id));
+  const someSelected = Array.from(selectedLeadIds).some(id => allLeadIds.includes(id));
+
+  const handleToggleSelectionMode = () => {
+    setIsSelectionModeActive(prev => !prev);
+    if (isSelectionModeActive) {
+      // Se está desativando, limpar seleções
+      setSelectedLeadIds(new Set());
+    }
+  };
+
+  const handleToggleSelection = (leadId: string) => {
+    setSelectedLeadIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(leadId)) {
+        newSet.delete(leadId);
+      } else {
+        newSet.add(leadId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (allSelected) {
+      setSelectedLeadIds(new Set());
+    } else {
+      setSelectedLeadIds(new Set(allLeadIds));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedLeadIds.size === 0) return;
+    
+    if (!confirm(`Tem certeza que deseja mover ${selectedLeadIds.size} lead(s) para a lixeira?`)) {
+      return;
+    }
+
+    try {
+      await bulkDelete.mutateAsync(Array.from(selectedLeadIds));
+      setSelectedLeadIds(new Set());
+      setIsSelectionModeActive(false);
+    } catch (error) {
+      // Error já é tratado no hook
+    }
+  };
 
   const handleNewLead = () => {
     setIsNewLeadModalOpen(false);
@@ -109,7 +180,7 @@ export default function LeadsLinear() {
     });
   };
 
-  // Exclusão é realizada dentro do LeadEditDialog
+  // Exclusão é realizada dentro do LeadDetailsSheet
 
   const onDragEnd = async (result: DropResult) => {
     const { source, destination, draggableId } = result;
@@ -188,15 +259,22 @@ export default function LeadsLinear() {
 
           {/* Filters inline - Dashboard style */}
           <div className="flex flex-wrap gap-2">
+            {/* Filtros minimalistas - unificado */}
+            <LeadsFiltersMinimal
+              filters={leadFilters}
+              onFiltersChange={setLeadFilters}
+            />
+
+            {/* Filtros Meta Ads (mantidos para compatibilidade) */}
             <DateRangeFilter
-              value={filters.dateRange}
-              onChange={(dateRange) => setFilters({ ...filters, dateRange })}
+              value={metaFilters.dateRange}
+              onChange={(dateRange) => setMetaFilters({ ...metaFilters, dateRange })}
             />
 
             <Select
-              value={filters.accountId || 'all'}
-              onValueChange={(value) => setFilters({
-                ...filters,
+              value={metaFilters.accountId || 'all'}
+              onValueChange={(value) => setMetaFilters({
+                ...metaFilters,
                 accountId: value === 'all' ? undefined : value,
                 campaignId: undefined
               })}
@@ -214,11 +292,11 @@ export default function LeadsLinear() {
               </SelectContent>
             </Select>
 
-            {filters.accountId && (
+            {metaFilters.accountId && (
               <Select
-                value={filters.campaignId || 'all'}
-                onValueChange={(value) => setFilters({
-                  ...filters,
+                value={metaFilters.campaignId || 'all'}
+                onValueChange={(value) => setMetaFilters({
+                  ...metaFilters,
                   campaignId: value === 'all' ? undefined : value
                 })}
               >
@@ -265,7 +343,45 @@ export default function LeadsLinear() {
             <Upload className="w-4 h-4" />
             Importar planilha
           </Button>
+          <Button
+            variant={isSelectionModeActive ? "default" : "outline"}
+            className={cn("gap-2", isSelectionModeActive && "bg-primary text-primary-foreground")}
+            onClick={handleToggleSelectionMode}
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            {isSelectionModeActive ? "Sair da Seleção" : "Selecionar"}
+          </Button>
         </div>
+
+        {/* Seleção em Massa - Header */}
+        {isSelectionModeActive && (
+          <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-lg p-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSelectAll}
+              className="h-8 px-3"
+            >
+              {allSelected ? (
+                <CheckSquare className="w-4 h-4 mr-2" />
+              ) : (
+                <Square className="w-4 h-4 mr-2" />
+              )}
+              {allSelected ? "Desmarcar todos" : "Selecionar todos"}
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              {selectedLeadIds.size} {selectedLeadIds.size === 1 ? "lead selecionado" : "leads selecionados"}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleToggleSelectionMode}
+              className="h-8 px-3 ml-auto"
+            >
+              Cancelar
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Loading State */}
@@ -330,12 +446,13 @@ export default function LeadsLinear() {
                                   key={lead.id}
                                   draggableId={lead.id}
                                   index={index}
+                                  isDragDisabled={isSelectionModeActive}
                                 >
                                   {(provided, snapshot) => (
                                     <div
                                       ref={provided.innerRef}
                                       {...provided.draggableProps}
-                                      {...provided.dragHandleProps}
+                                      {...(!isSelectionModeActive ? provided.dragHandleProps : {})}
                                       className={cn(
                                         "transition-all",
                                         snapshot.isDragging && "ring-2 ring-primary shadow-2xl scale-105 rotate-2"
@@ -343,6 +460,9 @@ export default function LeadsLinear() {
                                     >
                                       <LeadCard
                                         lead={lead}
+                                        isSelected={selectedLeadIds.has(lead.id)}
+                                        onToggleSelection={handleToggleSelection}
+                                        selectionMode={selectionMode}
                                       />
                                     </div>
                                   )}
@@ -377,6 +497,26 @@ export default function LeadsLinear() {
     onSave={handleNewLead}
   />
   <SpreadsheetImporter open={isImportOpen} onOpenChange={setIsImportOpen} />
+
+  {/* Barra de Ações em Massa */}
+  <LeadsBulkActions
+    selectedCount={selectedLeadIds.size}
+    onEdit={() => setIsBulkEditOpen(true)}
+    onDelete={handleBulkDelete}
+    onClearSelection={() => {
+      setSelectedLeadIds(new Set());
+      setIsSelectionModeActive(false);
+    }}
+    isLoading={bulkDelete.isPending}
+  />
+
+  {/* Modal de Edição em Massa */}
+  <BulkEditModal
+    open={isBulkEditOpen}
+    onOpenChange={setIsBulkEditOpen}
+    selectedLeadIds={Array.from(selectedLeadIds)}
+    selectedCount={selectedLeadIds.size}
+  />
   </div>
   );
 }
