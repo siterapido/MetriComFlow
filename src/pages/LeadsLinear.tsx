@@ -14,6 +14,7 @@ import { BulkEditModal } from "@/components/leads/BulkEditModal";
 import { useToast } from "@/hooks/use-toast";
 import { useLeads, useUpdateLead, type Lead, type LeadFilters } from "@/hooks/useLeads";
 import { useBulkDeleteLeads } from "@/hooks/useBulkLeadsActions";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
 import { useAdCampaigns } from "@/hooks/useMetaMetrics";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +39,8 @@ export default function LeadsLinear() {
   const [isSelectionModeActive, setIsSelectionModeActive] = useState(false);
   const { toast } = useToast();
   const bulkDelete = useBulkDeleteLeads();
+  const { data: permissions } = useUserPermissions();
+  const canImport = permissions?.canImportLeads ?? false;
 
   // Filters state unificado
   const [leadFilters, setLeadFilters] = useState<LeadFilters>({});
@@ -60,16 +63,16 @@ export default function LeadsLinear() {
       // Filtro de busca
       const matchesSearch = searchTerm
         ? (() => {
-            const searchLower = searchTerm.toLowerCase();
-            const titleMatch = lead.title.toLowerCase().includes(searchLower);
-            const customFields = lead.custom_fields as Record<string, any> | null;
-            if (customFields) {
-              const nomeFantasia = customFields["Nome Fantasia"]?.toLowerCase() || "";
-              const razaoSocial = customFields["Razão Social"]?.toLowerCase() || "";
-              return titleMatch || nomeFantasia.includes(searchLower) || razaoSocial.includes(searchLower);
-            }
-            return titleMatch;
-          })()
+          const searchLower = searchTerm.toLowerCase();
+          const titleMatch = lead.title.toLowerCase().includes(searchLower);
+          const customFields = lead.custom_fields as Record<string, any> | null;
+          if (customFields) {
+            const nomeFantasia = customFields["Nome Fantasia"]?.toLowerCase() || "";
+            const razaoSocial = customFields["Razão Social"]?.toLowerCase() || "";
+            return titleMatch || nomeFantasia.includes(searchLower) || razaoSocial.includes(searchLower);
+          }
+          return titleMatch;
+        })()
         : true;
 
       // Filtro de data (já aplicado no hook useLeads, mas mantemos aqui para busca)
@@ -149,7 +152,7 @@ export default function LeadsLinear() {
 
   const handleBulkDelete = async () => {
     if (selectedLeadIds.size === 0) return;
-    
+
     if (!confirm(`Tem certeza que deseja mover ${selectedLeadIds.size} lead(s) para a lixeira?`)) {
       return;
     }
@@ -261,19 +264,21 @@ export default function LeadsLinear() {
               </TooltipTrigger>
               <TooltipContent>Novo Lead</TooltipContent>
             </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => setIsImportOpen(true)}
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Importar planilha</TooltipContent>
-            </Tooltip>
+            {canImport && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setIsImportOpen(true)}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Importar planilha</TooltipContent>
+              </Tooltip>
+            )}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -436,33 +441,35 @@ export default function LeadsLinear() {
         </DragDropContext>
       )}
 
-  {/* Modal para Novo Lead */}
-  <NewLeadModal
-    open={isNewLeadModalOpen}
-    onOpenChange={setIsNewLeadModalOpen}
-    onSave={handleNewLead}
-  />
-  <SpreadsheetImporter open={isImportOpen} onOpenChange={setIsImportOpen} />
+      {/* Modal para Novo Lead */}
+      <NewLeadModal
+        open={isNewLeadModalOpen}
+        onOpenChange={setIsNewLeadModalOpen}
+        onSave={handleNewLead}
+      />
+      {canImport && (
+        <SpreadsheetImporter open={isImportOpen} onOpenChange={setIsImportOpen} />
+      )}
 
-  {/* Barra de Ações em Massa */}
-  <LeadsBulkActions
-    selectedCount={selectedLeadIds.size}
-    onEdit={() => setIsBulkEditOpen(true)}
-    onDelete={handleBulkDelete}
-    onClearSelection={() => {
-      setSelectedLeadIds(new Set());
-      setIsSelectionModeActive(false);
-    }}
-    isLoading={bulkDelete.isPending}
-  />
+      {/* Barra de Ações em Massa */}
+      <LeadsBulkActions
+        selectedCount={selectedLeadIds.size}
+        onEdit={() => setIsBulkEditOpen(true)}
+        onDelete={handleBulkDelete}
+        onClearSelection={() => {
+          setSelectedLeadIds(new Set());
+          setIsSelectionModeActive(false);
+        }}
+        isLoading={bulkDelete.isPending}
+      />
 
-  {/* Modal de Edição em Massa */}
-  <BulkEditModal
-    open={isBulkEditOpen}
-    onOpenChange={setIsBulkEditOpen}
-    selectedLeadIds={Array.from(selectedLeadIds)}
-    selectedCount={selectedLeadIds.size}
-  />
-  </div>
+      {/* Modal de Edição em Massa */}
+      <BulkEditModal
+        open={isBulkEditOpen}
+        onOpenChange={setIsBulkEditOpen}
+        selectedLeadIds={Array.from(selectedLeadIds)}
+        selectedCount={selectedLeadIds.size}
+      />
+    </div>
   );
 }

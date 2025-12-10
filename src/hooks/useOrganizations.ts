@@ -1,81 +1,109 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/hooks/useAuth";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
+import { toast } from "sonner";
 
-export interface UserOrganizationItem {
+export interface Organization {
   id: string;
   name: string;
-  slug: string | null;
-  role: "owner" | "admin" | "manager" | "member";
+  slug?: string;
+  created_at: string;
+  updated_at: string;
 }
 
-export function useUserOrganizations() {
-  const { user } = useAuth();
-  return useQuery({
-    queryKey: ["user-organizations", user?.id],
-    queryFn: async (): Promise<UserOrganizationItem[]> => {
-      if (!user?.id) return [];
+export function useOrganizations() {
+  const { data: permissions } = useUserPermissions();
+  const queryClient = useQueryClient();
 
+  const { data: organizations, isLoading, error } = useQuery({
+    queryKey: ["organizations", "all"],
+    queryFn: async () => {
+      // NOTE: This relies on RLS. 
+      // Normal users: get only their orgs.
+      // Super admins: get ALL orgs (via is_super_admin policy).
       const { data, error } = await supabase
-        .from("organization_memberships")
-        .select(
-          `
-          role,
-          organizations ( id, name, slug, is_active )
-        `,
-        )
-        .eq("profile_id", user.id)
-        .eq("is_active", true)
-        .order("joined_at", { ascending: false });
+        .from("organizations")
+        .select("*")
+        .order("name");
 
       if (error) throw error;
-
-      const items = (data ?? [])
-        .filter((row: any) => row.organizations && row.organizations.is_active)
-        .map((row: any) => ({
-          id: row.organizations.id as string,
-          name: row.organizations.name as string,
-          slug: (row.organizations.slug as string | null) ?? null,
-          role: row.role as UserOrganizationItem["role"],
-        }));
-
-      return items;
+      return data as Organization[];
     },
-    enabled: !!user?.id,
-    staleTime: 60 * 1000,
+    enabled: !!permissions,
   });
-}
 
-export function useSetActiveOrganization() {
-  const { user } = useAuth();
-  const qc = useQueryClient();
+  const createOrganization = useMutation({
+    mutationFn: async (vars: { name: string; slug?: string }) => {
+      const { data, error } = await supabase
+        .from("organizations")
+        .insert({
+          name: vars.name,
+          // slug if you have it in schema, otherwise ignoring. 
+          // Based on schema, only 'name' is in 000_users_and_organizations.sql.
+          // If 'slug' was added later, fine. I'll inspect schema if needed.
+          // For now, I only assume 'name'.
+        })
+        .select()
+        .single();
 
-  return (orgId: string | null) => {
-    try {
-      if (typeof window !== "undefined") {
-        if (orgId) window.localStorage.setItem("activeOrgId", orgId);
-        else window.localStorage.removeItem("activeOrgId");
-      }
-    } catch (error) {
-      console.warn("Falha ao atualizar activeOrgId no localStorage", error);
-    }
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      toast.success("Organização criada com sucesso!");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Erro ao criar organização");
+    },
+  });
 
-    // Persistir preferência no servidor (perfil do usuário)
-    if (user?.id) {
-      void supabase
-        .from('profiles')
-        .update({ active_organization_id: orgId })
-        .eq('id', user.id);
-    }
+  const updateOrganization = useMutation({
+    mutationFn: async (vars: { id: string; name: string }) => {
+      const { data, error } = await supabase
+        .from("organizations")
+        .update({ name: vars.name })
+        .eq("id", vars.id)
+        .select()
+        .single();
 
-    // Invalidar caches relacionados à organização
-    qc.invalidateQueries({ queryKey: ["active-organization", user?.id] });
-    qc.invalidateQueries({ queryKey: ["user-organizations", user?.id] });
-    qc.invalidateQueries({ queryKey: ["team-invitations"] });
-    qc.invalidateQueries({ queryKey: ["organization-plan-limits"] });
-    qc.invalidateQueries({ queryKey: ["user-permissions"] });
-    qc.invalidateQueries({ queryKey: ["leads"] });
-    qc.invalidateQueries({ queryKey: ["dashboard-summary"] });
-    qc.invalidateQueries({ queryKey: ["pipeline-metrics"] });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      toast.success("Organização atualizada com sucesso!");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Erro ao atualizar organização");
+    },
+  });
+
+  const deleteOrganization = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("organizations")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      toast.success("Organização removida com sucesso!");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Erro ao remover organização");
+    },
+  });
+
+  return {
+    organizations,
+    isLoading,
+    error,
+    createOrganization,
+    updateOrganization,
+    deleteOrganization
   };
 }

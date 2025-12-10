@@ -1,4 +1,4 @@
-import { Users, LayoutDashboard, FileText, Settings, UsersRound, CreditCard, Share2, type LucideIcon } from "lucide-react";
+import { Users, LayoutDashboard, FileText, Settings, UsersRound, CreditCard, Share2, Building2, type LucideIcon } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -22,6 +22,7 @@ export interface NavItem {
   requiresMetrics?: boolean;
   requiresOwner?: boolean;
   requiresForms?: boolean;
+  requiresSuperAdmin?: boolean;
 }
 
 export const items: NavItem[] = [
@@ -29,6 +30,7 @@ export const items: NavItem[] = [
     title: "Dashboard Geral",
     url: "/dashboard",
     icon: LayoutDashboard,
+    requiresOwner: true,
   },
   {
     title: "Leads",
@@ -66,6 +68,12 @@ export const items: NavItem[] = [
     icon: Share2,
     requiresOwner: true,
   },
+  {
+    title: "Organizações",
+    url: "/organizacoes",
+    icon: Building2,
+    requiresSuperAdmin: true,
+  },
 ];
 
 export function AppSidebar() {
@@ -82,6 +90,7 @@ export function AppSidebar() {
     if (item.requiresCRM && !permissions?.hasCRMAccess) return false;
     if (item.requiresMetrics && !permissions?.hasMetricsAccess) return false;
     if (item.requiresForms && !permissions?.hasFormsAccess) return false;
+    if (item.requiresSuperAdmin && !permissions?.isSuperAdmin) return false;
     return true;
   });
 

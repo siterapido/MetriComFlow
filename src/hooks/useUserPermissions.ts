@@ -20,6 +20,8 @@ export interface UserPermissions {
   canAddAdAccount: boolean;
   canAddUser: boolean;
   planHasCRMAccess: boolean;
+  canImportLeads: boolean;
+  isSuperAdmin: boolean;
 }
 
 export const useUserPermissions = () => {
@@ -43,13 +45,15 @@ export const useUserPermissions = () => {
           canAddAdAccount: false,
           canAddUser: false,
           planHasCRMAccess: false,
+          canImportLeads: false,
+          isSuperAdmin: false,
         };
       }
 
       // Fetch user profile to get user_type
       const { data: profile, error } = await supabase
         .from("profiles")
-        .select("user_type")
+        .select("user_type, is_super_admin")
         .eq("id", user.id)
         .single();
 
@@ -96,8 +100,8 @@ export const useUserPermissions = () => {
         planAllowsCRM && ["active", "trial"].includes(subscriptionStatus ?? "inactive");
       const hasCRMAccess = userHasCRMAccess && planHasCRMAccess;
 
-      // Determine Forms access (only owner and sales, NOT crm_user)
-      const hasFormsAccess = (isOwner || isSales) && planHasCRMAccess;
+      // Determine Forms access (only owner, NOT sales or crm_user)
+      const hasFormsAccess = isOwner && planHasCRMAccess;
 
       return {
         userType,
@@ -117,6 +121,8 @@ export const useUserPermissions = () => {
           ? !planLimits.users_limit_reached && ["active", "trial"].includes(subscriptionStatus)
           : true,
         planHasCRMAccess,
+        canImportLeads: isOwner || isOrgAdmin,
+        isSuperAdmin: !!profile?.is_super_admin,
       };
     },
     enabled: !!user?.id,
@@ -154,7 +160,7 @@ export const USER_TYPE_LABELS: Record<UserType, string> = {
 export const USER_TYPE_DESCRIPTIONS: Record<UserType, string> = {
   owner: "Acesso completo a todas as funcionalidades do sistema",
   traffic_manager: "Acesso exclusivo às métricas e análises, sem permissão para acessar o CRM",
-  sales: "Acesso completo ao CRM e formulários, porém sem permissão para visualizar métricas e análises",
+  sales: "Acesso ao CRM e pipeline de vendas, sem permissão para formulários, métricas ou análises",
   crm_user: "Acesso ao CRM e pipeline de vendas, sem permissão para formulários, métricas ou análises",
 };
 
@@ -181,10 +187,10 @@ export const USER_TYPE_PERMISSIONS: Record<UserType, string[]> = {
   sales: [
     "Criar e gerenciar leads",
     "Visualizar pipeline de vendas",
-    "Criar e gerenciar formulários",
     "Adicionar comentários e anexos",
     "Atualizar status de leads",
     "Visualizar membros da equipe",
+    "SEM acesso aos formulários",
     "SEM acesso às métricas",
   ],
   crm_user: [

@@ -355,18 +355,29 @@ export function ModernLeadCard({
           {lead.custom_fields && (
             <div className="space-y-2 mb-3 text-[11px] relative z-10">
               {/* Nome Fantasia */}
-              {lead.custom_fields["Nome Fantasia"] &&
-                String(lead.custom_fields["Nome Fantasia"]).trim() !== "" &&
-                String(lead.custom_fields["Nome Fantasia"]).trim() !== "0" && (
+              {(() => {
+                let nomeFantasia = lead.custom_fields?.["Nome Fantasia"];
+                const razaoSocial = lead.custom_fields?.["Razão Social"];
+
+                // Se nome fantasia for "-", substitui pela razão social
+                if (nomeFantasia && String(nomeFantasia).trim() === "-" && razaoSocial) {
+                  nomeFantasia = razaoSocial;
+                }
+
+                return nomeFantasia &&
+                  String(nomeFantasia).trim() !== "" &&
+                  String(nomeFantasia).trim() !== "0" &&
+                  String(nomeFantasia).trim() !== "-" ? (
                   <div className="flex items-start gap-2">
                     <Building2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-foreground/90 truncate">
-                        {lead.custom_fields["Nome Fantasia"]}
+                        {nomeFantasia}
                       </p>
                     </div>
                   </div>
-                )}
+                ) : null;
+              })()}
 
               {/* Cidade / Estado */}
               {(lead.custom_fields.Cidade || lead.custom_fields.Estado) && (
@@ -408,23 +419,29 @@ export function ModernLeadCard({
             </div>
           )}
 
-          {/* Contract Info - Compact */}
-          {lead.value && lead.value > 0 && (
-            <div className="space-y-0.5 p-2 bg-primary/5 rounded-lg border border-primary/20 mb-3 relative z-10">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-muted-foreground">
+          {/* Contract Info - Minimalist */}
+          {((lead.value || 0) > 0 || (lead.contract_value || 0) > 0) && (
+            <div className="flex items-center justify-between p-2 py-1.5 bg-primary/5 rounded border border-primary/10 mb-3 relative z-10">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] uppercase font-medium text-muted-foreground">
                   {contractTypeLabels[lead.contract_type as keyof typeof contractTypeLabels] || "Único"}
-                  {lead.contract_type === "monthly" && ` (${lead.contract_months || 1}x)`}
                 </span>
-                <span className="font-semibold text-primary">
-                  {formatCurrency(lead.contract_value || lead.value || 0)}
-                </span>
+                {lead.contract_type === "monthly" && (lead.contract_months || 1) > 1 && (
+                  <span className="text-[9px] px-1 rounded-sm bg-background/50 border border-border/50 text-muted-foreground">
+                    {lead.contract_months}x
+                  </span>
+                )}
               </div>
-              {lead.contract_value && lead.contract_value > 0 && lead.value !== lead.contract_value && (
-                <div className="text-[10px] font-semibold text-success flex items-center justify-end gap-0.5">
-                  Total: {formatCurrency(lead.value || 0)}
+              <div className="text-right leading-tight">
+                <div className="font-bold text-sm text-primary/90">
+                  {formatCurrency(lead.contract_value || lead.value || 0)}
                 </div>
-              )}
+                {(lead.contract_value || 0) > 0 && lead.value !== lead.contract_value && (
+                  <div className="text-[9px] text-muted-foreground/70">
+                    Total: {formatCurrency(lead.value || 0)}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

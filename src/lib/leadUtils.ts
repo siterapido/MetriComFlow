@@ -12,19 +12,29 @@ export function getLeadDisplayName(lead: {
   custom_fields?: Record<string, any> | null;
 }): string {
   const customFields = lead.custom_fields || {};
-  
+
   // Prioridade: Nome Fantasia > Razão Social > Título atual
-  const nomeFantasia = customFields["Nome Fantasia"];
-  const razaoSocial = customFields["Razão Social"];
-  
-  if (nomeFantasia && typeof nomeFantasia === "string" && nomeFantasia.trim()) {
+  let nomeFantasia = customFields["Nome Fantasia"];
+  let razaoSocial = customFields["Razão Social"];
+
+  // Se nome fantasia for "-", substitui pela razão social
+  if (nomeFantasia && typeof nomeFantasia === "string" && nomeFantasia.trim() === "-") {
+    nomeFantasia = razaoSocial;
+  }
+
+  // Se razão social for "-", substitui pelo nome fantasia
+  if (razaoSocial && typeof razaoSocial === "string" && razaoSocial.trim() === "-") {
+    razaoSocial = nomeFantasia;
+  }
+
+  if (nomeFantasia && typeof nomeFantasia === "string" && nomeFantasia.trim() && nomeFantasia.trim() !== "-") {
     return nomeFantasia.trim();
   }
-  
-  if (razaoSocial && typeof razaoSocial === "string" && razaoSocial.trim()) {
+
+  if (razaoSocial && typeof razaoSocial === "string" && razaoSocial.trim() && razaoSocial.trim() !== "-") {
     return razaoSocial.trim();
   }
-  
+
   // Fallback para o título atual
   return lead.title || "Lead sem nome";
 }
@@ -43,19 +53,27 @@ export function buildLeadTitleFromCustomFields(
   if (!customFields) {
     return fallbackTitle || "Lead sem nome";
   }
-  
-  const nomeFantasia = customFields["Nome Fantasia"];
-  const razaoSocial = customFields["Razão Social"];
-  
-  if (nomeFantasia && typeof nomeFantasia === "string" && nomeFantasia.trim()) {
+
+  let nomeFantasia = customFields["Nome Fantasia"];
+  let razaoSocial = customFields["Razão Social"];
+
+  // Se nome fantasia for "-", substitui pela razão social
+  if (nomeFantasia && typeof nomeFantasia === "string" && nomeFantasia.trim() === "-") {
+    nomeFantasia = razaoSocial;
+  }
+
+  // Se razão social for "-", substitui pelo nome fantasia
+  if (razaoSocial && typeof razaoSocial === "string" && razaoSocial.trim() === "-") {
+    razaoSocial = nomeFantasia;
+  }
+
+  if (nomeFantasia && typeof nomeFantasia === "string" && nomeFantasia.trim() && nomeFantasia.trim() !== "-") {
     return nomeFantasia.trim();
   }
-  
-  if (razaoSocial && typeof razaoSocial === "string" && razaoSocial.trim()) {
+
+  if (razaoSocial && typeof razaoSocial === "string" && razaoSocial.trim() && razaoSocial.trim() !== "-") {
     return razaoSocial.trim();
   }
-  
+
   return fallbackTitle || "Lead sem nome";
 }
-
-

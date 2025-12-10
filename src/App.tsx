@@ -7,6 +7,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/components/theme-provider";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import OwnerRoute from "@/components/auth/OwnerRoute";
 import Auth from "./pages/Auth";
 import Index from "./pages/Index";
 import SetupAdmin from "./pages/SetupAdmin";
@@ -33,7 +34,9 @@ import PublicLeadForm from "./pages/PublicLeadForm";
 import PurchasePage from "./pages/PurchasePage";
 import PurchaseSuccessPage from "./pages/PurchaseSuccessPage";
 import PurchaseCancelPage from "./pages/PurchaseCancelPage";
+import PurchaseCancelPage from "./pages/PurchaseCancelPage";
 import PosLoginPage from "./pages/PosLoginPage";
+import Organizations from "./pages/Organizations";
 
 const queryClient = new QueryClient();
 
@@ -71,7 +74,7 @@ const App = () => (
                   <Route path="/comprar" element={<PurchasePage />} />
                   <Route path="/compra/sucesso" element={<PurchaseSuccessPage />} />
                   <Route path="/compra/cancelada" element={<PurchaseCancelPage />} />
-                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/dashboard" element={<OwnerRoute><Dashboard /></OwnerRoute>} />
                   <Route path="/leads" element={<LeadsLinear />} />
                   <Route path="/leads/kanban" element={<Leads />} />
                   {/* Rotas de importação desabilitadas temporariamente */}
@@ -79,20 +82,21 @@ const App = () => (
                   {/* <Route path="/leads/importacoes/:batchId" element={<LeadImportDetails />} /> */}
                   <Route path="/formularios" element={<LeadForms />} />
                   {/* Rota /metas desabilitada temporariamente */}
-                  <Route path="/metas" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="/metas-legacy" element={<Navigate to="/dashboard" replace />} />
-                  {/* Rotas de métricas desativadas - redireciona para o dashboard CRM */}
-                  <Route path="/metricas" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="/meta-ads-config" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="/metrics" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="/metas" element={<Navigate to="/leads" replace />} />
+                  <Route path="/metas-legacy" element={<Navigate to="/leads" replace />} />
+                  {/* Rotas de métricas desativadas - redireciona para o pipeline de leads */}
+                  <Route path="/metricas" element={<Navigate to="/leads" replace />} />
+                  <Route path="/meta-ads-config" element={<Navigate to="/leads" replace />} />
+                  <Route path="/metrics" element={<Navigate to="/leads" replace />} />
                   {/* Nova página unificada de gestão de equipe */}
-                  <Route path="/equipe" element={<TeamManagement />} />
+                  <Route path="/equipe" element={<OwnerRoute><TeamManagement /></OwnerRoute>} />
+                  <Route path="/organizacoes" element={<ProtectedRoute><Organizations /></ProtectedRoute>} />
                   {/* Redirects de rotas antigas para nova rota unificada */}
                   <Route path="/usuarios" element={<Navigate to="/equipe" replace />} />
                   <Route path="/team" element={<Navigate to="/equipe" replace />} />
                   {/* Planos e Assinatura */}
-                  <Route path="/planos" element={<SubscriptionPlans />} />
-                  <Route path="/distribuicao" element={<DistributionRules />} />
+                  <Route path="/planos" element={<OwnerRoute><SubscriptionPlans /></OwnerRoute>} />
+                  <Route path="/distribuicao" element={<OwnerRoute><DistributionRules /></OwnerRoute>} />
                   <Route path="/meu-perfil" element={<Profile />} />
                 </Route>
               </Route>

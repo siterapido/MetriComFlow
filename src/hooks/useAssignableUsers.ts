@@ -36,11 +36,11 @@ export const useAssignableUsers = () => {
 
       if (error) throw error;
 
-      // Extrair perfis e filtrar por tipos permitidos (owner, sales)
+      // Extrair perfis e filtrar por tipos permitidos (owner, sales, crm_user)
       const profiles = (data ?? [])
         .map((row: any) => row.profiles as ProfileRow | null)
         .filter((p): p is ProfileRow => !!p && !!p.id && !!p.full_name)
-        .filter((p) => ["owner", "sales"].includes(p.user_type as string));
+        .filter((p) => ["owner", "sales", "crm_user"].includes(p.user_type as string));
 
       // Remover duplicados por segurança
       const uniqueById = new Map<string, ProfileRow>();

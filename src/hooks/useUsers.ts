@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import type { Database } from "@/lib/database.types";
 
 type UserType = Database["public"]["Enums"]["user_type"];
@@ -107,6 +108,8 @@ export const useUser = (userId: string) => {
 export const useCreateUser = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  // Obtemos a organização ativa para vincular o novo usuário
+  const { data: activeOrg } = useActiveOrganization();
 
   return useMutation({
     mutationFn: async (userData: CreateUserData) => {
@@ -126,7 +129,6 @@ export const useCreateUser = () => {
       }
 
       // 2. Criar usuário no auth com user_type nos metadados
-      // O trigger handle_new_user() vai criar o perfil automaticamente com o user_type
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
@@ -139,7 +141,6 @@ export const useCreateUser = () => {
       });
 
       if (authError) {
-        // Tratar erros específicos do Supabase Auth
         if (authError.message.includes("already registered")) {
           throw new Error("Este email já está cadastrado no sistema.");
         }
@@ -154,7 +155,29 @@ export const useCreateUser = () => {
 
       if (!authData.user) throw new Error("Falha ao criar usuário");
 
-      // 3. Restaurar sessão anterior (proprietário) para evitar login automático no novo usuário
+      // 3. Vincular usuário à organização ativa (se houver)
+      if (activeOrg?.id) {
+        const { error: membershipError } = await supabase
+          .from("organization_memberships")
+          .insert({
+            organization_id: activeOrg.id,
+            profile_id: authData.user.id,
+            role: "member", // Default role
+            is_active: true,
+          });
+
+        if (membershipError) {
+          console.error("Erro ao vincular usuário à organização:", membershipError);
+          // Não lançamos erro aqui para não falhar o fluxo principal, mas logamos
+          toast({
+            title: "Aviso",
+            description: "Usuário criado, mas houve erro ao vinculá-lo à organização.",
+            variant: "destructive"
+          });
+        }
+      }
+
+      // 4. Restaurar sessão anterior (proprietário)
       if (currentSession) {
         const { error: restoreError } = await supabase.auth.setSession({
           access_token: currentSession.access_token,
@@ -176,13 +199,15 @@ export const useCreateUser = () => {
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      // Atualiza lista de usuários disponíveis no CRM quando um responsável elegível é criado
+      // Invalidate organization team to prompt refresh in TeamManagement
+      queryClient.invalidateQueries({ queryKey: ["organization-team"] });
+
       if (variables?.user_type === "sales" || variables?.user_type === "owner") {
         queryClient.invalidateQueries({ queryKey: ["assignable-users"] });
       }
       toast({
         title: "Usuário criado",
-        description: "O usuário foi criado com sucesso.",
+        description: "O usuário foi criado e adicionado à equipe com sucesso.",
       });
     },
     onError: (error: Error) => {

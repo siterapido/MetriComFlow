@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -12,18 +12,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, Plus, Search, Filter, Mail } from "lucide-react";
+import { Users, Plus, Search, Filter, Mail, UserPlus, Sparkles } from "lucide-react";
 import { useTeamManagement, type MemberFilter, type UserTypeFilter } from "@/hooks/useTeamManagement";
 import { UnifiedMemberCard } from "@/components/team/UnifiedMemberCard";
 import { InvitationCard } from "@/components/team/InvitationCard";
 import OrganizationNameEditor from "@/components/organization/OrganizationNameEditor";
 import { useToast } from "@/hooks/use-toast";
+import { UserFormDialog } from "@/components/users/UserFormDialog";
 
 function MembersSkeleton() {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: 6 }).map((_, idx) => (
-        <Card key={idx} className="bg-card border-border">
+        <Card key={idx} className="bg-card/50 border-border/50 backdrop-blur-sm">
           <CardContent className="p-6">
             <div className="flex items-start gap-4">
               <Skeleton className="h-14 w-14 rounded-full shrink-0" />
@@ -46,6 +47,7 @@ function MembersSkeleton() {
 
 export default function TeamManagement() {
   const { toast } = useToast();
+  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
 
   const {
     organization,
@@ -114,60 +116,89 @@ export default function TeamManagement() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-500">
 
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-md">
-            <Users className="w-7 h-7 text-white" />
-          </div>
-          <div>
-            <div className="mt-1 flex flex-col gap-2">
-              <p className="text-muted-foreground">
-                {organization
-                  ? `Gerencie membros, convites e permissões de ${organization.name}`
-                  : "Carregando organização..."}
-              </p>
-              {organization && (
-                <OrganizationNameEditor canEdit={isOwner} />
+      {/* Header Section with Modern Gradient */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-background to-muted/50 border border-border/50 p-8">
+        <div className="absolute top-0 right-0 -mt-20 -mr-20 h-64 w-64 bg-primary/10 blur-3xl rounded-full pointer-events-none" />
+        <div className="absolute bottom-0 left-0 -mb-20 -ml-20 h-64 w-64 bg-secondary/10 blur-3xl rounded-full pointer-events-none" />
+
+        <div className="relative flex flex-col gap-6 md:flex-row md:items-start md:justify-between z-10">
+          <div className="flex items-start gap-5">
+            <div className="w-16 h-16 bg-gradient-to-br from-primary to-secondary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 ring-4 ring-background">
+              <Users className="w-8 h-8 text-white" />
+            </div>
+            <div className="space-y-1">
+              {organization ? (
+                <>
+                  <OrganizationNameEditor canEdit={isOwner} />
+                  <p className="text-muted-foreground text-lg">
+                    Gerencie sua equipe, permissões e metas
+                  </p>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <Skeleton className="h-8 w-64" />
+                  <Skeleton className="h-5 w-48" />
+                </div>
               )}
             </div>
           </div>
-        </div>
 
-        <div className="flex gap-2">
-          <Button
-            onClick={handleGenerateInvite}
-            disabled={!isOwner || generating}
-            className="bg-primary hover:bg-primary/90 gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            {generating ? "Gerando..." : "Gerar link de convite"}
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button
+              onClick={() => setIsCreateUserOpen(true)}
+              disabled={!isOwner}
+              className="bg-card hover:bg-accent text-foreground border border-input shadow-sm h-11 px-6 rounded-xl transition-all duration-300 hover:scale-105"
+            >
+              <UserPlus className="h-4 w-4 mr-2 text-primary" />
+              Criar Usuário
+            </Button>
+
+            <Button
+              onClick={handleGenerateInvite}
+              disabled={!isOwner || generating}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 h-11 px-6 rounded-xl transition-all duration-300 hover:scale-105"
+            >
+              {generating ? (
+                <span className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 animate-spin" />
+                  Gerando...
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Gerar Convite
+                </span>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
 
-      {isOwner && (
-        <Card className="bg-card border-border">
-          <CardContent className="p-4 space-y-2">
-            <p className="text-sm text-muted-foreground">Use o link abaixo para convidar qualquer pessoa. Ao acessar, poderá criar conta ou entrar e será vinculada à organização.</p>
-            <div className="flex gap-2">
-              <Input readOnly value={inviteLink ?? "Clique em 'Gerar link de convite'"} className="text-xs" />
+      {isOwner && inviteLink && (
+        <Card className="bg-gradient-to-r from-card to-muted/50 border-primary/20 animate-in slide-in-from-top-2">
+          <CardContent className="p-4 flex flex-col sm:flex-row items-center gap-4 justify-between">
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              Convite gerado com sucesso! Compartilhe este link:
+            </p>
+            <div className="flex w-full sm:w-auto gap-2">
+              <Input
+                readOnly
+                value={inviteLink}
+                className="font-mono text-sm bg-background/50 border-primary/20 focus-visible:ring-primary/30"
+              />
               <Button
                 type="button"
                 variant="secondary"
-                disabled={!inviteLink}
                 onClick={async () => {
-                  if (!inviteLink) return;
                   try {
                     await navigator.clipboard.writeText(inviteLink);
-                    toast({ title: "Link copiado" });
+                    toast({ title: "Link copiado ✨" });
                   } catch (error) {
-                    console.error("Falha ao copiar convite", error);
                     toast({
-                      title: "Não foi possível copiar",
-                      description: "Copie manualmente o link no campo ao lado.",
+                      title: "Erro ao copiar",
                       variant: "destructive",
                     });
                   }
@@ -182,198 +213,203 @@ export default function TeamManagement() {
 
       {/* Permission Warning */}
       {!isOwner && (
-        <Alert className="bg-accent/20 border-border">
-          <AlertDescription className="text-muted-foreground">
-            Você não tem permissão para gerenciar membros. Apenas proprietários (owners) podem convidar,
-            editar ou remover membros da equipe.
+        <Alert className="bg-destructive/5 border-destructive/20 text-destructive">
+          <AlertDescription>
+            Você não tem permissão para gerenciar membros. Apenas proprietários podem convidar ou editar membros.
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Stats Cards */}
+      {/* Stats Overview */}
       <div className="grid gap-4 md:grid-cols-2">
-        <Card className="bg-gradient-to-br from-card to-accent/20 border-border">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Users className="h-5 w-5 text-primary" />
+        <Card className="bg-card/50 border-border/50 hover:bg-card/80 transition-colors">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center">
+                <Users className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total de Membros</p>
-                <p className="text-2xl font-bold text-foreground">{stats.totalMembers}</p>
+                <p className="text-sm font-medium text-muted-foreground">Total de Membros</p>
+                <div className="flex items-baseline gap-2">
+                  <h3 className="text-3xl font-bold">{stats.totalMembers}</h3>
+                  <span className="text-xs text-muted-foreground">ativos</span>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-card to-accent/20 border-border">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-warning/10 rounded-lg flex items-center justify-center">
-                <Mail className="h-5 w-5 text-warning" />
+        <Card className="bg-card/50 border-border/50 hover:bg-card/80 transition-colors">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-orange-500/10 rounded-2xl flex items-center justify-center">
+                <Mail className="h-6 w-6 text-orange-500" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Convites Pendentes</p>
-                <p className="text-2xl font-bold text-foreground">{stats.pendingInvitations}</p>
+                <p className="text-sm font-medium text-muted-foreground">Convites Pendentes</p>
+                <div className="flex items-baseline gap-2">
+                  <h3 className="text-3xl font-bold">{stats.pendingInvitations}</h3>
+                  <span className="text-xs text-muted-foreground">aguardando</span>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Search and Filters */}
-      <Card className="bg-card border-border">
-        <CardContent className="p-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            {/* Search */}
-            <div className="relative md:col-span-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nome ou email..."
-                value={filters.search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 bg-background border-border"
-              />
-            </div>
+      {/* Main Content */}
+      <Card className="border-none shadow-none bg-transparent">
+        <Tabs defaultValue="members" className="space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <TabsList className="bg-card border border-border p-1 rounded-xl h-12 w-full md:w-auto">
+              <TabsTrigger value="members" className="rounded-lg gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary h-10 px-4">
+                <Users className="h-4 w-4" />
+                Membros
+                <span className="ml-1 bg-background/50 text-foreground/70 px-1.5 py-0.5 rounded text-xs font-medium">
+                  {stats.totalMembers}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="invitations" className="rounded-lg gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary h-10 px-4">
+                <Mail className="h-4 w-4" />
+                Convites
+                {stats.pendingInvitations > 0 && (
+                  <span className="ml-1 bg-orange-500/10 text-orange-500 px-1.5 py-0.5 rounded text-xs font-medium">
+                    {stats.pendingInvitations}
+                  </span>
+                )}
+              </TabsTrigger>
+            </TabsList>
 
-            {/* Role Filter */}
-            <div className="relative">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 md:flex-none md:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar membro..."
+                  value={filters.search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 bg-card border-border rounded-xl h-10"
+                />
+              </div>
+
               <Select
                 value={filters.roleFilter}
                 onValueChange={(value) => setRoleFilter(value as MemberFilter)}
               >
-                <SelectTrigger className="bg-background border-border">
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4 text-muted-foreground" />
-                    <SelectValue placeholder="Filtrar por função" />
+                <SelectTrigger className="w-[150px] bg-card border-border rounded-xl h-10">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Filter className="h-3.5 w-3.5" />
+                    <SelectValue />
                   </div>
                 </SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  <SelectItem value="all">Todas as funções</SelectItem>
+                <SelectContent>
+                  <SelectItem value="all">Todas Funções</SelectItem>
                   <SelectItem value="owner">Owner</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="member">Membro</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
 
-            {/* User Type Filter */}
-            <div className="relative">
               <Select
                 value={filters.userTypeFilter}
                 onValueChange={(value) => setUserTypeFilter(value as UserTypeFilter)}
               >
-                <SelectTrigger className="bg-background border-border">
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4 text-muted-foreground" />
-                    <SelectValue placeholder="Filtrar por tipo" />
+                <SelectTrigger className="w-[150px] bg-card border-border rounded-xl h-10">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Filter className="h-3.5 w-3.5" />
+                    <SelectValue />
                   </div>
                 </SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  <SelectItem value="all">Todos os tipos</SelectItem>
-                  <SelectItem value="owner">Owner (Acesso total)</SelectItem>
-                  <SelectItem value="traffic_manager">Gestor de Tráfego</SelectItem>
-                  <SelectItem value="sales">CRM / Vendas</SelectItem>
+                <SelectContent>
+                  <SelectItem value="all">Todos Tipos</SelectItem>
+                  <SelectItem value="owner">Owner</SelectItem>
+                  <SelectItem value="traffic_manager">Tráfego</SelectItem>
+                  <SelectItem value="sales">Comercial</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
-        </CardContent>
+
+          <TabsContent value="members" className="space-y-4 mt-0">
+            {isLoading ? (
+              <MembersSkeleton />
+            ) : members.length === 0 ? (
+              <Card className="bg-card/50 border-dashed border-2 p-12">
+                <div className="flex flex-col items-center justify-center text-center space-y-4">
+                  <div className="w-16 h-16 bg-muted/50 rounded-full flex items-center justify-center">
+                    <Users className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">Nenhum membro encontrado</h3>
+                    <p className="text-muted-foreground">
+                      {filters.search || filters.roleFilter !== "all"
+                        ? "Tente ajustar os filtros da sua busca"
+                        : "Sua equipe ainda não tem membros, comece convidando alguém!"}
+                    </p>
+                  </div>
+                  {isOwner && !filters.search && (
+                    <Button onClick={() => setIsCreateUserOpen(true)} variant="outline">
+                      Criar primeiro usuário
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {members.map((member) => (
+                  <UnifiedMemberCard
+                    key={member.membershipId}
+                    member={member}
+                    isCurrentUser={member.profile.id === currentUserId}
+                    canManage={isOwner}
+                    onRoleChange={(role) => handleRoleChange(member.membershipId, role)}
+                    onUserTypeChange={(userType) => handleUserTypeChange(member.profile.id, userType)}
+                    onRemove={() => handleRemoveMember(member.membershipId)}
+                    isUpdating={isProcessing}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="invitations" className="space-y-4 mt-0">
+            {isLoading ? (
+              <MembersSkeleton />
+            ) : invitations.length === 0 ? (
+              <Card className="bg-card/50 border-dashed border-2 p-12">
+                <div className="flex flex-col items-center justify-center text-center space-y-4">
+                  <div className="w-16 h-16 bg-muted/50 rounded-full flex items-center justify-center">
+                    <Mail className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">Nenhum convite pendente</h3>
+                    <p className="text-muted-foreground">
+                      Todos os convites enviados foram aceitos
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {invitations.map((invitation) => (
+                  <InvitationCard
+                    key={invitation.id}
+                    invitation={invitation}
+                    onRevoke={() => handleRevokeInvitation(invitation.id)}
+                    isProcessing={isProcessing}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </Card>
 
-      {/* Tabs */}
-      <Tabs defaultValue="members" className="space-y-6">
-        <TabsList className="bg-muted">
-          <TabsTrigger value="members" className="gap-2">
-            <Users className="h-4 w-4" />
-            Membros ({stats.totalMembers})
-          </TabsTrigger>
-          <TabsTrigger value="invitations" className="gap-2">
-            <Mail className="h-4 w-4" />
-            Convites Pendentes ({stats.pendingInvitations})
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Members Tab */}
-        <TabsContent value="members" className="space-y-4">
-          {isLoading ? (
-            <MembersSkeleton />
-          ) : members.length === 0 ? (
-            <Card className="bg-card border-border">
-              <CardContent className="p-12 text-center">
-                <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-foreground mb-2">
-                  {filters.search || filters.roleFilter !== "all" || filters.userTypeFilter !== "all"
-                    ? "Nenhum membro encontrado"
-                    : "Nenhum membro cadastrado"}
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  {filters.search || filters.roleFilter !== "all" || filters.userTypeFilter !== "all"
-                    ? "Tente ajustar os filtros de busca"
-                    : "Convide sua equipe para colaborar nas metas, leads e métricas da organização."}
-                </p>
-                {isOwner && !filters.search && filters.roleFilter === "all" && filters.userTypeFilter === "all" && (
-                  <Button onClick={handleGenerateInvite} className="bg-primary hover:bg-primary/90 gap-2">
-                    <Plus className="h-4 w-4" />
-                    Gerar link de convite
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {members.map((member) => (
-                <UnifiedMemberCard
-                  key={member.membershipId}
-                  member={member}
-                  isCurrentUser={member.profile.id === currentUserId}
-                  canManage={isOwner}
-                  onRoleChange={(role) => handleRoleChange(member.membershipId, role)}
-                  onUserTypeChange={(userType) => handleUserTypeChange(member.profile.id, userType)}
-                  onRemove={() => handleRemoveMember(member.membershipId)}
-                  isUpdating={isProcessing}
-                />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* Invitations Tab */}
-        <TabsContent value="invitations" className="space-y-4">
-          {isLoading ? (
-            <MembersSkeleton />
-          ) : invitations.length === 0 ? (
-            <Card className="bg-card border-border">
-              <CardContent className="p-12 text-center">
-                <Mail className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-foreground mb-2">
-                  Nenhum convite pendente
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  Todos os convites foram aceitos ou expirados.
-                </p>
-                {isOwner && (
-                  <Button onClick={handleGenerateInvite} className="bg-primary hover:bg-primary/90 gap-2">
-                    <Plus className="h-4 w-4" />
-                    Gerar link de convite
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {invitations.map((invitation) => (
-                <InvitationCard
-                  key={invitation.id}
-                  invitation={invitation}
-                  onRevoke={() => handleRevokeInvitation(invitation.id)}
-                  isProcessing={isProcessing}
-                />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+      <UserFormDialog
+        open={isCreateUserOpen}
+        onOpenChange={setIsCreateUserOpen}
+        mode="create"
+      />
     </div>
   );
 }
+

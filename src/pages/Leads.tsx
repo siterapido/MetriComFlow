@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useLeads, useUpdateLead, type LeadFilters } from "@/hooks/useLeads";
 import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
 import { useBulkDeleteLeads } from "@/hooks/useBulkLeadsActions";
+import { useUserPermissions } from "@/hooks/useUserPermissions";
 import { ModernLeadCard } from "@/components/leads/ModernLeadCard";
 import { CelebrationOverlay } from "@/components/leads/CelebrationOverlay";
 import { motion } from "framer-motion";
@@ -49,13 +50,15 @@ export default function Leads() {
   const [showCelebration, setShowCelebration] = useState(false);
   const { toast } = useToast();
   const bulkDelete = useBulkDeleteLeads();
+  const { data: permissions } = useUserPermissions();
+  const canImport = permissions?.canImportLeads ?? false;
 
   const {
     hasActiveConnection: hasMetaConnection,
     isLoading: metaStatusLoading,
     isFetching: metaStatusFetching,
   } = useMetaConnectionStatus();
-  
+
   const metaStatusPending = metaStatusLoading || metaStatusFetching;
   const hideMetaLeads = !metaStatusPending && !hasMetaConnection;
 
@@ -72,16 +75,16 @@ export default function Leads() {
       // Busca por título e campos customizados
       const matchesSearch = searchTerm
         ? (() => {
-            const searchLower = searchTerm.toLowerCase();
-            const titleMatch = lead.title.toLowerCase().includes(searchLower);
-            const customFields = lead.custom_fields as Record<string, any> | null;
-            if (customFields) {
-              const nomeFantasia = customFields["Nome Fantasia"]?.toLowerCase() || "";
-              const razaoSocial = customFields["Razão Social"]?.toLowerCase() || "";
-              return titleMatch || nomeFantasia.includes(searchLower) || razaoSocial.includes(searchLower);
-            }
-            return titleMatch;
-          })()
+          const searchLower = searchTerm.toLowerCase();
+          const titleMatch = lead.title.toLowerCase().includes(searchLower);
+          const customFields = lead.custom_fields as Record<string, any> | null;
+          if (customFields) {
+            const nomeFantasia = customFields["Nome Fantasia"]?.toLowerCase() || "";
+            const razaoSocial = customFields["Razão Social"]?.toLowerCase() || "";
+            return titleMatch || nomeFantasia.includes(searchLower) || razaoSocial.includes(searchLower);
+          }
+          return titleMatch;
+        })()
         : true;
 
       const matchesVisibility = hideMetaLeads
@@ -130,7 +133,7 @@ export default function Leads() {
 
   const handleBulkDelete = async () => {
     if (selectedLeadIds.size === 0) return;
-    
+
     if (!confirm(`Tem certeza que deseja mover ${selectedLeadIds.size} lead(s) para a lixeira?`)) {
       return;
     }
@@ -179,7 +182,7 @@ export default function Leads() {
         if (newStatus === 'fechado_ganho') {
           setShowCelebration(true);
         }
-        
+
         const toBoard = BOARD_CONFIG.find(b => b.id === newStatus);
         toast({
           title: "Status atualizado",
@@ -196,17 +199,17 @@ export default function Leads() {
   };
 
   if (error) {
-     // Tratamento de erro simplificado para focar no UI
-     return <div className="p-8 text-center text-red-500">Erro ao carregar leads. Tente recarregar.</div>;
+    // Tratamento de erro simplificado para focar no UI
+    return <div className="p-8 text-center text-red-500">Erro ao carregar leads. Tente recarregar.</div>;
   }
 
   return (
     <div className="relative min-h-[calc(100vh-4rem)] p-4 sm:p-6 overflow-hidden">
-       {/* Background Ambient Effects - Glassmorphism Vibe */}
-       <div className="fixed inset-0 pointer-events-none -z-10">
-          <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] opacity-50" />
-          <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[100px] opacity-40" />
-       </div>
+      {/* Background Ambient Effects - Glassmorphism Vibe */}
+      <div className="fixed inset-0 pointer-events-none -z-10">
+        <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] opacity-50" />
+        <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[100px] opacity-40" />
+      </div>
 
       <div className="space-y-4 animate-fade-in relative z-10">
         {/* Header Section Compacto */}
@@ -222,7 +225,7 @@ export default function Leads() {
                 className="pl-8 pr-2 bg-white/5 border-white/10 focus:border-primary/50 transition-all text-sm h-7"
               />
             </div>
-            
+
             {/* Botões de ação */}
             <div className="flex gap-1 items-center flex-shrink-0">
               <Tooltip>
@@ -237,19 +240,21 @@ export default function Leads() {
                 </TooltipTrigger>
                 <TooltipContent>Novo Lead</TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-7 w-7 border-white/10 bg-white/5 hover:bg-white/10"
-                    onClick={() => setIsImportOpen(true)}
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Importar Leads</TooltipContent>
-              </Tooltip>
+              {canImport && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7 border-white/10 bg-white/5 hover:bg-white/10"
+                      onClick={() => setIsImportOpen(true)}
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Importar Leads</TooltipContent>
+                </Tooltip>
+              )}
             </div>
 
             {/* Filtros */}
@@ -312,11 +317,11 @@ export default function Leads() {
                   {/* Column Header */}
                   <div className="flex items-center justify-between px-2">
                     <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${board.color} shadow-[0_0_8px_rgba(0,0,0,0.5)]`} style={{ boxShadow: `0 0 10px ${board.color}` }} />
-                        <h3 className="font-medium text-sm text-foreground/90">{board.title}</h3>
+                      <div className={`w-2 h-2 rounded-full ${board.color} shadow-[0_0_8px_rgba(0,0,0,0.5)]`} style={{ boxShadow: `0 0 10px ${board.color}` }} />
+                      <h3 className="font-medium text-sm text-foreground/90">{board.title}</h3>
                     </div>
                     <span className="text-xs text-muted-foreground bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
-                        {board.cards.length}
+                      {board.cards.length}
                     </span>
                   </div>
 
@@ -341,8 +346,8 @@ export default function Leads() {
                                 style={{ ...provided.draggableProps.style }}
                                 className="mb-3"
                               >
-                                <ModernLeadCard 
-                                  lead={lead} 
+                                <ModernLeadCard
+                                  lead={lead}
                                   index={index}
                                   isSelected={selectedLeadIds.has(lead.id)}
                                   onToggleSelection={handleToggleSelection}
@@ -368,10 +373,12 @@ export default function Leads() {
         onOpenChange={setIsNewLeadModalOpen}
         onSave={handleNewLead}
       />
-      <SpreadsheetImporter open={isImportOpen} onOpenChange={setIsImportOpen} />
-      <CelebrationOverlay 
-        isVisible={showCelebration} 
-        onComplete={() => setShowCelebration(false)} 
+      {canImport && (
+        <SpreadsheetImporter open={isImportOpen} onOpenChange={setIsImportOpen} />
+      )}
+      <CelebrationOverlay
+        isVisible={showCelebration}
+        onComplete={() => setShowCelebration(false)}
       />
 
       {/* Barra de Ações em Massa */}
