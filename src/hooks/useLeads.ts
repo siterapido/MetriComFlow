@@ -139,41 +139,6 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
               color
             )
           ),
-          checklist_items (
-            id,
-            title,
-            completed
-          ),
-          comments (
-            id,
-            content,
-            user_name,
-            created_at
-          ),
-          interactions (
-            id,
-            interaction_type,
-            outcome,
-            content,
-            interaction_date,
-            user_id,
-            profiles!interactions_user_id_fkey (
-              full_name
-            )
-          ),
-          tasks (
-            id,
-            title,
-            description,
-            task_type,
-            priority,
-            due_date,
-            status,
-            assigned_to,
-            profiles!tasks_assigned_to_fkey (
-              full_name
-            )
-          ),
           ad_campaigns (
             name,
             external_id
@@ -245,38 +210,38 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
       let filteredData = data || [];
       if (filters?.custom_fields && filteredData.length > 0) {
         const cf = filters.custom_fields;
-        
+
         filteredData = filteredData.filter((lead) => {
           const customFields = lead.custom_fields as Record<string, any> | null;
           if (!customFields) return false;
-          
+
           // Filtro por Cidade
           if (cf.Cidade && cf.Cidade.length > 0) {
             const cidade = customFields.Cidade;
             if (!cidade || !cf.Cidade.includes(cidade)) return false;
           }
-          
+
           // Filtro por Estado
           if (cf.Estado && cf.Estado.length > 0) {
             const estado = customFields.Estado;
             if (!estado || !cf.Estado.includes(estado)) return false;
           }
-          
+
           // Filtro por Porte
           if (cf.Porte && cf.Porte.length > 0) {
             const porte = customFields.Porte;
             if (!porte || !cf.Porte.includes(porte)) return false;
           }
-          
+
           // Filtro por Nome Fantasia (busca por texto - case insensitive)
           if (cf["Nome Fantasia"]) {
             const nomeFantasia = customFields["Nome Fantasia"];
-            if (!nomeFantasia || 
-                !String(nomeFantasia).toLowerCase().includes(cf["Nome Fantasia"].toLowerCase())) {
+            if (!nomeFantasia ||
+              !String(nomeFantasia).toLowerCase().includes(cf["Nome Fantasia"].toLowerCase())) {
               return false;
             }
           }
-          
+
           return true;
         });
       }
@@ -308,6 +273,7 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
     staleTime: 0, // sempre fresco para refletir mudanças imediatas
     refetchOnMount: true,
     refetchOnWindowFocus: true,
+    enabled: !!org?.id,
   })
 }
 
@@ -730,7 +696,7 @@ export function useLeadsFollowUp() {
     queryFn: async () => {
       if (!org?.id) throw new Error('Organização ativa não definida')
       const today = new Date().toISOString().split('T')[0]
-      
+
       const { data, error } = await supabase
         .from('leads')
         .select('id, title, assignee_name, next_follow_up_date, last_contact_date, priority')

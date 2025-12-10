@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useActiveOrganization } from "@/hooks/useActiveOrganization";
-import { useSetActiveOrganization, useUserOrganizations } from "@/hooks/useOrganizations";
+import { useActiveOrganization, useSetActiveOrganization } from "@/hooks/useActiveOrganization";
+import { useOrganizations } from "@/hooks/useOrganizations";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, Building2 } from "lucide-react";
 import {
@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 
 export function OrganizationSwitcher() {
   const { data: activeOrg } = useActiveOrganization();
-  const { data: orgs } = useUserOrganizations();
+  const { organizations: orgs } = useOrganizations();
   const setActiveOrg = useSetActiveOrganization();
   const [needsChoice, setNeedsChoice] = useState(false);
 

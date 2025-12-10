@@ -21,7 +21,6 @@ export interface UserPermissions {
   canAddUser: boolean;
   planHasCRMAccess: boolean;
   canImportLeads: boolean;
-  isSuperAdmin: boolean;
 }
 
 export const useUserPermissions = () => {
@@ -46,14 +45,13 @@ export const useUserPermissions = () => {
           canAddUser: false,
           planHasCRMAccess: false,
           canImportLeads: false,
-          isSuperAdmin: false,
         };
       }
 
       // Fetch user profile to get user_type
       const { data: profile, error } = await supabase
         .from("profiles")
-        .select("user_type, is_super_admin")
+        .select("user_type")
         .eq("id", user.id)
         .single();
 
@@ -122,7 +120,6 @@ export const useUserPermissions = () => {
           : true,
         planHasCRMAccess,
         canImportLeads: isOwner || isOrgAdmin,
-        isSuperAdmin: !!profile?.is_super_admin,
       };
     },
     enabled: !!user?.id,

@@ -34,9 +34,7 @@ import PublicLeadForm from "./pages/PublicLeadForm";
 import PurchasePage from "./pages/PurchasePage";
 import PurchaseSuccessPage from "./pages/PurchaseSuccessPage";
 import PurchaseCancelPage from "./pages/PurchaseCancelPage";
-import PurchaseCancelPage from "./pages/PurchaseCancelPage";
 import PosLoginPage from "./pages/PosLoginPage";
-import Organizations from "./pages/Organizations";
 
 const queryClient = new QueryClient();
 
@@ -90,7 +88,6 @@ const App = () => (
                   <Route path="/metrics" element={<Navigate to="/leads" replace />} />
                   {/* Nova página unificada de gestão de equipe */}
                   <Route path="/equipe" element={<OwnerRoute><TeamManagement /></OwnerRoute>} />
-                  <Route path="/organizacoes" element={<ProtectedRoute><Organizations /></ProtectedRoute>} />
                   {/* Redirects de rotas antigas para nova rota unificada */}
                   <Route path="/usuarios" element={<Navigate to="/equipe" replace />} />
                   <Route path="/team" element={<Navigate to="/equipe" replace />} />

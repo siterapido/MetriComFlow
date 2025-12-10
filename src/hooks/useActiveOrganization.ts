@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -76,10 +76,10 @@ export function useActiveOrganization() {
         preferredOrgId = typeof window !== "undefined"
           ? window.localStorage.getItem("activeOrgId")
           : null;
-    } catch (error) {
-      console.warn("Falha ao recuperar organização ativa do localStorage", error)
-      preferredOrgId = null;
-    }
+      } catch (error) {
+        console.warn("Falha ao recuperar organização ativa do localStorage", error)
+        preferredOrgId = null;
+      }
 
       if (preferredOrgId) {
         const { data: preferredMembership } = await supabase
@@ -177,4 +177,37 @@ export function useActiveOrganization() {
     enabled: !!user?.id,
     staleTime: 60 * 1000,
   });
+}
+
+export function useSetActiveOrganization() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return async (orgId: string) => {
+    if (!user?.id) return;
+
+    // 1. Update Local Storage
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("activeOrgId", orgId);
+      }
+    } catch (e) {
+      console.warn("Error saving active org preference", e);
+    }
+
+    // 2. Update Profile on Server
+    try {
+      await supabase
+        .from("profiles")
+        .update({ active_organization_id: orgId })
+        .eq("id", user.id);
+    } catch (e) {
+      console.error("Error updating active org on server", e);
+    }
+
+    // 3. Invalidate Query to trigger refresh
+    await queryClient.invalidateQueries({
+      queryKey: ["active-organization", user.id],
+    });
+  };
 }
