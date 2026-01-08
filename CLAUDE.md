@@ -10,15 +10,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **InsightFy** is a B2B CRM for lead management, revenue tracking, and goal monitoring. Built with **Vite + React 18 + TypeScript**, **shadcn-ui**, **Tailwind CSS**, and **Supabase** backend. Originally created with Lovable (lovable.dev).
 
-## Key Commands
+### Key Commands
 
 ```bash
+# Development
 npm i                # Install dependencies
 npm run dev          # Start dev server (port 8082)
 npm run build        # Production build
 npm run build:dev    # Development build
 npm run lint         # Run ESLint
 npm run preview      # Preview production build
+
+# Testing
+npm run test         # Run tests once
+npm run test:watch   # Run tests in watch mode
+npm run test:ui      # Run tests with UI interface
 
 # Meta Ads Integration
 npm run verify:meta  # Verify Meta credentials configuration
@@ -963,8 +969,11 @@ CREATE POLICY "Users can view their org's data"
 
 - [DATABASE.md](DATABASE.md) - Complete schema and API reference
 - [README.md](README.md) - Project overview and setup
+- [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) - Official design system and UI/UX guidelines
+- [AGENTS.md](AGENTS.md) - Contributor guidelines for AI agents
 - [docs/META_ADS_SETUP.md](docs/META_ADS_SETUP.md) - Meta Ads integration guide
-- [docs/VERCEL_ENV_GUIDE.md](docs/VERCEL_ENV_GUIDE.md) - Vercel deployment guide
+- [docs/META_ADS_ARCHITECTURE.md](docs/META_ADS_ARCHITECTURE.md) - Meta Ads technical architecture
+- [docs/META_OAUTH_SETUP.md](docs/META_OAUTH_SETUP.md) - Complete OAuth setup guide
 
 ## Common Issues & Troubleshooting
 

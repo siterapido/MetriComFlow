@@ -43,6 +43,7 @@ const getLabelColor = (label: string) => {
 const BOARD_CONFIG = [
   { id: "novo_lead", title: "Novo Lead" },
   { id: "qualificacao", title: "Qualificação" },
+  { id: "reuniao", title: "Reunião" },
   { id: "proposta", title: "Proposta" },
   { id: "negociacao", title: "Negociação" },
   { id: "fechado_ganho", title: "Fechado - Ganho" },
@@ -53,6 +54,7 @@ const BOARD_CONFIG = [
 type LeadStatus =
   | 'novo_lead'
   | 'qualificacao'
+  | 'reuniao'
   | 'proposta'
   | 'negociacao'
   | 'fechado_ganho'

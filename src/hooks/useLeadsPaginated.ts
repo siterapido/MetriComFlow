@@ -133,6 +133,7 @@ export function useLeadsPaginated() {
       const statuses = [
         'novo_lead',
         'qualificacao',
+        'reuniao',
         'proposta',
         'negociacao',
         'fechado_ganho',
