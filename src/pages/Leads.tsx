@@ -16,7 +16,8 @@ import { Plus, Search, Filter, Calendar, MessageSquare, Paperclip, User, History
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { useLeads, useUpdateLead, type LeadWithLabels } from "@/hooks/useLeads";
+import { useLeads, useUpdateLead, type LeadWithLabels } from "@/hooks/useLeads"
+import { useLeadsPaginated, useUpdateLeadPaginated } from "@/hooks/useLeadsPaginated";
 import { useLeadActivity } from "@/hooks/useLeads";
 import type { Database } from "@/lib/database.types";
 import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
@@ -77,49 +78,57 @@ export default function Leads() {
     }
   }, [hideMetaLeads, sourceFilter]);
 
-  // Fetch data
-  const { data: leads, isLoading, error } = useLeads();
+  // Fetch data - USANDO PAGINAÇÃO PARA MELHOR PERFORMANCE
+  const { data: leadsPaginated, isLoading, error, loadMore, refresh } = useLeadsPaginated();
   const { data: campaigns } = useAdCampaigns(undefined, { enabled: hasMetaConnection });
   type LeadActivity = Database['public']['Tables']['lead_activity']['Row']
   const { data: activitiesData } = useLeadActivity();
-  const updateLead = useUpdateLead();
+  const updateLead = useUpdateLeadPaginated();
 
   const recentActivities = useMemo<LeadActivity[]>(() => {
     return (activitiesData ?? []).slice(0, 10)
   }, [activitiesData])
 
-  // Group leads by status
+  // Group leads by status - COM PAGINAÇÃO
   const boards = useMemo(() => {
-    if (!leads) return BOARD_CONFIG.map(config => ({ ...config, cards: [] }));
+    if (!leadsPaginated) return BOARD_CONFIG.map(config => ({ ...config, cards: [] }));
 
-    const filteredLeads = leads.filter(lead => {
-      // Search filter
-      const matchesSearch = searchTerm
-        ? lead.title.toLowerCase().includes(searchTerm.toLowerCase())
-        : true;
+    return BOARD_CONFIG.map(config => {
+      const statusData = leadsPaginated[config.id]
+      const leads = statusData?.leads || []
 
-      // Source filter
-      const matchesSource = sourceFilter === 'all'
-        ? true
-        : lead.source === sourceFilter;
+      // Aplicar filtros nos leads já carregados
+      const filteredLeads = leads.filter(lead => {
+        // Search filter
+        const matchesSearch = searchTerm
+          ? lead.title.toLowerCase().includes(searchTerm.toLowerCase())
+          : true;
 
-      // Campaign filter
-      const matchesCampaign = campaignFilter === 'all'
-        ? true
-        : lead.campaign_id === campaignFilter;
+        // Source filter
+        const matchesSource = sourceFilter === 'all'
+          ? true
+          : lead.source === sourceFilter;
 
-      const matchesVisibility = hideMetaLeads
-        ? (lead.source !== 'meta_ads' && !lead.campaign_id)
-        : true;
+        // Campaign filter
+        const matchesCampaign = campaignFilter === 'all'
+          ? true
+          : lead.campaign_id === campaignFilter;
 
-      return matchesSearch && matchesSource && matchesCampaign && matchesVisibility;
+        const matchesVisibility = hideMetaLeads
+          ? (lead.source !== 'meta_ads' && !lead.campaign_id)
+          : true;
+
+        return matchesSearch && matchesSource && matchesCampaign && matchesVisibility;
+      });
+
+      return {
+        ...config,
+        cards: filteredLeads,
+        hasMore: statusData?.hasMore || false,
+        totalCount: statusData?.totalCount || 0
+      };
     });
-
-    return BOARD_CONFIG.map(config => ({
-      ...config,
-      cards: filteredLeads.filter(lead => lead.status === config.id)
-    }));
-  }, [leads, searchTerm, sourceFilter, campaignFilter, hideMetaLeads]);
+  }, [leadsPaginated, searchTerm, sourceFilter, campaignFilter, hideMetaLeads]);
 
   const handleNewLead = () => {
     setIsNewLeadModalOpen(false);
@@ -137,7 +146,14 @@ export default function Leads() {
       return;
     }
 
-    const lead = leads?.find(l => l.id === draggableId);
+    // Encontrar o lead em qualquer coluna carregada
+    let lead: LeadWithLabels | undefined
+    if (leadsPaginated) {
+      for (const status of Object.keys(leadsPaginated)) {
+        lead = leadsPaginated[status]?.leads.find(l => l.id === draggableId)
+        if (lead) break
+      }
+    }
     if (!lead) return;
 
     const newStatus = destination.droppableId as LeadStatus;
@@ -343,7 +359,7 @@ export default function Leads() {
                         {board.title}
                       </CardTitle>
                       <Badge variant="secondary" className="text-xs">
-                        {board.cards.length}
+                        {board.cards.length}/{board.totalCount}
                       </Badge>
                     </div>
                   </CardHeader>
@@ -475,6 +491,17 @@ export default function Leads() {
                         ))}
 
                         {provided.placeholder}
+
+                        {/* Load More Button */}
+                        {board.hasMore && (
+                          <Button
+                            variant="ghost"
+                            className="w-full h-10 border border-dashed border-border hover:border-primary hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all text-sm"
+                            onClick={() => loadMore(board.id)}
+                          >
+                            Carregar mais leads ({board.totalCount - board.cards.length} restantes)
+                          </Button>
+                        )}
 
                         {/* Add New Card Button */}
                         <Button
