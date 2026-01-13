@@ -541,13 +541,4 @@ CREATE TRIGGER trg_subscription_usage_updated_at
 COMMENT ON TABLE public.subscription_plans IS 'Available subscription plans with feature limits';
 COMMENT ON TABLE public.organization_subscriptions IS 'Active subscriptions for organizations';
 COMMENT ON TABLE public.subscription_usage IS 'Real-time tracking of resource usage per organization';
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_matviews
-    WHERE schemaname = 'public'
-      AND matviewname = 'organization_plan_limits'
-  ) THEN
-    EXECUTE $$COMMENT ON MATERIALIZED VIEW public.organization_plan_limits IS 'Combined view of plan limits and current usage for easy validation'$$;
-  END IF;
-END $$;
+COMMENT ON MATERIALIZED VIEW public.organization_plan_limits IS 'Combined view of plan limits and current usage for easy validation';

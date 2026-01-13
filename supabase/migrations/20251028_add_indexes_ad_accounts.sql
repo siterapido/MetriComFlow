@@ -4,6 +4,18 @@
 
 BEGIN;
 
+-- Add organization_id column if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'ad_accounts' AND column_name = 'organization_id'
+  ) THEN
+    ALTER TABLE public.ad_accounts
+      ADD COLUMN organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
 -- Covering index for connected_by (FK to profiles.id)
 CREATE INDEX IF NOT EXISTS idx_ad_accounts_connected_by
   ON public.ad_accounts(connected_by);

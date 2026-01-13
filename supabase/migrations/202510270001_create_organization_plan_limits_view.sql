@@ -1,6 +1,9 @@
 -- Create materialized view for organization plan limits
 -- This view combines subscription, plan, and usage data for efficient querying
 
+-- Drop materialized view if it exists (from previous migration)
+DROP MATERIALIZED VIEW IF EXISTS public.organization_plan_limits;
+
 CREATE OR REPLACE VIEW organization_plan_limits AS
 SELECT
   o.id AS organization_id,

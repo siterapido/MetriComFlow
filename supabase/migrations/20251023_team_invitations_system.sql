@@ -6,17 +6,49 @@
 -- ORGANIZATIONS
 -- =====================================================
 
-CREATE TABLE IF NOT EXISTS public.organizations (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name TEXT NOT NULL,
-  slug TEXT UNIQUE,
-  owner_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  billing_email TEXT,
-  is_active BOOLEAN NOT NULL DEFAULT TRUE,
-  metadata JSONB DEFAULT '{}'::JSONB,
-  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-);
+-- Add missing columns to existing organizations table
+DO $$
+BEGIN
+  -- Add owner_id if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'organizations' AND column_name = 'owner_id'
+  ) THEN
+    ALTER TABLE public.organizations ADD COLUMN owner_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE;
+  END IF;
+
+  -- Add slug if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'organizations' AND column_name = 'slug'
+  ) THEN
+    ALTER TABLE public.organizations ADD COLUMN slug TEXT UNIQUE;
+  END IF;
+
+  -- Add billing_email if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'organizations' AND column_name = 'billing_email'
+  ) THEN
+    ALTER TABLE public.organizations ADD COLUMN billing_email TEXT;
+  END IF;
+
+  -- Add is_active if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'organizations' AND column_name = 'is_active'
+  ) THEN
+    ALTER TABLE public.organizations ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
+  END IF;
+
+  -- Add metadata if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'organizations' AND column_name = 'metadata'
+  ) THEN
+    ALTER TABLE public.organizations ADD COLUMN metadata JSONB DEFAULT '{}'::JSONB;
+  END IF;
+END $$;
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 DO $$
 BEGIN
@@ -28,16 +60,7 @@ BEGIN
   ) THEN
     CREATE POLICY "Members can view organizations they belong to"
       ON public.organizations FOR SELECT
-      USING (
-        owner_id = auth.uid()
-        OR EXISTS (
-          SELECT 1
-          FROM public.organization_memberships om
-          WHERE om.organization_id = organizations.id
-            AND om.profile_id = auth.uid()
-            AND om.is_active = TRUE
-        )
-      );
+      USING (owner_id = auth.uid());
   END IF;
 
   IF NOT EXISTS (
@@ -182,6 +205,22 @@ CREATE TRIGGER trg_organizations_updated_at
   BEFORE UPDATE ON public.organizations
   FOR EACH ROW
   EXECUTE FUNCTION public.set_timestamp_updated_at();
+
+-- Update organizations policy to include membership check (now that organization_memberships exists)
+DROP POLICY IF EXISTS "Members can view organizations they belong to" ON public.organizations;
+CREATE POLICY "Members can view organizations they belong to"
+  ON public.organizations FOR SELECT
+  USING (
+    owner_id = auth.uid()
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_memberships om
+      WHERE om.organization_id = organizations.id
+        AND om.profile_id = auth.uid()
+        AND om.is_active = TRUE
+    )
+  );
+
 -- =====================================================
 -- TEAM INVITATIONS
 -- =====================================================

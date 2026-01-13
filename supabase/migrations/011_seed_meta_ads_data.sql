@@ -1,7 +1,7 @@
 -- Migration: Seed data for Meta Ads testing
 -- Description: Popula tabelas com dados de exemplo se estiverem vazias
 
--- Inserir conta de anúncios de teste (apenas se não existir)
+-- Inserir conta de anúncios de teste (apenas se não existir E se houver usuários)
 INSERT INTO ad_accounts (id, external_id, business_name, provider, is_active, connected_by)
 SELECT
   gen_random_uuid(),
@@ -10,8 +10,9 @@ SELECT
   'meta',
   true,
   (SELECT id FROM profiles LIMIT 1)
-WHERE NOT EXISTS (SELECT 1 FROM ad_accounts LIMIT 1);
--- Inserir campanhas de teste (apenas se não existirem)
+WHERE NOT EXISTS (SELECT 1 FROM ad_accounts LIMIT 1)
+AND EXISTS (SELECT 1 FROM profiles LIMIT 1);
+-- Inserir campanhas de teste (apenas se não existirem E se houver contas)
 WITH test_account AS (
   SELECT id FROM ad_accounts LIMIT 1
 )
@@ -25,7 +26,8 @@ SELECT
   (SELECT id FROM test_account),
   CURRENT_DATE - INTERVAL '90 days'
 FROM generate_series(1, 3)
-WHERE NOT EXISTS (SELECT 1 FROM ad_campaigns LIMIT 1);
+WHERE NOT EXISTS (SELECT 1 FROM ad_campaigns LIMIT 1)
+AND EXISTS (SELECT 1 FROM ad_accounts LIMIT 1);
 -- Inserir dados diários de insights (últimos 90 dias)
 WITH
   test_campaigns AS (
@@ -64,6 +66,7 @@ FROM date_series ds
 WHERE NOT EXISTS (
   SELECT 1 FROM campaign_daily_insights
   WHERE campaign_daily_insights.date = ds.date
-);
+)
+AND EXISTS (SELECT 1 FROM ad_campaigns LIMIT 1);
 -- Comentário informativo
 COMMENT ON TABLE campaign_daily_insights IS 'Dados de teste gerados automaticamente para desenvolvimento. Em produção, estes dados virão da API do Meta.';
