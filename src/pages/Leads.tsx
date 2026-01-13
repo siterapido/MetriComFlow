@@ -12,8 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Filter, Calendar, MessageSquare, Paperclip, User, History, Loader2, Facebook } from "lucide-react";
+import { Plus, Search, Filter, Calendar, MessageSquare, Paperclip, User, History, Loader2, Facebook, Upload } from "lucide-react";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
+import { LeadImportModal } from "@/components/leads/LeadImportModal";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useLeads, useUpdateLead, type LeadWithLabels } from "@/hooks/useLeads";
@@ -59,6 +60,7 @@ type LeadStatus =
 export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [sourceFilter, setSourceFilter] = useState<'all' | 'meta_ads' | 'manual'>('all');
   const [campaignFilter, setCampaignFilter] = useState<string>('all');
   const { toast } = useToast();
@@ -247,6 +249,14 @@ export default function Leads() {
           <Button variant="outline" className="gap-2">
             <Filter className="w-4 h-4" />
             Filtros
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setIsImportModalOpen(true)}
+          >
+            <Upload className="w-4 h-4" />
+            Importar
           </Button>
           <Button
             className="gap-2 bg-primary hover:bg-primary/90"
@@ -500,6 +510,12 @@ export default function Leads() {
         open={isNewLeadModalOpen}
         onOpenChange={setIsNewLeadModalOpen}
         onSave={handleNewLead}
+      />
+
+      {/* Modal para Importação */}
+      <LeadImportModal
+        open={isImportModalOpen}
+        onOpenChange={setIsImportModalOpen}
       />
 
       {/* Histórico de movimentações */}

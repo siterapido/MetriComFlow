@@ -43,15 +43,16 @@ const App = () => (
           }}
         >
           <Routes>
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={<Auth />} />
+            <Route path="/landingpage" element={<Index />} />
             <Route path="/login" element={<Auth />} />
             {/* Checkout removido temporariamente para reinimplementação */}
             <Route path="/finalizar-cadastro" element={<FinalizeSignup />} />
             <Route path="/setup-admin" element={<SetupAdmin />} />
             <Route path="/forms/:formId" element={<PublicLeadForm />} />
             {/* Slug pair must come BEFORE orgSlug/formId to avoid misrouting */}
-            <Route path= "/:profileSlug/:formSlug" element={<PublicLeadForm />} />
-            <Route path= "/:orgSlug/:formId" element={<PublicLeadForm />} />
+            <Route path="/:profileSlug/:formSlug" element={<PublicLeadForm />} />
+            <Route path="/:orgSlug/:formId" element={<PublicLeadForm />} />
             <Route path="/auth/forgot-password" element={<ForgotPassword />} />
             <Route path="/auth/update-password" element={<UpdatePassword />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
