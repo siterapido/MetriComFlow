@@ -49,7 +49,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   },
   global: {
     headers: {
-      'x-application-name': 'metricom-flow',
+      'x-application-name': 'insightfy',
     },
   },
 })
@@ -60,79 +60,79 @@ try {
   if (typeof window !== 'undefined' && (import.meta as any).env?.DEV) {
     // Expose client for inspection
     (window as any).__supabase = supabase
-    ;(window as any).__capturedInvokes = (window as any).__capturedInvokes || []
-    ;(window as any).__capturedAuth = (window as any).__capturedAuth || []
+      ; (window as any).__capturedInvokes = (window as any).__capturedInvokes || []
+      ; (window as any).__capturedAuth = (window as any).__capturedAuth || []
 
     // Wrap functions.invoke to log requests and responses
     const originalInvoke = (supabase.functions.invoke as any).bind(supabase.functions)
-    ;(supabase.functions as any).invoke = async (fnName: string, options?: any) => {
-      const start = Date.now()
-      try {
-        const result = await originalInvoke(fnName, options)
-        ;(window as any).__capturedInvokes.push({
-          fnName,
-          options,
-          result,
-          start,
-          end: Date.now(),
-        })
-        return result
-      } catch (err) {
-        ;(window as any).__capturedInvokes.push({
-          fnName,
-          options,
-          error: err instanceof Error ? err.message : String(err),
-          start,
-          end: Date.now(),
-        })
-        throw err
+      ; (supabase.functions as any).invoke = async (fnName: string, options?: any) => {
+        const start = Date.now()
+        try {
+          const result = await originalInvoke(fnName, options)
+            ; (window as any).__capturedInvokes.push({
+              fnName,
+              options,
+              result,
+              start,
+              end: Date.now(),
+            })
+          return result
+        } catch (err) {
+          ; (window as any).__capturedInvokes.push({
+            fnName,
+            options,
+            error: err instanceof Error ? err.message : String(err),
+            start,
+            end: Date.now(),
+          })
+          throw err
+        }
       }
-    }
 
     // Wrap key auth methods for visibility
     const originalSignUp = (supabase.auth.signUp as any).bind(supabase.auth)
-    ;(supabase.auth as any).signUp = async (params: any) => {
-      try {
-        const res = await originalSignUp(params)
-        ;(window as any).__capturedAuth.push({ type: 'signUp', params, res })
-        return res
-      } catch (err) {
-        ;(window as any).__capturedAuth.push({
-          type: 'signUp',
-          params,
-          error: err instanceof Error ? err.message : String(err),
-        })
-        throw err
+      ; (supabase.auth as any).signUp = async (params: any) => {
+        try {
+          const res = await originalSignUp(params)
+            ; (window as any).__capturedAuth.push({ type: 'signUp', params, res })
+          return res
+        } catch (err) {
+          ; (window as any).__capturedAuth.push({
+            type: 'signUp',
+            params,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          throw err
+        }
       }
-    }
 
     const originalSignIn = (supabase.auth.signInWithPassword as any).bind(supabase.auth)
-    ;(supabase.auth as any).signInWithPassword = async (params: any) => {
-      try {
-        const res = await originalSignIn(params)
-        ;(window as any).__capturedAuth.push({ type: 'signInWithPassword', params, res })
-        return res
-      } catch (err) {
-        ;(window as any).__capturedAuth.push({
-          type: 'signInWithPassword',
-          params,
-          error: err instanceof Error ? err.message : String(err),
-        })
-        throw err
+      ; (supabase.auth as any).signInWithPassword = async (params: any) => {
+        try {
+          const res = await originalSignIn(params)
+            ; (window as any).__capturedAuth.push({ type: 'signInWithPassword', params, res })
+          return res
+        } catch (err) {
+          ; (window as any).__capturedAuth.push({
+            type: 'signInWithPassword',
+            params,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          throw err
+        }
       }
-    }
 
     const originalGetSession = (supabase.auth.getSession as any).bind(supabase.auth)
-    ;(supabase.auth as any).getSession = async () => {
-      try {
-        const res = await originalGetSession()
-        ;(window as any).__capturedAuth.push({ type: 'getSession', res })
-        return res
-      } catch (err) {
-        ;(window as any).__capturedAuth.push({ type: 'getSession', error: err instanceof Error ? err.message : String(err) })
-        throw err
+      ; (supabase.auth as any).getSession = async () => {
+        try {
+          const res = await originalGetSession()
+            ; (window as any).__capturedAuth.push({ type: 'getSession', res })
+          return res
+        } catch (err) {
+          ; (window as any).__capturedAuth.push({ type: 'getSession', error: err instanceof Error ? err.message : String(err) })
+          throw err
+        }
       }
-    }
   }
 } catch (e) {
   console.warn('Supabase debug instrumentation failed:', e)

@@ -91,8 +91,8 @@ export function AppSidebar() {
             </div>
             {!isCollapsed && (
               <div>
-                <h2 className="font-bold text-sidebar-foreground">MetriCom</h2>
-                <p className="text-xs text-sidebar-foreground/60">Flow System</p>
+                <h2 className="font-bold text-sidebar-foreground">InsightFy</h2>
+                <p className="text-xs text-sidebar-foreground/60">System</p>
               </div>
             )}
           </div>
@@ -108,10 +108,9 @@ export function AppSidebar() {
                     <NavLink
                       to={item.url}
                       className={({ isActive }) =>
-                        `flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ${
-                          isActive
-                            ? "bg-primary text-primary-foreground shadow-lg"
-                            : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        `flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ${isActive
+                          ? "bg-primary text-primary-foreground shadow-lg"
+                          : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                         }`
                       }
                     >

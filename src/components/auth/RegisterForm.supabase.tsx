@@ -76,7 +76,7 @@ export function RegisterFormSupabase() {
       <CardHeader>
         <CardTitle>Criar conta</CardTitle>
         <CardDescription>
-          Preencha os dados para criar sua conta no Metricom Flow
+          Preencha os dados para criar sua conta no InsightFy
         </CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>

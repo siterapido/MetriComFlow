@@ -48,8 +48,24 @@ type Lead = Tables<"leads"> & {
     labels: Tables<"labels">;
   }>;
   comments?: Tables<"comments">[];
+  // New columns
+  cnpj?: string | null;
+  legal_name?: string | null;
+  trade_name?: string | null;
+  size?: string | null;
+  share_capital?: number | null;
+  opening_date?: string | null;
   phone?: string | null;
+  secondary_phone?: string | null;
   email?: string | null;
+  address?: string | null;
+  address_number?: string | null;
+  complement?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip_code?: string | null;
+  main_activity?: string | null;
 };
 
 interface LeadEditDialogProps {
@@ -110,6 +126,24 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
     status: lead.status,
     source: lead.source as "manual" | "meta_ads",
     campaign_id: lead.campaign_id || undefined,
+    // New fields
+    cnpj: lead.cnpj || "",
+    legal_name: lead.legal_name || "",
+    trade_name: lead.trade_name || "",
+    size: lead.size || "",
+    share_capital: lead.share_capital ? String(lead.share_capital) : "",
+    opening_date: lead.opening_date ? new Date(lead.opening_date) : undefined,
+    phone: lead.phone || "",
+    secondary_phone: lead.secondary_phone || "",
+    email: lead.email || "",
+    address: lead.address || "",
+    address_number: lead.address_number || "",
+    complement: lead.complement || "",
+    neighborhood: lead.neighborhood || "",
+    city: lead.city || "",
+    state: lead.state || "",
+    zip_code: lead.zip_code || "",
+    main_activity: lead.main_activity || "",
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -169,6 +203,24 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
           source: formData.source,
           // Nunca envie string vazia para UUIDs; use null quando não selecionado
           campaign_id: formData.source === "meta_ads" ? (formData.campaign_id ?? null) : null,
+          // New fields updates
+          cnpj: formData.cnpj || null,
+          legal_name: formData.legal_name || null,
+          trade_name: formData.trade_name || null,
+          size: formData.size || null,
+          share_capital: formData.share_capital ? parseFloat(formData.share_capital.replace(/\./g, '').replace(',', '.')) : null,
+          opening_date: formData.opening_date?.toISOString().split("T")[0] || null,
+          phone: formData.phone || null,
+          secondary_phone: formData.secondary_phone || null,
+          email: formData.email || null,
+          address: formData.address || null,
+          address_number: formData.address_number || null,
+          complement: formData.complement || null,
+          neighborhood: formData.neighborhood || null,
+          city: formData.city || null,
+          state: formData.state || null,
+          zip_code: formData.zip_code || null,
+          main_activity: formData.main_activity || null,
         },
       });
 
@@ -287,490 +339,666 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
       <Dialog open={open && !showDeleteConfirm} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[780px] max-h-[85vh] bg-card border-border flex flex-col overflow-hidden">
           <div className="flex-1 overflow-auto">
-          <DialogHeader>
-            <div>
-              <DialogTitle className="text-foreground">Detalhes do Lead</DialogTitle>
-              <DialogDescription className="text-muted-foreground">
-                Visualize e atualize as informações do lead
-              </DialogDescription>
-            </div>
-          </DialogHeader>
+            <DialogHeader>
+              <div>
+                <DialogTitle className="text-foreground">Detalhes do Lead</DialogTitle>
+                <DialogDescription className="text-muted-foreground">
+                  Visualize e atualize as informações do lead
+                </DialogDescription>
+              </div>
+            </DialogHeader>
 
-          <Tabs defaultValue="detalhes" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="detalhes">Detalhes</TabsTrigger>
-              <TabsTrigger value="comentarios_followup">Comentários / Follow-up</TabsTrigger>
-              <TabsTrigger value="timeline">Linha do tempo</TabsTrigger>
-            </TabsList>
+            <Tabs defaultValue="detalhes" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="detalhes">Detalhes</TabsTrigger>
+                <TabsTrigger value="comentarios_followup">Comentários / Follow-up</TabsTrigger>
+                <TabsTrigger value="timeline">Linha do tempo</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="detalhes" className="space-y-4 mt-4">
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Nome (Título) */}
-                <div className="space-y-2">
-                  <Label htmlFor="title" className="text-foreground">
-                    Nome do Lead *
-                  </Label>
-                  <Input
-                    id="title"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    className="bg-input border-border"
-                    required
-                    disabled={isSubmitting}
-                  />
-                </div>
-
-                {/* Contatos (somente exibição) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1 rounded border border-border/60 p-3">
-                    <div className="text-xs uppercase text-muted-foreground tracking-wide">E-mail</div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Mail className="w-4 h-4 text-muted-foreground" />
-                      {(() => {
-                        const extractEmail = (text?: string | null) => {
-                          if (!text) return null;
-                          const m = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-                          return m ? m[0] : null;
-                        };
-                        const email = (lead as any).email || extractEmail(lead.description);
-                        return email ? (
-                          <a href={`mailto:${email}`} onClick={(e) => e.stopPropagation()} className="hover:underline">
-                            {email}
-                          </a>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                  <div className="space-y-1 rounded border border-border/60 p-3">
-                    <div className="text-xs uppercase text-muted-foreground tracking-wide">Telefone</div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Phone className="w-4 h-4 text-muted-foreground" />
-                      {(() => {
-                        const extractPhone = (text?: string | null) => {
-                          if (!text) return null;
-                          const match = (text.match(/\d[\d\s().-]{8,}\d/g) || [])
-                            .map((m) => m.replace(/\D/g, ""))
-                            .find((n) => n.length >= 10 && n.length <= 13);
-                          return match || null;
-                        };
-                        const phone = (lead as any).phone || extractPhone(lead.description);
-                        return phone ? <span>{phone}</span> : <span className="text-muted-foreground">—</span>;
-                      })()}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Origem / Campanha / Criativo */}
-                <div className="rounded border border-border/60 p-3 space-y-2">
-                  <div className="text-xs uppercase text-muted-foreground tracking-wide">Origem e Campanha</div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                    <div>
-                      <div className="text-xs text-muted-foreground">Origem</div>
-                      <div className="font-medium">{lead.source || '—'}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Campanha</div>
-                      <div className="font-medium" title={lead.ad_campaigns?.name || undefined}>
-                        {lead.ad_campaigns?.name || '—'}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Criativo</div>
-                      <div className="font-medium" title={lead.ad_id || undefined}>{lead.ad_id || '—'}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Datas movidas para Comentários / Follow-up */}
-
-                {/* Descrição */}
-                <div className="space-y-2">
-                  <Label htmlFor="description" className="text-foreground">Descrição</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="bg-input border-border min-h-[80px]"
-                    disabled={isSubmitting}
-                  />
-                </div>
-
-                {/* Status */}
-                <div className="space-y-2">
-                  <Label className="text-foreground">Status</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value) => setFormData({ ...formData, status: value })}
-                    disabled={isSubmitting}
-                  >
-                    <SelectTrigger className="bg-input border-border">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statusOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Responsável */}
-                <div className="space-y-2">
-                  <Label className="text-foreground">Responsável</Label>
-                  <Select
-                    value={formData.assigneeId}
-                    onValueChange={(value) => setFormData({ ...formData, assigneeId: value })}
-                    disabled={isSubmitting}
-                  >
-                    <SelectTrigger className="bg-input border-border">
-                      <SelectValue placeholder="Selecione o responsável" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {assignableUsers && assignableUsers.length > 0 ? (
-                        assignableUsers.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            <div className="flex flex-col">
-                              <span>{user.full_name}</span>
-                              <span className="text-xs text-muted-foreground">{USER_TYPE_LABELS[user.user_type]}</span>
-                            </div>
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="none" disabled>
-                          Nenhum usuário disponível
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Etiquetas */}
-                <div className="space-y-2">
-                  <Label className="text-foreground">Etiquetas</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {labels?.map((label) => (
-                      <Badge
-                        key={label.id}
-                        variant={formData.selectedLabels.includes(label.id) ? "default" : "outline"}
-                        className={cn(
-                          "cursor-pointer transition-colors",
-                          formData.selectedLabels.includes(label.id)
-                            ? getLabelColor(label.name) + " text-white"
-                            : "hover:bg-accent"
-                        )}
-                        onClick={() => !isSubmitting && toggleLabel(label.id)}
-                      >
-                        {label.name}
-                        {formData.selectedLabels.includes(label.id) && (
-                          <X className="w-3 h-3 ml-1" />
-                        )}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Tipo de Contrato */}
-                <div className="space-y-2">
-                  <Label className="text-foreground">Tipo de Contrato</Label>
-                  <Select
-                    value={formData.contractType}
-                    onValueChange={(value: "monthly" | "annual" | "one_time") => setFormData({ ...formData, contractType: value })}
-                    disabled={isSubmitting}
-                  >
-                    <SelectTrigger className="bg-input border-border">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="monthly">Mensal</SelectItem>
-                      <SelectItem value="annual">Anual</SelectItem>
-                      <SelectItem value="one_time">Pagamento Único</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Valor do Contrato */}
-                <div className="space-y-2">
-                  <Label htmlFor="contractValue" className="text-foreground">
-                    Valor do Contrato {formData.contractType === "monthly" ? "(mensal)" : ""}
-                  </Label>
-                  <Input
-                    id="contractValue"
-                    value={formData.contractValue}
-                    onChange={(e) => setFormData({ ...formData, contractValue: formatCurrency(e.target.value) })}
-                    className="bg-input border-border"
-                    disabled={isSubmitting}
-                  />
-                </div>
-
-                {/* Quantidade de Meses */}
-                {formData.contractType === "monthly" && (
+              <TabsContent value="detalhes" className="space-y-4 mt-4">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  {/* Nome (Título) */}
                   <div className="space-y-2">
-                    <Label htmlFor="contractMonths" className="text-foreground">Quantidade de Meses</Label>
+                    <Label htmlFor="title" className="text-foreground">
+                      Nome do Lead *
+                    </Label>
                     <Input
-                      id="contractMonths"
-                      type="number"
-                      min="1"
-                      max="120"
-                      value={formData.contractMonths}
-                      onChange={(e) => setFormData({ ...formData, contractMonths: e.target.value })}
+                      id="title"
+                      value={formData.title}
+                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                       className="bg-input border-border"
+                      required
                       disabled={isSubmitting}
                     />
                   </div>
-                )}
 
-                {/* Origem e Campanha (editar) */}
-                <div className="space-y-2">
-                  <Label className="text-foreground">Origem do Lead</Label>
-                  <Select
-                    value={formData.source}
-                    onValueChange={(value: "manual" | "meta_ads") => setFormData({
-                      ...formData,
-                      source: value,
-                      campaign_id: value === "manual" ? undefined : formData.campaign_id,
-                    })}
-                    disabled={isSubmitting || lead.source === "meta_ads"}
-                  >
-                    <SelectTrigger className="bg-input border-border">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="manual">Manual</SelectItem>
-                      <SelectItem value="meta_ads">
-                        <div className="flex items-center gap-2">
-                          <Facebook className="w-4 h-4" />
-                          Meta Ads
+                  {/* Contatos */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="email" className="text-foreground">E-mail</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="email"
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                          className="pl-9 bg-input border-border"
+                          placeholder="email@exemplo.com"
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="phone" className="text-foreground">Telefone Principal</Label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="phone"
+                          value={formData.phone}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                          className="pl-9 bg-input border-border"
+                          placeholder="(00) 00000-0000"
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="secondary_phone" className="text-foreground">Telefone Secundário</Label>
+                      <Input
+                        id="secondary_phone"
+                        value={formData.secondary_phone}
+                        onChange={(e) => setFormData({ ...formData, secondary_phone: e.target.value })}
+                        className="bg-input border-border"
+                        placeholder="(00) 00000-0000"
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dados da Empresa */}
+                  <div className="rounded-lg border border-border p-4 space-y-4">
+                    <h3 className="font-medium text-foreground flex items-center gap-2">
+                      <UserIcon className="w-4 h-4" /> Dados da Empresa
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="legal_name">Razão Social</Label>
+                        <Input
+                          id="legal_name"
+                          value={formData.legal_name}
+                          onChange={(e) => setFormData({ ...formData, legal_name: e.target.value })}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="trade_name">Nome Fantasia</Label>
+                        <Input
+                          id="trade_name"
+                          value={formData.trade_name}
+                          onChange={(e) => setFormData({ ...formData, trade_name: e.target.value })}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="cnpj">CNPJ</Label>
+                        <Input
+                          id="cnpj"
+                          value={formData.cnpj}
+                          onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="size">Porte</Label>
+                        <Select
+                          value={formData.size}
+                          onValueChange={(value) => setFormData({ ...formData, size: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="MEI">MEI</SelectItem>
+                            <SelectItem value="Microempresa">Microempresa (ME)</SelectItem>
+                            <SelectItem value="Pequena Empresa">Pequena Empresa (EPP)</SelectItem>
+                            <SelectItem value="Médio Porte">Médio Porte</SelectItem>
+                            <SelectItem value="Grande Porte">Grande Porte</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="share_capital">Capital Social</Label>
+                        <Input
+                          id="share_capital"
+                          value={formData.share_capital}
+                          onChange={(e) => setFormData({ ...formData, share_capital: e.target.value })}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="opening_date">Data de Abertura</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !formData.opening_date && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {formData.opening_date ? (
+                                format(formData.opening_date, "dd/MM/yyyy", { locale: ptBR })
+                              ) : (
+                                <span>Selecione a data</span>
+                              )}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={formData.opening_date}
+                              onSelect={(date) => setFormData({ ...formData, opening_date: date })}
+                              initialFocus
+                              locale={ptBR}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="main_activity">Atividade Principal</Label>
+                        <Input
+                          id="main_activity"
+                          value={formData.main_activity}
+                          onChange={(e) => setFormData({ ...formData, main_activity: e.target.value })}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Endereço */}
+                  <div className="rounded-lg border border-border p-4 space-y-4">
+                    <h3 className="font-medium text-foreground flex items-center gap-2">
+                      <UserIcon className="w-4 h-4" /> Endereço
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="zip_code">CEP</Label>
+                        <Input
+                          id="zip_code"
+                          value={formData.zip_code}
+                          onChange={(e) => setFormData({ ...formData, zip_code: e.target.value })}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="address">Logradouro</Label>
+                        <Input
+                          id="address"
+                          value={formData.address}
+                          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="address_number">Número</Label>
+                        <Input
+                          id="address_number"
+                          value={formData.address_number}
+                          onChange={(e) => setFormData({ ...formData, address_number: e.target.value })}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="complement">Complemento</Label>
+                        <Input
+                          id="complement"
+                          value={formData.complement}
+                          onChange={(e) => setFormData({ ...formData, complement: e.target.value })}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="neighborhood">Bairro</Label>
+                        <Input
+                          id="neighborhood"
+                          value={formData.neighborhood}
+                          onChange={(e) => setFormData({ ...formData, neighborhood: e.target.value })}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="city">Cidade</Label>
+                        <Input
+                          id="city"
+                          value={formData.city}
+                          onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="state">Estado</Label>
+                        <Input
+                          id="state"
+                          value={formData.state}
+                          onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                          disabled={isSubmitting}
+                          maxLength={2}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Origem / Campanha / Criativo */}
+                  <div className="rounded border border-border/60 p-3 space-y-2">
+                    <div className="text-xs uppercase text-muted-foreground tracking-wide">Origem e Campanha</div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <div className="text-xs text-muted-foreground">Origem</div>
+                        <div className="font-medium">{lead.source || '—'}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Campanha</div>
+                        <div className="font-medium" title={lead.ad_campaigns?.name || undefined}>
+                          {lead.ad_campaigns?.name || '—'}
                         </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Criativo</div>
+                        <div className="font-medium" title={lead.ad_id || undefined}>{lead.ad_id || '—'}</div>
+                      </div>
+                    </div>
+                  </div>
 
-                {formData.source === "meta_ads" && (
+                  {/* Datas movidas para Comentários / Follow-up */}
+
+                  {/* Descrição */}
                   <div className="space-y-2">
-                    <Label className="text-foreground">Campanha Meta Ads</Label>
+                    <Label htmlFor="description" className="text-foreground">Descrição</Label>
+                    <Textarea
+                      id="description"
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      className="bg-input border-border min-h-[80px]"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+
+                  {/* Status */}
+                  <div className="space-y-2">
+                    <Label className="text-foreground">Status</Label>
                     <Select
-                      value={formData.campaign_id}
-                      onValueChange={(value) => setFormData({ ...formData, campaign_id: value })}
+                      value={formData.status}
+                      onValueChange={(value) => setFormData({ ...formData, status: value })}
                       disabled={isSubmitting}
                     >
                       <SelectTrigger className="bg-input border-border">
-                        <SelectValue placeholder="Selecione a campanha" />
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {campaigns && campaigns.length > 0 ? (
-                          campaigns.map((campaign) => (
-                            <SelectItem key={campaign.id} value={campaign.id}>
-                              {campaign.name}
+                        {statusOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Responsável */}
+                  <div className="space-y-2">
+                    <Label className="text-foreground">Responsável</Label>
+                    <Select
+                      value={formData.assigneeId}
+                      onValueChange={(value) => setFormData({ ...formData, assigneeId: value })}
+                      disabled={isSubmitting}
+                    >
+                      <SelectTrigger className="bg-input border-border">
+                        <SelectValue placeholder="Selecione o responsável" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {assignableUsers && assignableUsers.length > 0 ? (
+                          assignableUsers.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>
+                              <div className="flex flex-col">
+                                <span>{user.full_name}</span>
+                                <span className="text-xs text-muted-foreground">{USER_TYPE_LABELS[user.user_type]}</span>
+                              </div>
                             </SelectItem>
                           ))
                         ) : (
                           <SelectItem value="none" disabled>
-                            Nenhuma campanha disponível
+                            Nenhum usuário disponível
                           </SelectItem>
                         )}
                       </SelectContent>
                     </Select>
                   </div>
-                )}
 
-              </form>
-            </TabsContent>
-
-            {/* Comentários / Follow-up */}
-            <TabsContent value="comentarios_followup" className="space-y-6 mt-4">
-              {/* Resumo do follow-up */}
-              {(() => {
-                const d = formData.followUpDate || (lead.next_follow_up_date ? new Date(lead.next_follow_up_date) : undefined);
-                if (!d) {
-                  return (
-                    <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                      <AlertCircle className="h-4 w-4" /> Nenhum follow-up agendado.
-                    </div>
-                  );
-                }
-                const isOverdue = isPast(new Date(d.toDateString())) && !isToday(d);
-                const isTodayFlag = isToday(d);
-                const tone = isOverdue ? 'text-destructive border-destructive/40 bg-destructive/10' : isTodayFlag ? 'text-amber-600 border-amber-300 bg-amber-50/10' : 'text-blue-600 border-blue-300 bg-blue-50/10';
-                return (
-                  <div className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${tone}`}>
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4" />
-                      <span className="font-medium">Próximo follow-up:</span>
-                      <span>{format(d, 'dd/MM/yyyy', { locale: ptBR })}</span>
-                      <span className="text-xs text-muted-foreground">({formatDistanceToNowStrict(d, { locale: ptBR, addSuffix: true })})</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2"
-                        onClick={async () => {
-                          try {
-                            await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: null } });
-                            setFormData({ ...formData, followUpDate: undefined });
-                          } catch {
-                            // no-op
-                          }
-                        }}
-                      >
-                        Limpar
-                      </Button>
+                  {/* Etiquetas */}
+                  <div className="space-y-2">
+                    <Label className="text-foreground">Etiquetas</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {labels?.map((label) => (
+                        <Badge
+                          key={label.id}
+                          variant={formData.selectedLabels.includes(label.id) ? "default" : "outline"}
+                          className={cn(
+                            "cursor-pointer transition-colors",
+                            formData.selectedLabels.includes(label.id)
+                              ? getLabelColor(label.name) + " text-white"
+                              : "hover:bg-accent"
+                          )}
+                          onClick={() => !isSubmitting && toggleLabel(label.id)}
+                        >
+                          {label.name}
+                          {formData.selectedLabels.includes(label.id) && (
+                            <X className="w-3 h-3 ml-1" />
+                          )}
+                        </Badge>
+                      ))}
                     </div>
                   </div>
-                );
-              })()}
-              {/* Próximo contato + observação + data de entrega */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-foreground">Próximo contato</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
+
+                  {/* Tipo de Contrato */}
+                  <div className="space-y-2">
+                    <Label className="text-foreground">Tipo de Contrato</Label>
+                    <Select
+                      value={formData.contractType}
+                      onValueChange={(value: "monthly" | "annual" | "one_time") => setFormData({ ...formData, contractType: value })}
+                      disabled={isSubmitting}
+                    >
+                      <SelectTrigger className="bg-input border-border">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">Mensal</SelectItem>
+                        <SelectItem value="annual">Anual</SelectItem>
+                        <SelectItem value="one_time">Pagamento Único</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Valor do Contrato */}
+                  <div className="space-y-2">
+                    <Label htmlFor="contractValue" className="text-foreground">
+                      Valor do Contrato {formData.contractType === "monthly" ? "(mensal)" : ""}
+                    </Label>
+                    <Input
+                      id="contractValue"
+                      value={formData.contractValue}
+                      onChange={(e) => setFormData({ ...formData, contractValue: formatCurrency(e.target.value) })}
+                      className="bg-input border-border"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+
+                  {/* Quantidade de Meses */}
+                  {formData.contractType === "monthly" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="contractMonths" className="text-foreground">Quantidade de Meses</Label>
+                      <Input
+                        id="contractMonths"
+                        type="number"
+                        min="1"
+                        max="120"
+                        value={formData.contractMonths}
+                        onChange={(e) => setFormData({ ...formData, contractMonths: e.target.value })}
+                        className="bg-input border-border"
                         disabled={isSubmitting}
-                        className={cn(
-                          "w-full justify-start text-left font-normal bg-input border-border",
-                          !formData.followUpDate && "text-muted-foreground"
-                        )}
+                      />
+                    </div>
+                  )}
+
+                  {/* Origem e Campanha (editar) */}
+                  <div className="space-y-2">
+                    <Label className="text-foreground">Origem do Lead</Label>
+                    <Select
+                      value={formData.source}
+                      onValueChange={(value: "manual" | "meta_ads") => setFormData({
+                        ...formData,
+                        source: value,
+                        campaign_id: value === "manual" ? undefined : formData.campaign_id,
+                      })}
+                      disabled={isSubmitting || lead.source === "meta_ads"}
+                    >
+                      <SelectTrigger className="bg-input border-border">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="manual">Manual</SelectItem>
+                        <SelectItem value="meta_ads">
+                          <div className="flex items-center gap-2">
+                            <Facebook className="w-4 h-4" />
+                            Meta Ads
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {formData.source === "meta_ads" && (
+                    <div className="space-y-2">
+                      <Label className="text-foreground">Campanha Meta Ads</Label>
+                      <Select
+                        value={formData.campaign_id}
+                        onValueChange={(value) => setFormData({ ...formData, campaign_id: value })}
+                        disabled={isSubmitting}
                       >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formData.followUpDate ? (
-                          format(formData.followUpDate, "dd/MM/yyyy", { locale: ptBR })
-                        ) : (
-                          "Selecione a data"
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-card border-border">
-                      <Calendar
-                        mode="single"
-                        selected={formData.followUpDate}
-                        onSelect={async (date) => {
-                          setFormData({ ...formData, followUpDate: date || undefined });
-                          if (date) {
+                        <SelectTrigger className="bg-input border-border">
+                          <SelectValue placeholder="Selecione a campanha" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {campaigns && campaigns.length > 0 ? (
+                            campaigns.map((campaign) => (
+                              <SelectItem key={campaign.id} value={campaign.id}>
+                                {campaign.name}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="none" disabled>
+                              Nenhuma campanha disponível
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                </form>
+              </TabsContent>
+
+              {/* Comentários / Follow-up */}
+              <TabsContent value="comentarios_followup" className="space-y-6 mt-4">
+                {/* Resumo do follow-up */}
+                {(() => {
+                  const d = formData.followUpDate || (lead.next_follow_up_date ? new Date(lead.next_follow_up_date) : undefined);
+                  if (!d) {
+                    return (
+                      <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                        <AlertCircle className="h-4 w-4" /> Nenhum follow-up agendado.
+                      </div>
+                    );
+                  }
+                  const isOverdue = isPast(new Date(d.toDateString())) && !isToday(d);
+                  const isTodayFlag = isToday(d);
+                  const tone = isOverdue ? 'text-destructive border-destructive/40 bg-destructive/10' : isTodayFlag ? 'text-amber-600 border-amber-300 bg-amber-50/10' : 'text-blue-600 border-blue-300 bg-blue-50/10';
+                  return (
+                    <div className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${tone}`}>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        <span className="font-medium">Próximo follow-up:</span>
+                        <span>{format(d, 'dd/MM/yyyy', { locale: ptBR })}</span>
+                        <span className="text-xs text-muted-foreground">({formatDistanceToNowStrict(d, { locale: ptBR, addSuffix: true })})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2"
+                          onClick={async () => {
                             try {
-                              await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: date.toISOString().split('T')[0] } });
+                              await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: null } });
+                              setFormData({ ...formData, followUpDate: undefined });
                             } catch {
                               // no-op
                             }
-                          }
-                        }}
-                        initialFocus
-                        locale={ptBR}
+                          }}
+                        >
+                          Limpar
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {/* Próximo contato + observação + data de entrega */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-foreground">Próximo contato</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          disabled={isSubmitting}
+                          className={cn(
+                            "w-full justify-start text-left font-normal bg-input border-border",
+                            !formData.followUpDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formData.followUpDate ? (
+                            format(formData.followUpDate, "dd/MM/yyyy", { locale: ptBR })
+                          ) : (
+                            "Selecione a data"
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 bg-card border-border">
+                        <Calendar
+                          mode="single"
+                          selected={formData.followUpDate}
+                          onSelect={async (date) => {
+                            setFormData({ ...formData, followUpDate: date || undefined });
+                            if (date) {
+                              try {
+                                await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: date.toISOString().split('T')[0] } });
+                              } catch {
+                                // no-op
+                              }
+                            }
+                          }}
+                          initialFocus
+                          locale={ptBR}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <div className="space-y-1">
+                      <Label className="text-foreground text-xs">Observação do próximo contato</Label>
+                      <Textarea
+                        value={formData.followUpNote}
+                        onChange={(e) => setFormData({ ...formData, followUpNote: e.target.value })}
+                        placeholder="Ex.: confirmar proposta, pedir documentos, etc."
+                        className="bg-input border-border min-h-[70px]"
                       />
-                    </PopoverContent>
-                  </Popover>
-                  <div className="space-y-1">
-                    <Label className="text-foreground text-xs">Observação do próximo contato</Label>
-                    <Textarea
-                      value={formData.followUpNote}
-                      onChange={(e) => setFormData({ ...formData, followUpNote: e.target.value })}
-                      placeholder="Ex.: confirmar proposta, pedir documentos, etc."
-                      className="bg-input border-border min-h-[70px]"
-                    />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-foreground">Data de Entrega</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          disabled={isSubmitting}
+                          className={cn(
+                            "w-full justify-start text-left font-normal bg-input border-border",
+                            !formData.dueDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formData.dueDate ? (
+                            format(formData.dueDate, "dd/MM/yyyy", { locale: ptBR })
+                          ) : (
+                            "Selecione a data"
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 bg-card border-border">
+                        <Calendar
+                          mode="single"
+                          selected={formData.dueDate}
+                          onSelect={(date) => setFormData({ ...formData, dueDate: date })}
+                          initialFocus
+                          locale={ptBR}
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-foreground">Data de Entrega</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        disabled={isSubmitting}
-                        className={cn(
-                          "w-full justify-start text-left font-normal bg-input border-border",
-                          !formData.dueDate && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formData.dueDate ? (
-                          format(formData.dueDate, "dd/MM/yyyy", { locale: ptBR })
-                        ) : (
-                          "Selecione a data"
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-card border-border">
-                      <Calendar
-                        mode="single"
-                        selected={formData.dueDate}
-                        onSelect={(date) => setFormData({ ...formData, dueDate: date })}
-                        initialFocus
-                        locale={ptBR}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
 
-              {/* Ações rápidas de follow-up */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground mr-1">Agendar rápido:</span>
-                {[
-                  { label: 'Hoje', days: 0 },
-                  { label: 'Amanhã', days: 1 },
-                  { label: '+2d', days: 2 },
-                  { label: 'Próx. Semana', days: 7 },
-                  { label: '+30d', days: 30 },
-                ].map((opt) => (
+                {/* Ações rápidas de follow-up */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground mr-1">Agendar rápido:</span>
+                  {[
+                    { label: 'Hoje', days: 0 },
+                    { label: 'Amanhã', days: 1 },
+                    { label: '+2d', days: 2 },
+                    { label: 'Próx. Semana', days: 7 },
+                    { label: '+30d', days: 30 },
+                  ].map((opt) => (
+                    <Button
+                      key={opt.label}
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2"
+                      onClick={async () => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + opt.days);
+                        const iso = d.toISOString().split('T')[0];
+                        setFormData({ ...formData, followUpDate: d });
+                        try {
+                          await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: iso } });
+                          toast({ title: 'Follow-up agendado', description: `${opt.label} (${format(d, 'dd/MM/yyyy', { locale: ptBR })})` });
+                        } catch (e) {
+                          // ignore, toast in mutation handles
+                        }
+                      }}
+                    >
+                      {opt.label}
+                    </Button>
+                  ))}
+                  <div className="ml-auto" />
                   <Button
-                    key={opt.label}
                     size="sm"
-                    variant="outline"
-                    className="h-7 px-2"
+                    variant="secondary"
+                    className="h-7"
                     onClick={async () => {
-                      const d = new Date();
-                      d.setDate(d.getDate() + opt.days);
-                      const iso = d.toISOString().split('T')[0];
-                      setFormData({ ...formData, followUpDate: d });
                       try {
-                        await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: iso } });
-                        toast({ title: 'Follow-up agendado', description: `${opt.label} (${format(d, 'dd/MM/yyyy', { locale: ptBR })})` });
+                        await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: null } });
+                        setFormData({ ...formData, followUpDate: undefined, followUpNote: '' });
+                        const displayName = (user?.user_metadata as any)?.full_name || user?.email || 'Usuário';
+                        await supabase.from('comments').insert({ lead_id: lead.id, content: 'Follow-up concluído', user_name: displayName, user_id: user?.id ?? null });
+                        toast({ title: 'Follow-up marcado como feito' });
                       } catch (e) {
-                        // ignore, toast in mutation handles
+                        // handled by hooks
                       }
                     }}
                   >
-                    {opt.label}
+                    Marcar como feito
                   </Button>
-                ))}
-                <div className="ml-auto" />
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-7"
-                  onClick={async () => {
-                    try {
-                      await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: null } });
-                      setFormData({ ...formData, followUpDate: undefined, followUpNote: '' });
-                      const displayName = (user?.user_metadata as any)?.full_name || user?.email || 'Usuário';
-                      await supabase.from('comments').insert({ lead_id: lead.id, content: 'Follow-up concluído', user_name: displayName, user_id: user?.id ?? null });
-                      toast({ title: 'Follow-up marcado como feito' });
-                    } catch (e) {
-                      // handled by hooks
-                    }
-                  }}
-                >
-                  Marcar como feito
-                </Button>
-              </div>
+                </div>
 
-              {/* Comentários */}
-              <CommentsSection leadId={lead.id} currentUserId={user?.id || undefined} nextFollowUpDate={formData.followUpDate || (lead.next_follow_up_date ? new Date(lead.next_follow_up_date) : undefined)} />
-            </TabsContent>
+                {/* Comentários */}
+                <CommentsSection leadId={lead.id} currentUserId={user?.id || undefined} nextFollowUpDate={formData.followUpDate || (lead.next_follow_up_date ? new Date(lead.next_follow_up_date) : undefined)} />
+              </TabsContent>
 
-            {/* Linha do Tempo */}
-            <TabsContent value="timeline" className="space-y-6 mt-4">
-              <FollowupTimeline lead={lead} followUpDate={formData.followUpDate} dueDate={formData.dueDate} />
-            </TabsContent>
+              {/* Linha do Tempo */}
+              <TabsContent value="timeline" className="space-y-6 mt-4">
+                <FollowupTimeline lead={lead} followUpDate={formData.followUpDate} dueDate={formData.dueDate} />
+              </TabsContent>
 
-            
-          </Tabs>
+
+            </Tabs>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0 bg-card/95 backdrop-blur border-t border-border py-3 z-10">
@@ -1017,10 +1245,10 @@ function FollowupTimeline({ lead, followUpDate, dueDate }: { lead: any; followUp
     const label = a.action_type === 'status_change'
       ? `Mudança de etapa: ${a.from_status || '—'} → ${a.to_status || '—'}`
       : a.action_type === 'assignment'
-      ? `Responsável: ${a.description || ''}`
-      : a.action_type === 'value_update'
-      ? `Atualização de valor`
-      : a.description || a.action_type;
+        ? `Responsável: ${a.description || ''}`
+        : a.action_type === 'value_update'
+          ? `Atualização de valor`
+          : a.description || a.action_type;
     items.push({ date: new Date(a.created_at), title: label, kind: a.action_type || "activity" });
   });
   (interactions || []).forEach((it: any) => {

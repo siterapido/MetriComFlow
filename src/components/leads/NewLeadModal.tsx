@@ -58,6 +58,24 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
     status: "novo_lead",
     source: "manual" as 'manual' | 'meta_ads',
     campaign_id: undefined as string | undefined,
+    // New fields
+    cnpj: "",
+    legal_name: "",
+    trade_name: "",
+    size: "",
+    share_capital: "",
+    opening_date: undefined as Date | undefined,
+    phone: "",
+    secondary_phone: "",
+    email: "",
+    address: "",
+    address_number: "",
+    complement: "",
+    neighborhood: "",
+    city: "",
+    state: "",
+    zip_code: "",
+    main_activity: "",
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -89,22 +107,40 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
         ? contractValueNumber * parseInt(formData.contractMonths)
         : contractValueNumber;
 
-       // Create lead
-       const newLead = await createLead.mutateAsync({
-         title: formData.title,
-         description: formData.description || null,
-         status: formData.status,
-         value: totalContractValue, // Valor total do contrato (usado no pipeline e dashboard)
-         contract_value: contractValueNumber, // Valor mensal/anual/único
-         contract_type: formData.contractType,
-         contract_months: formData.contractType === 'monthly' ? parseInt(formData.contractMonths) : 1,
-         due_date: formData.dueDate?.toISOString().split('T')[0] || null,
+      // Create lead
+      const newLead = await createLead.mutateAsync({
+        title: formData.title,
+        description: formData.description || null,
+        status: formData.status,
+        value: totalContractValue, // Valor total do contrato (usado no pipeline e dashboard)
+        contract_value: contractValueNumber, // Valor mensal/anual/único
+        contract_type: formData.contractType,
+        contract_months: formData.contractType === 'monthly' ? parseInt(formData.contractMonths) : 1,
+        due_date: formData.dueDate?.toISOString().split('T')[0] || null,
         assignee_id: formData.assigneeId || null,
         assignee_name: selectedAssigneeName,
-         position: 0,
-         source: formData.source,
-         campaign_id: formData.source === 'meta_ads' ? formData.campaign_id : null,
-       });
+        position: 0,
+        source: formData.source,
+        campaign_id: formData.source === 'meta_ads' ? formData.campaign_id : null,
+        // New fields
+        cnpj: formData.cnpj || null,
+        legal_name: formData.legal_name || null,
+        trade_name: formData.trade_name || null,
+        size: formData.size || null,
+        share_capital: formData.share_capital ? parseFloat(formData.share_capital.replace(/\./g, '').replace(',', '.')) : null,
+        opening_date: formData.opening_date?.toISOString().split('T')[0] || null,
+        phone: formData.phone || null,
+        secondary_phone: formData.secondary_phone || null,
+        email: formData.email || null,
+        address: formData.address || null,
+        address_number: formData.address_number || null,
+        complement: formData.complement || null,
+        neighborhood: formData.neighborhood || null,
+        city: formData.city || null,
+        state: formData.state || null,
+        zip_code: formData.zip_code || null,
+        main_activity: formData.main_activity || null,
+      });
 
       // Add labels if any selected
       if (formData.selectedLabels.length > 0 && newLead) {
@@ -149,6 +185,23 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
       status: "novo_lead",
       source: "manual",
       campaign_id: undefined,
+      cnpj: "",
+      legal_name: "",
+      trade_name: "",
+      size: "",
+      share_capital: "",
+      opening_date: undefined,
+      phone: "",
+      secondary_phone: "",
+      email: "",
+      address: "",
+      address_number: "",
+      complement: "",
+      neighborhood: "",
+      city: "",
+      state: "",
+      zip_code: "",
+      main_activity: "",
     });
   };
 
@@ -221,6 +274,224 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
               className="bg-input border-border focus:ring-primary min-h-[100px]"
               disabled={isSubmitting}
             />
+          </div>
+
+          {/* Dados de Contato */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-lg border border-border p-4">
+            <div className="md:col-span-2 font-medium">Contatos</div>
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-foreground">E-mail</Label>
+              <Input
+                id="email"
+                placeholder="email@exemplo.com"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone" className="text-foreground">Telefone Principal</Label>
+              <Input
+                id="phone"
+                placeholder="(00) 00000-0000"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="secondary_phone" className="text-foreground">Telefone Secundário</Label>
+              <Input
+                id="secondary_phone"
+                placeholder="(00) 00000-0000"
+                value={formData.secondary_phone}
+                onChange={(e) => setFormData({ ...formData, secondary_phone: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+          </div>
+
+          {/* Dados da Empresa */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-lg border border-border p-4">
+            <div className="md:col-span-2 font-medium">Dados da Empresa</div>
+            <div className="space-y-2">
+              <Label htmlFor="legal_name">Razão Social</Label>
+              <Input
+                id="legal_name"
+                value={formData.legal_name}
+                onChange={(e) => setFormData({ ...formData, legal_name: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="trade_name">Nome Fantasia</Label>
+              <Input
+                id="trade_name"
+                value={formData.trade_name}
+                onChange={(e) => setFormData({ ...formData, trade_name: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cnpj">CNPJ</Label>
+              <Input
+                id="cnpj"
+                value={formData.cnpj}
+                onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="size">Porte</Label>
+              <Select
+                value={formData.size}
+                onValueChange={(value) => setFormData({ ...formData, size: value })}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="bg-input border-border">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="MEI">MEI</SelectItem>
+                  <SelectItem value="Microempresa">Microempresa (ME)</SelectItem>
+                  <SelectItem value="Pequena Empresa">Pequena Empresa (EPP)</SelectItem>
+                  <SelectItem value="Médio Porte">Médio Porte</SelectItem>
+                  <SelectItem value="Grande Porte">Grande Porte</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="share_capital">Capital Social</Label>
+              <Input
+                id="share_capital"
+                value={formData.share_capital}
+                onChange={(e) => setFormData({ ...formData, share_capital: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="opening_date">Data de Abertura</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal bg-input border-border",
+                      !formData.opening_date && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {formData.opening_date ? (
+                      format(formData.opening_date, "dd/MM/yyyy", { locale: ptBR })
+                    ) : (
+                      <span>Selecione a data</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 border-border">
+                  <Calendar
+                    mode="single"
+                    selected={formData.opening_date}
+                    onSelect={(date) => setFormData({ ...formData, opening_date: date })}
+                    initialFocus
+                    locale={ptBR}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="main_activity">Atividade Principal</Label>
+              <Input
+                id="main_activity"
+                value={formData.main_activity}
+                onChange={(e) => setFormData({ ...formData, main_activity: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+          </div>
+
+          {/* Endereço */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg border border-border p-4">
+            <div className="md:col-span-2 lg:col-span-3 font-medium">Endereço</div>
+            <div className="space-y-2">
+              <Label htmlFor="zip_code">CEP</Label>
+              <Input
+                id="zip_code"
+                value={formData.zip_code}
+                onChange={(e) => setFormData({ ...formData, zip_code: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="address">Logradouro</Label>
+              <Input
+                id="address"
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="address_number">Número</Label>
+              <Input
+                id="address_number"
+                value={formData.address_number}
+                onChange={(e) => setFormData({ ...formData, address_number: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="complement">Complemento</Label>
+              <Input
+                id="complement"
+                value={formData.complement}
+                onChange={(e) => setFormData({ ...formData, complement: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="neighborhood">Bairro</Label>
+              <Input
+                id="neighborhood"
+                value={formData.neighborhood}
+                onChange={(e) => setFormData({ ...formData, neighborhood: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="city">Cidade</Label>
+              <Input
+                id="city"
+                value={formData.city}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="state">Estado</Label>
+              <Input
+                id="state"
+                value={formData.state}
+                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                className="bg-input border-border"
+                disabled={isSubmitting}
+                maxLength={2}
+              />
+            </div>
           </div>
 
           {/* Grid de campos */}

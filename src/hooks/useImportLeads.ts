@@ -3,20 +3,41 @@ import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { useActiveOrganization } from '@/hooks/useActiveOrganization'
 import Papa from 'papaparse'
+import * as XLSX from 'xlsx'
 
 // Sinônimos para cada campo do lead (normalizado, sem acentos, lowercase)
+
 const FIELD_SYNONYMS: Record<string, string[]> = {
-    name: ['nome', 'name', 'cliente', 'lead', 'contato', 'contact', 'razao_social', 'razao social'],
+    // Campos Básicos
+    trade_name: ['nome_fantasia', 'nome fantasia', 'fantasia', 'title', 'titulo', 'name', 'nome', 'cliente', 'lead'], // Titulo/Nome geralmente é o Nome Fantasia
+    legal_name: ['razao_social', 'razao social', 'company', 'empresa', 'organizacao', 'firma'],
+    cnpj: ['cnpj', 'documento_federal', 'tax_id'],
     email: ['email', 'e-mail', 'correio', 'mail'],
-    phone: ['telefone', 'phone', 'celular', 'whatsapp', 'fone', 'tel', 'mobile'],
+    phone: ['telefone_principal', 'telefone principal', 'telefone', 'phone', 'celular', 'whatsapp', 'fone', 'tel', 'mobile'],
+    secondary_phone: ['telefone_secundario', 'telefone secundario', 'telefone_2', 'celular_2'],
+
+    // Detalhes da Empresa
+    size: ['porte', 'tamanho', 'size'],
+    share_capital: ['capital_social', 'capital social', 'share_capital', 'capital'],
+    opening_date: ['data_abertura', 'data abertura', 'data_fundacao', 'inicio_atividades'],
+    main_activity: ['atividade_principal', 'atividade principal', 'cnae', 'atividade', 'segmento'],
+
+    // Endereço
+    zip_code: ['cep', 'zip_code', 'codigo_postal'],
+    address: ['logradouro', 'endereco', 'address', 'rua', 'avenida'],
+    address_number: ['numero', 'number', 'num'],
+    complement: ['complemento', 'complement', 'comp'],
+    neighborhood: ['bairro', 'neighborhood', 'vicinity'],
+    city: ['cidade', 'city', 'municipio'],
+    state: ['estado', 'state', 'uf', 'provincia'],
+
+    // Outros campos existentes
     value: ['valor', 'value', 'receita', 'faturamento', 'deal', 'orcamento', 'budget', 'preco', 'price'],
     source: ['origem', 'source', 'fonte', 'canal'],
     status: ['status', 'estagio', 'etapa', 'fase', 'stage'],
     priority: ['prioridade', 'priority', 'urgencia'],
     product_interest: ['produto', 'product', 'interesse', 'interest', 'servico', 'service'],
     notes: ['notas', 'notes', 'observacoes', 'obs', 'comentarios', 'comments', 'descricao', 'description'],
-    company: ['empresa', 'company', 'organizacao', 'org', 'firma', 'cnpj'],
-    title: ['titulo', 'title', 'assunto', 'subject'],
 }
 
 // Status válidos para leads
@@ -134,6 +155,85 @@ function findBestMatch(csvColumn: string): { field: string | null; confidence: '
 }
 
 /**
+ * Lê um arquivo Excel e retorna os nomes das abas
+ */
+export async function getExcelSheets(file: File): Promise<string[]> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+            try {
+                const data = e.target?.result
+                const workbook = XLSX.read(data, { type: 'binary' })
+                resolve(workbook.SheetNames)
+            } catch (error) {
+                reject(new Error('Falha ao ler arquivo Excel'))
+            }
+        }
+        reader.onerror = () => reject(new Error('Erro ao ler arquivo'))
+        reader.readAsBinaryString(file)
+    })
+}
+
+/**
+ * Processa dados parseados (comum para CSV e Excel)
+ */
+function processParsedData(headers: string[], rows: Record<string, string>[]): ParsedData {
+    // Criar mapeamentos automáticos
+    const mappings: FieldMapping[] = headers.map(header => {
+        const { field, confidence } = findBestMatch(header)
+        return {
+            csvColumn: header,
+            dbField: field,
+            confidence: field ? confidence : 'low',
+            sampleValue: rows[0]?.[header] || ''
+        }
+    })
+
+    return { headers, rows, mappings }
+}
+
+/**
+ * Faz o parse de uma aba específica do Excel
+ */
+export async function parseExcelSheet(file: File, sheetName: string): Promise<ParsedData> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+            try {
+                const data = e.target?.result
+                const workbook = XLSX.read(data, { type: 'binary' })
+                const worksheet = workbook.Sheets[sheetName]
+
+                // Converter para JSON
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][]
+
+                if (jsonData.length === 0) {
+                    throw new Error('A planilha está vazia')
+                }
+
+                // Assumindo que a primeira linha são os headers
+                const headers = jsonData[0] as string[]
+
+                // Converter linhas subsequentes para objetos
+                const rows = jsonData.slice(1).map(row => {
+                    const rowData: Record<string, string> = {}
+                    headers.forEach((header, index) => {
+                        rowData[header] = String(row[index] || '')
+                    })
+                    return rowData
+                })
+
+                resolve(processParsedData(headers, rows))
+            } catch (error) {
+                reject(new Error('Falha ao processar aba do Excel'))
+            }
+        }
+        reader.onerror = () => reject(new Error('Erro ao ler arquivo'))
+        reader.readAsBinaryString(file)
+    })
+}
+
+/**
  * Faz o parse de um arquivo CSV e retorna os dados parseados com mapeamento automático
  */
 export function parseCSV(file: File): Promise<ParsedData> {
@@ -145,19 +245,7 @@ export function parseCSV(file: File): Promise<ParsedData> {
             complete: (results) => {
                 const headers = results.meta.fields || []
                 const rows = results.data as Record<string, string>[]
-
-                // Criar mapeamentos automáticos
-                const mappings: FieldMapping[] = headers.map(header => {
-                    const { field, confidence } = findBestMatch(header)
-                    return {
-                        csvColumn: header,
-                        dbField: field,
-                        confidence: field ? confidence : 'low',
-                        sampleValue: rows[0]?.[header] || ''
-                    }
-                })
-
-                resolve({ headers, rows, mappings })
+                resolve(processParsedData(headers, rows))
             },
             error: (error) => {
                 reject(new Error(`Erro ao processar CSV: ${error.message}`))
@@ -176,6 +264,7 @@ function normalizeValue(value: string, dbField: string): any {
 
     switch (dbField) {
         case 'value':
+        case 'share_capital':
             // Converte para número (aceita vírgula ou ponto como decimal)
             const numValue = parseFloat(trimmed.replace(/[^\d.,]/g, '').replace(',', '.'))
             return isNaN(numValue) ? null : numValue
@@ -233,9 +322,29 @@ function normalizeValue(value: string, dbField: string): any {
             return emailRegex.test(trimmed) ? trimmed : null
 
         case 'phone':
+        case 'secondary_phone':
             // Remove caracteres não numéricos, mantém apenas dígitos
             const phone = trimmed.replace(/\D/g, '')
             return phone.length >= 8 ? phone : null
+
+        case 'opening_date':
+            // Tenta converter data (aceita DD/MM/YYYY ou YYYY-MM-DD)
+            try {
+                if (trimmed.includes('/')) {
+                    const parts = trimmed.split('/')
+                    if (parts.length === 3) {
+                        return `${parts[2]}-${parts[1]}-${parts[0]}`
+                    }
+                }
+                const date = new Date(trimmed)
+                return isNaN(date.getTime()) ? null : trimmed
+            } catch {
+                return null
+            }
+
+        case 'cnpj':
+            // Remove formatação de CNPJ
+            return trimmed.replace(/\D/g, '')
 
         default:
             return trimmed
@@ -313,18 +422,24 @@ export function useImportLeads() {
                         }
                     }
 
-                    // Se não tiver nome, usar email ou título genérico
-                    if (!leadData.name && !leadData.title) {
-                        if (leadData.email) {
-                            leadData.name = leadData.email.split('@')[0]
+                    // Se não tiver title, mas tiver trade_name (Nome Fantasia) ou legal_name (Razão Social), usar
+                    if (!leadData.title) {
+                        if (leadData.trade_name) {
+                            leadData.title = leadData.trade_name
+                        } else if (leadData.legal_name) {
+                            leadData.title = leadData.legal_name
+                        } else if (leadData.name) {
+                            leadData.title = leadData.name
+                        } else if (leadData.email) {
+                            leadData.title = leadData.email.split('@')[0]
                         } else {
-                            leadData.name = `Lead importado ${rowNumber}`
+                            leadData.title = `Lead importado ${rowNumber}`
                         }
                     }
 
-                    // Se tiver name mas não title, usar name como title
-                    if (leadData.name && !leadData.title) {
-                        leadData.title = leadData.name
+                    // Se name não estiver definido mas tiver title, usar title
+                    if (!leadData.name && !leadData.trade_name && !leadData.legal_name) {
+                        // name não é uma coluna padrão, mas se usarmos, deve vir do title
                     }
 
                     // Verificar duplicados por email
@@ -401,13 +516,25 @@ export function useImportLeads() {
 
 // Campos disponíveis para mapeamento manual
 export const AVAILABLE_FIELDS = [
-    { value: 'name', label: 'Nome' },
-    { value: 'email', label: 'Email' },
-    { value: 'phone', label: 'Telefone' },
-    { value: 'value', label: 'Valor' },
-    { value: 'company', label: 'Empresa' },
-    { value: 'title', label: 'Título' },
-    { value: 'status', label: 'Status' },
+    { value: 'trade_name', label: 'Nome Fantasia / Título' },
+    { value: 'legal_name', label: 'Razão Social' },
+    { value: 'cnpj', label: 'CNPJ' },
+    { value: 'email', label: 'E-mail' },
+    { value: 'phone', label: 'Telefone Principal' },
+    { value: 'secondary_phone', label: 'Telefone Secundário' },
+    { value: 'size', label: 'Porte' },
+    { value: 'share_capital', label: 'Capital Social' },
+    { value: 'opening_date', label: 'Data de Abertura' },
+    { value: 'main_activity', label: 'Atividade Principal' },
+    { value: 'zip_code', label: 'CEP' },
+    { value: 'address', label: 'Logradouro' },
+    { value: 'address_number', label: 'Número' },
+    { value: 'complement', label: 'Complemento' },
+    { value: 'neighborhood', label: 'Bairro' },
+    { value: 'city', label: 'Cidade' },
+    { value: 'state', label: 'Estado' },
+    { value: 'value', label: 'Valor Estimado' },
+    { value: 'status', label: 'Status Inicial' },
     { value: 'priority', label: 'Prioridade' },
     { value: 'source', label: 'Origem' },
     { value: 'product_interest', label: 'Produto/Interesse' },

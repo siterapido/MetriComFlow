@@ -37,6 +37,8 @@ import {
 } from "lucide-react";
 import {
     parseCSV,
+    getExcelSheets,
+    parseExcelSheet,
     useImportLeads,
     AVAILABLE_FIELDS,
     type ParsedData,
@@ -49,7 +51,7 @@ interface LeadImportModalProps {
     onOpenChange: (open: boolean) => void;
 }
 
-type Step = "upload" | "mapping" | "result";
+type Step = "upload" | "sheet-selection" | "mapping" | "result";
 
 export function LeadImportModal({ open, onOpenChange }: LeadImportModalProps) {
     const [step, setStep] = useState<Step>("upload");
@@ -59,6 +61,9 @@ export function LeadImportModal({ open, onOpenChange }: LeadImportModalProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
+    const [sheetNames, setSheetNames] = useState<string[]>([]);
+    const [selectedSheet, setSelectedSheet] = useState<string>("");
+    const [currentFile, setCurrentFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const importMutation = useImportLeads();
@@ -71,6 +76,9 @@ export function LeadImportModal({ open, onOpenChange }: LeadImportModalProps) {
         setError(null);
         setIsLoading(false);
         setIsDragging(false);
+        setSheetNames([]);
+        setSelectedSheet("");
+        setCurrentFile(null);
     }, []);
 
     const handleClose = useCallback(() => {
@@ -79,21 +87,64 @@ export function LeadImportModal({ open, onOpenChange }: LeadImportModalProps) {
     }, [resetState, onOpenChange]);
 
     const handleFileSelect = async (file: File) => {
-        if (!file.name.endsWith(".csv")) {
-            setError("Por favor, selecione um arquivo CSV válido");
+        const isCSV = file.name.toLowerCase().endsWith(".csv");
+        const isExcel = file.name.toLowerCase().endsWith(".xlsx") || file.name.toLowerCase().endsWith(".xls");
+
+        if (!isCSV && !isExcel) {
+            setError("Por favor, selecione um arquivo válido (.csv, .xlsx, .xls)");
             return;
         }
 
         setIsLoading(true);
         setError(null);
+        setCurrentFile(file);
 
         try {
-            const data = await parseCSV(file);
+            if (isExcel) {
+                const sheets = await getExcelSheets(file);
+                if (sheets.length === 0) {
+                    throw new Error("Nenhuma aba encontrada no arquivo Excel");
+                }
+
+                if (sheets.length === 1) {
+                    // Se só tem uma aba, processa direto
+                    const data = await parseExcelSheet(file, sheets[0]);
+                    setParsedData(data);
+                    setMappings(data.mappings);
+                    setStep("mapping");
+                } else {
+                    // Se tem mais de uma, pede para selecionar
+                    setSheetNames(sheets);
+                    setSelectedSheet(sheets[0]); // Seleciona a primeira por padrão
+                    setStep("sheet-selection");
+                }
+            } else {
+                // CSV
+                const data = await parseCSV(file);
+                setParsedData(data);
+                setMappings(data.mappings);
+                setStep("mapping");
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Erro ao processar arquivo");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSheetConfirmation = async () => {
+        if (!currentFile || !selectedSheet) return;
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const data = await parseExcelSheet(currentFile, selectedSheet);
             setParsedData(data);
             setMappings(data.mappings);
             setStep("mapping");
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Erro ao processar arquivo");
+            setError(err instanceof Error ? err.message : "Erro ao processar aba");
         } finally {
             setIsLoading(false);
         }
@@ -196,11 +247,15 @@ export function LeadImportModal({ open, onOpenChange }: LeadImportModalProps) {
                 {/* Progress indicator */}
                 <div className="flex items-center justify-center gap-2 mb-4">
                     <div
-                        className={`flex items-center gap-1 ${step === "upload" ? "text-primary font-medium" : "text-muted-foreground"
+                        className={`flex items-center gap-1 ${step === "upload" || step === "sheet-selection"
+                            ? "text-primary font-medium"
+                            : "text-muted-foreground"
                             }`}
                     >
                         <div
-                            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step === "upload" ? "bg-primary text-primary-foreground" : "bg-muted"
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step === "upload" || step === "sheet-selection"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted"
                                 }`}
                         >
                             1
@@ -244,14 +299,14 @@ export function LeadImportModal({ open, onOpenChange }: LeadImportModalProps) {
                             onDragLeave={handleDragLeave}
                             onClick={() => fileInputRef.current?.click()}
                             className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${isDragging
-                                    ? "border-primary bg-primary/5"
-                                    : "border-muted-foreground/25 hover:border-primary/50"
+                                ? "border-primary bg-primary/5"
+                                : "border-muted-foreground/25 hover:border-primary/50"
                                 }`}
                         >
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept=".csv"
+                                accept=".csv,.xlsx,.xls"
                                 onChange={handleInputChange}
                                 className="hidden"
                             />
@@ -264,7 +319,7 @@ export function LeadImportModal({ open, onOpenChange }: LeadImportModalProps) {
                                 <>
                                     <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                                     <p className="text-lg font-medium mb-2">
-                                        Arraste seu arquivo CSV aqui
+                                        Arraste seu arquivo CSV ou Excel aqui
                                     </p>
                                     <p className="text-sm text-muted-foreground mb-4">
                                         ou clique para selecionar
@@ -290,6 +345,34 @@ export function LeadImportModal({ open, onOpenChange }: LeadImportModalProps) {
                                     Nome, Email, Telefone, Valor, Empresa
                                 </span>
                             </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Step: Sheet Selection */}
+                {step === "sheet-selection" && (
+                    <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                        <FileSpreadsheet className="w-12 h-12 text-muted-foreground" />
+                        <div className="text-center">
+                            <h3 className="text-lg font-medium">Selecione a aba da planilha</h3>
+                            <p className="text-sm text-muted-foreground mt-1 text-center max-w-sm mx-auto">
+                                O arquivo selecionado possui múltiplas abas. Escolha qual deseja importar.
+                            </p>
+                        </div>
+
+                        <div className="w-full max-w-xs pt-4">
+                            <Select value={selectedSheet} onValueChange={setSelectedSheet}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione uma aba" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {sheetNames.map((name) => (
+                                        <SelectItem key={name} value={name}>
+                                            {name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
                 )}
@@ -465,6 +548,30 @@ export function LeadImportModal({ open, onOpenChange }: LeadImportModalProps) {
                         <Button variant="outline" onClick={handleClose}>
                             Cancelar
                         </Button>
+                    )}
+
+                    {step === "sheet-selection" && (
+                        <>
+                            <Button variant="outline" onClick={() => setStep("upload")}>
+                                Voltar
+                            </Button>
+                            <Button
+                                onClick={handleSheetConfirmation}
+                                disabled={!selectedSheet || isLoading}
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                        Processando...
+                                    </>
+                                ) : (
+                                    <>
+                                        Continuar
+                                        <ArrowRight className="w-4 h-4 ml-1" />
+                                    </>
+                                )}
+                            </Button>
+                        </>
                     )}
 
                     {step === "mapping" && (

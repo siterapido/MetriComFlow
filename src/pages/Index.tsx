@@ -16,7 +16,7 @@ const LANDING_PAGE_CHECKOUT_URL = PAYMENT_LINKS.basico.url;
 
 // Landing page sem formulário: removido schema e validação
 
-type DataLayerEvent = { event: string; [key: string]: any };
+type DataLayerEvent = { event: string;[key: string]: any };
 
 function useTracker() {
   useEffect(() => {
@@ -164,7 +164,7 @@ function PAS() {
         </div>
         <div>
           <h3 className="text-xl font-semibold">A solução</h3>
-          <p className="mt-2 text-muted-foreground">MetriCom Flow centraliza Ads, Leads e Metas, trazendo clareza e velocidade.</p>
+          <p className="mt-2 text-muted-foreground">InsightFy centraliza Ads, Leads e Metas, trazendo clareza e velocidade.</p>
         </div>
       </div>
     </section>
@@ -570,7 +570,7 @@ function FooterLanding() {
   return (
     <footer className="border-t border-border">
       <div className="container mx-auto px-4 py-6 flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-        <div>© {new Date().getFullYear()} MetriCom Flow</div>
+        <div>© {new Date().getFullYear()} InsightFy</div>
         {hasCommit && (
           <div className="text-center text-xs sm:text-sm sm:text-right">
             <span className="text-muted-foreground">Último commit: </span>

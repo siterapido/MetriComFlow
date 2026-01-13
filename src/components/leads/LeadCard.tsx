@@ -148,43 +148,43 @@ export function LeadCard({ lead, onDelete, onUpdate, className }: LeadCardProps)
         );
       case "whatsapp":
         return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-emerald-50 border-emerald-200 text-emerald-700")}> 
+          <Badge variant="outline" className={cn(commonClasses, "bg-emerald-50 border-emerald-200 text-emerald-700")}>
             <MessageCircle className="w-2.5 h-2.5" /> WhatsApp
           </Badge>
         );
       case "google_ads":
         return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-yellow-50 border-yellow-200 text-yellow-700")}> 
+          <Badge variant="outline" className={cn(commonClasses, "bg-yellow-50 border-yellow-200 text-yellow-700")}>
             <Megaphone className="w-2.5 h-2.5" /> Google Ads
           </Badge>
         );
       case "site":
         return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-slate-50 border-slate-200 text-slate-700")}> 
+          <Badge variant="outline" className={cn(commonClasses, "bg-slate-50 border-slate-200 text-slate-700")}>
             <Globe className="w-2.5 h-2.5" /> Site
           </Badge>
         );
       case "email":
         return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-indigo-50 border-indigo-200 text-indigo-700")}> 
+          <Badge variant="outline" className={cn(commonClasses, "bg-indigo-50 border-indigo-200 text-indigo-700")}>
             <Mail className="w-2.5 h-2.5" /> E-mail
           </Badge>
         );
       case "telefone":
         return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-zinc-50 border-zinc-200 text-zinc-700")}> 
+          <Badge variant="outline" className={cn(commonClasses, "bg-zinc-50 border-zinc-200 text-zinc-700")}>
             <Phone className="w-2.5 h-2.5" /> Telefone
           </Badge>
         );
       case "indicacao":
         return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-fuchsia-50 border-fuchsia-200 text-fuchsia-700")}> 
+          <Badge variant="outline" className={cn(commonClasses, "bg-fuchsia-50 border-fuchsia-200 text-fuchsia-700")}>
             <Users className="w-2.5 h-2.5" /> Indicação
           </Badge>
         );
       default:
         return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-muted/50 text-muted-foreground")}> 
+          <Badge variant="outline" className={cn(commonClasses, "bg-muted/50 text-muted-foreground")}>
             Manual
           </Badge>
         );
@@ -195,249 +195,165 @@ export function LeadCard({ lead, onDelete, onUpdate, className }: LeadCardProps)
     <>
       <Card
         className={cn(
-          "bg-card border-border hover:border-primary/50 transition-all duration-200 cursor-pointer",
+          "group relative overflow-hidden bg-card hover:bg-accent/5 transition-all duration-300 border-border/60 hover:border-primary/30 hover:shadow-md cursor-pointer",
           className
         )}
         onClick={() => setIsEditOpen(true)}
       >
-        <CardHeader className="pb-2 p-3">
-          <div className="flex items-start justify-between gap-2">
-            <CardTitle className="text-sm font-semibold text-foreground line-clamp-2 leading-tight">
-              {lead.title}
-            </CardTitle>
+        {/* Hover Strip */}
+        <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary/0 group-hover:bg-primary transition-all duration-300" />
+
+        <CardContent className="p-3 space-y-3">
+          {/* Header: Title & Actions */}
+          <div className="flex items-start justify-between gap-2 pl-2">
+            <div className="space-y-1 overflow-hidden">
+              <h3 className="font-semibold text-sm text-foreground leading-tight truncate pr-2" title={lead.title}>
+                {lead.title}
+              </h3>
+              {lead.description && (
+                <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                  {lead.description}
+                </p>
+              )}
+            </div>
             {whatsappHref && (
               <a
                 href={whatsappHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded-full border border-blue-300 text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                aria-label="Abrir WhatsApp"
-                title="Abrir WhatsApp"
+                className="shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:scale-110 transition-all focus:outline-none focus:ring-1 focus:ring-emerald-400 border border-emerald-200"
+                title="Conversar no WhatsApp"
               >
-                <MessageCircle className="h-4 w-4" />
+                <MessageCircle className="w-3.5 h-3.5" />
               </a>
             )}
           </div>
-        </CardHeader>
 
-        <CardContent className="space-y-2 p-3 pt-0">
-          {/* Contact: Telefone / WhatsApp */}
-          {/* Telefone ocultado por solicitação: manter apenas o botão de WhatsApp */}
+          {/* Value Section - Elegant Display */}
+          <div className="bg-muted/40 rounded-md p-2 border border-border/40 flex items-center justify-between group-hover:bg-muted/60 transition-colors ml-2">
+            <span className="text-[10px] text-muted-foreground bg-background/50 px-1.5 py-0.5 rounded">
+              Proposta
+            </span>
+            <span className="text-sm font-bold text-primary font-mono tracking-tight">
+              {lead.value ? formatCurrency(lead.value) : "R$ 0,00"}
+            </span>
+          </div>
 
-          {/* Description */}
-          {lead.description && (
-            <p className="text-xs text-muted-foreground line-clamp-2">
-              {lead.description}
-            </p>
-          )}
+          {/* Badges & Tags */}
+          <div className="flex flex-wrap gap-1.5 pl-2">
+            <SourceBadge />
+            {lead.lead_labels && lead.lead_labels.length > 0 && lead.lead_labels.map((labelRel, index) => (
+              <Badge
+                key={index}
+                variant="outline"
+                className={`text-[10px] px-1.5 py-0 border-transparent bg-opacity-15 font-normal ${getLabelColor(labelRel.labels.name)}`}
+              >
+                {labelRel.labels.name}
+              </Badge>
+            ))}
+          </div>
 
-          {/* Source Badge */}
-          <SourceBadge />
-
-          {/* Labels */}
-          {lead.lead_labels && lead.lead_labels.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {lead.lead_labels.map((labelRel, index) => (
-                <Badge
-                  key={index}
-                  className={`text-[10px] px-1.5 py-0.5 ${getLabelColor(labelRel.labels.name)}`}
-                >
-                  {labelRel.labels.name}
-                </Badge>
-              ))}
-            </div>
-          )}
-
-          {/* Contract Info - Compact */}
-          {lead.contract_value && lead.contract_value > 0 && (
-            <div className="space-y-0.5 p-1.5 bg-primary/5 rounded border border-primary/20">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-muted-foreground">
-                  {contractTypeLabels[lead.contract_type as keyof typeof contractTypeLabels] || "Único"}
-                  {lead.contract_type === "monthly" && ` (${lead.contract_months || 1}x)`}
-                </span>
-                <span className="font-semibold text-primary">
-                  {formatCurrency(lead.contract_value || 0)}
-                </span>
-              </div>
-              {lead.value !== lead.contract_value && (
-                <div className="text-[10px] font-semibold text-success flex items-center justify-end gap-0.5">
-                  Total: {formatCurrency(lead.value || 0)}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Footer Info - Compact */}
-          <div className="flex items-center justify-between pt-1 text-[10px] text-muted-foreground border-t border-border/50">
-            <div className="flex items-center gap-2">
+          {/* Footer: Date, Comments, FollowUp */}
+          <div className="flex items-center justify-between pt-2 mt-1 border-t border-border/30 pl-2">
+            <div className="flex items-center gap-3 text-muted-foreground">
               {lead.due_date && (
-                <div className="flex items-center gap-0.5">
-                  <Calendar className="w-2.5 h-2.5" />
-                  {format(new Date(lead.due_date), "dd/MM", { locale: ptBR })}
+                <div className="flex items-center gap-1 text-[10px]" title="Data de vencimento">
+                  <Calendar className="w-3 h-3" />
+                  <span>{format(new Date(lead.due_date), "dd/MM", { locale: ptBR })}</span>
                 </div>
               )}
-              <div className="flex items-center gap-0.5">
-                <MessageSquare className="w-2.5 h-2.5" />
-                {lead.comments_count || 0}
+              <div className="flex items-center gap-1 text-[10px]" title="Comentários">
+                <MessageSquare className="w-3 h-3" />
+                <span>{lead.comments_count || 0}</span>
               </div>
-              {/* Mini contador e menu de Follow up (unificado quando não há data) */}
+            </div>
+
+            {/* Follow Up Component */}
+            <div onClick={(e) => e.stopPropagation()}>
               {(() => {
                 const fu = lead.next_follow_up_date ? new Date(lead.next_follow_up_date) : null;
-                const label = fu ? formatDistanceToNowStrict(fu, { locale: ptBR, addSuffix: true }) : null;
-                const tone = fu ? (isPast(new Date(fu.toDateString())) && !isToday(fu) ? "text-destructive" : isToday(fu) ? "text-amber-600" : "text-blue-600") : "text-muted-foreground";
-                const base = fu || new Date();
-                const snooze = async (days: number) => {
-                  const next = addDays(base, days);
-                  try {
-                    await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: next.toISOString().split("T")[0] } });
-                    toast({ title: "Follow-up reagendado", description: format(next, "dd/MM/yyyy", { locale: ptBR }) });
-                  } catch (e) {
-                    // handled upstream
-                  }
-                };
-                const clearFU = async () => {
-                  try {
-                    await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: null } });
-                    toast({ title: "Follow-up limpo" });
-                  } catch (e) {
-                    // no-op
-                  }
-                };
-                // Sem follow-up: mostrar apenas o botão "Follow up" (unificado)
+                const isLate = fu && isPast(new Date(fu.toDateString())) && !isToday(fu);
+                const isTodayFu = fu && isToday(fu);
+
                 if (!fu) {
                   return (
-                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="inline-flex items-center gap-1 justify-center rounded px-1.5 h-4 text-[10px] border border-border hover:bg-accent/50">
-                            <Clock className="w-2.5 h-2.5" /> Follow up
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="bg-card border-border text-foreground">
-                          <DropdownMenuItem onClick={() => snooze(0)} className="cursor-pointer">Hoje</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => snooze(1)} className="cursor-pointer">Amanhã</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => snooze(2)} className="cursor-pointer">+2 dias</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => snooze(7)} className="cursor-pointer">Próx. semana</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => snooze(30)} className="cursor-pointer">+30 dias</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-[10px] hover:bg-primary/5 hover:text-primary gap-1"
+                        >
+                          <Clock className="w-3 h-3" />
+                          Follow-up
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-32">
+                        <DropdownMenuItem onClick={() => {
+                          const date = new Date();
+                          updateLead.mutate({ id: lead.id, updates: { next_follow_up_date: date.toISOString().split('T')[0] } });
+                        }}>Hoje</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          const date = addDays(new Date(), 1);
+                          updateLead.mutate({ id: lead.id, updates: { next_follow_up_date: date.toISOString().split('T')[0] } });
+                        }}>Amanhã</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          const date = addDays(new Date(), 2);
+                          updateLead.mutate({ id: lead.id, updates: { next_follow_up_date: date.toISOString().split('T')[0] } });
+                        }}>+2 dias</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          const date = addDays(new Date(), 7);
+                          updateLead.mutate({ id: lead.id, updates: { next_follow_up_date: date.toISOString().split('T')[0] } });
+                        }}>+1 semana</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   );
                 }
-                // Com follow-up: esconder botão e permitir alterar clicando na data
+
                 return (
                   <Popover>
                     <PopoverTrigger asChild>
-                      <button
-                        className="flex items-center gap-1 cursor-pointer hover:underline underline-offset-2"
-                        onClick={(e) => e.stopPropagation()}
-                        title="Alterar follow-up"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-6 px-2 text-[10px] gap-1 font-medium ring-1 ring-inset",
+                          isLate ? "bg-destructive/10 text-destructive ring-destructive/20 hover:bg-destructive/20" :
+                            isTodayFu ? "bg-amber-500/10 text-amber-600 ring-amber-500/20 hover:bg-amber-500/20" :
+                              "bg-blue-500/10 text-blue-600 ring-blue-500/20 hover:bg-blue-500/20"
+                        )}
                       >
-                        <Clock className={cn("w-2.5 h-2.5", tone)} />
-                        <span className={cn("text-[10px]", tone)}>{label}</span>
-                      </button>
+                        <Clock className="w-3 h-3" />
+                        {format(fu, "dd/MM", { locale: ptBR })}
+                      </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="p-2 bg-card border-border w-72" align="center" side="right" sideOffset={8} collisionPadding={10}>
-                      <div className="flex flex-wrap items-center gap-1 mb-2">
-                        <span className="text-xs text-muted-foreground mr-1">Agendar rápido:</span>
-                        {[
-                          { label: 'Hoje', days: 0 },
-                          { label: 'Amanhã', days: 1 },
-                          { label: '+2d', days: 2 },
-                          { label: '+7d', days: 7 },
-                          { label: '+30d', days: 30 },
-                        ].map((opt) => (
-                          <Button
-                            key={opt.label}
-                            size="sm"
-                            variant="outline"
-                            className="h-6 px-2 text-[11px]"
-                            onClick={() => snooze(opt.days)}
-                          >
-                            {opt.label}
-                          </Button>
-                        ))}
-                      </div>
-                      <div className="rounded-md border border-border/60 overflow-hidden">
-                        <CalendarPicker
-                          mode="single"
-                          selected={fu}
-                          onSelect={async (date) => {
-                            if (!date) return;
-                            try {
-                              await updateLead.mutateAsync({ id: lead.id, updates: { next_follow_up_date: date.toISOString().split('T')[0] } });
-                              toast({ title: 'Follow-up atualizado', description: format(date, 'dd/MM/yyyy', { locale: ptBR }) });
-                            } catch (e) {
-                              // no-op
-                            }
-                          }}
-                          initialFocus
-                          locale={ptBR}
-                        />
-                      </div>
-                      <div className="mt-2 space-y-2">
-                        <div className="space-y-1">
-                          <Textarea
-                            value={quickComment}
-                            onChange={(e) => setQuickComment(e.target.value)}
-                            placeholder="Adicionar comentário..."
-                            className="bg-input border-border text-xs min-h-[60px]"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Checkbox id={`linkfu-${lead.id}`} checked={linkFU} onCheckedChange={(v) => setLinkFU(Boolean(v))} />
-                              <label htmlFor={`linkfu-${lead.id}`} className="cursor-pointer">Vincular ao follow-up</label>
-                            </div>
-                            <Button
-                              size="sm"
-                              className="h-7"
-                              disabled={!quickComment.trim()}
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                const displayName = (user?.user_metadata as any)?.full_name || user?.email || 'Usuário';
-                                const content = linkFU && fu
-                                  ? `Follow-up (${format(fu, 'dd/MM/yyyy', { locale: ptBR })}): ${quickComment.trim()}`
-                                  : quickComment.trim();
-                                const { error } = await supabase.from('comments').insert({
-                                  lead_id: lead.id,
-                                  content,
-                                  user_name: displayName,
-                                  user_id: user?.id ?? null,
-                                });
-                                if (!error) {
-                                  setQuickComment('');
-                                  queryClient.invalidateQueries({ queryKey: ['leads'] });
-                                  toast({ title: 'Comentário adicionado' });
-                                } else {
-                                  toast({ title: 'Erro ao comentar', description: error.message, variant: 'destructive' });
-                                }
-                              }}
-                            >
-                              Comentar
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
-                          <Button size="sm" variant="ghost" className="h-7 text-destructive" onClick={clearFU}>
-                            Limpar
-                          </Button>
-                        </div>
+                    <PopoverContent className="w-auto p-0" align="end">
+                      <CalendarPicker
+                        mode="single"
+                        selected={fu}
+                        onSelect={(date) => {
+                          if (date) {
+                            updateLead.mutate({ id: lead.id, updates: { next_follow_up_date: date.toISOString().split('T')[0] } });
+                          }
+                        }}
+                        initialFocus
+                      />
+                      <div className="p-2 border-t flex justify-end">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs text-destructive hover:text-destructive"
+                          onClick={() => updateLead.mutate({ id: lead.id, updates: { next_follow_up_date: null } })}
+                        >
+                          Remover Data
+                        </Button>
                       </div>
                     </PopoverContent>
                   </Popover>
                 );
               })()}
             </div>
-
-            {lead.assignee_name && (
-              <div className="flex items-center gap-0.5">
-                <User className="w-2.5 h-2.5" />
-                <span className="truncate max-w-[60px]">{lead.assignee_name}</span>
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>
