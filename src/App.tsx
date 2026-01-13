@@ -9,12 +9,9 @@ import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import Auth from "./pages/Auth";
 import Index from "./pages/Index";
 import SetupAdmin from "./pages/SetupAdmin";
-import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
 import LeadsLinear from "./pages/LeadsLinear";
-import TrafficMetrics from "./pages/TrafficMetrics";
 import Users from "./pages/Users";
-import LeadForms from "./pages/LeadForms";
 import NotFound from "./pages/NotFound";
 import ForgotPassword from "./pages/ForgotPassword";
 import UpdatePassword from "./pages/UpdatePassword";
@@ -49,10 +46,7 @@ const App = () => (
             {/* Checkout removido temporariamente para reinimplementação */}
             <Route path="/finalizar-cadastro" element={<FinalizeSignup />} />
             <Route path="/setup-admin" element={<SetupAdmin />} />
-            <Route path="/forms/:formId" element={<PublicLeadForm />} />
-            {/* Slug pair must come BEFORE orgSlug/formId to avoid misrouting */}
-            <Route path="/:profileSlug/:formSlug" element={<PublicLeadForm />} />
-            <Route path="/:orgSlug/:formId" element={<PublicLeadForm />} />
+            <Route path="/setup-admin" element={<SetupAdmin />} />
             <Route path="/auth/forgot-password" element={<ForgotPassword />} />
             <Route path="/auth/update-password" element={<UpdatePassword />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
@@ -60,17 +54,16 @@ const App = () => (
             <Route path="/accept-invitation" element={<AcceptInvitation />} />
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
-                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/dashboard" element={<Navigate to="/leads" replace />} />
                 <Route path="/leads" element={<LeadsLinear />} />
                 <Route path="/leads/kanban" element={<Leads />} />
-                <Route path="/formularios" element={<LeadForms />} />
                 {/* Rota /metas desabilitada temporariamente */}
-                <Route path="/metas" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/metas-legacy" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/metas" element={<Navigate to="/leads" replace />} />
+                <Route path="/metas-legacy" element={<Navigate to="/leads" replace />} />
                 {/* Rotas de métricas */}
-                <Route path="/metricas" element={<TrafficMetrics />} />
-                <Route path="/meta-ads-config" element={<Navigate to="/metricas" replace />} />
-                <Route path="/metrics" element={<Navigate to="/metricas" replace />} />
+                <Route path="/metricas" element={<Navigate to="/leads" replace />} />
+                <Route path="/meta-ads-config" element={<Navigate to="/leads" replace />} />
+                <Route path="/metrics" element={<Navigate to="/leads" replace />} />
                 {/* Nova página unificada de gestão de equipe */}
                 <Route path="/equipe" element={<TeamManagement />} />
                 {/* Redirects de rotas antigas para nova rota unificada */}

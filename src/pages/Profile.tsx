@@ -172,17 +172,6 @@ export default function Profile() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-start gap-3">
-        <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-md">
-          <UserCog className="h-6 w-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Meu Perfil</h1>
-          <p className="text-muted-foreground">
-            Atualize seus dados pessoais e mantenha suas credenciais seguras.
-          </p>
-        </div>
-      </div>
 
       <Card className="border-border">
         <CardHeader className="space-y-1">
@@ -198,165 +187,165 @@ export default function Profile() {
                     src={personalForm.watch("avatarUrl") || profileData?.profile?.avatar_url || undefined}
                     alt={personalForm.watch("fullName")}
                   />
-                <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold">
-                  {getInitials(personalForm.watch("fullName") || user?.email || "MF")}
-                </AvatarFallback>
-              </Avatar>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Foto de perfil</p>
-                <p className="text-xs text-muted-foreground/80">
-                  Informe uma URL pública para que seu avatar apareça em toda a plataforma.
-                </p>
+                  <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold">
+                    {getInitials(personalForm.watch("fullName") || user?.email || "MF")}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Foto de perfil</p>
+                  <p className="text-xs text-muted-foreground/80">
+                    Informe uma URL pública para que seu avatar apareça em toda a plataforma.
+                  </p>
+                </div>
+              </div>
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="avatarUrl">URL da foto</Label>
+                <Input id="avatarUrl" placeholder="https://..." {...personalForm.register("avatarUrl")} />
+                {personalForm.formState.errors.avatarUrl && (
+                  <p className="text-xs text-destructive">{personalForm.formState.errors.avatarUrl.message}</p>
+                )}
               </div>
             </div>
-            <div className="flex-1 space-y-2">
-              <Label htmlFor="avatarUrl">URL da foto</Label>
-              <Input id="avatarUrl" placeholder="https://..." {...personalForm.register("avatarUrl")} />
-              {personalForm.formState.errors.avatarUrl && (
-                <p className="text-xs text-destructive">{personalForm.formState.errors.avatarUrl.message}</p>
-              )}
-            </div>
-          </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="fullName">Nome completo</Label>
-              <Input id="fullName" placeholder="Seu nome" {...personalForm.register("fullName")} />
-              {personalForm.formState.errors.fullName && (
-                <p className="text-xs text-destructive">{personalForm.formState.errors.fullName.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Email corporativo</Label>
-              <Input value={user?.email ?? ""} disabled className="bg-muted/40 text-muted-foreground" />
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="jobTitle">Cargo/Função</Label>
-              <Input id="jobTitle" placeholder="Ex: Gestor de Tráfego" {...personalForm.register("jobTitle")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phoneNumber">Telefone/Whatsapp</Label>
-              <Input id="phoneNumber" placeholder="+55 11 99999-9999" {...personalForm.register("phoneNumber")} />
-            </div>
-            <div className="space-y-2">
-              <Label>Fuso horário padrão</Label>
-              <Controller
-                control={personalForm.control}
-                name="timezone"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {timezones.map((tz) => (
-                        <SelectItem key={tz.value} value={tz.value}>
-                          {tz.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="fullName">Nome completo</Label>
+                <Input id="fullName" placeholder="Seu nome" {...personalForm.register("fullName")} />
+                {personalForm.formState.errors.fullName && (
+                  <p className="text-xs text-destructive">{personalForm.formState.errors.fullName.message}</p>
                 )}
+              </div>
+              <div className="space-y-2">
+                <Label>Email corporativo</Label>
+                <Input value={user?.email ?? ""} disabled className="bg-muted/40 text-muted-foreground" />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="jobTitle">Cargo/Função</Label>
+                <Input id="jobTitle" placeholder="Ex: Gestor de Tráfego" {...personalForm.register("jobTitle")} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phoneNumber">Telefone/Whatsapp</Label>
+                <Input id="phoneNumber" placeholder="+55 11 99999-9999" {...personalForm.register("phoneNumber")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Fuso horário padrão</Label>
+                <Controller
+                  control={personalForm.control}
+                  name="timezone"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {timezones.map((tz) => (
+                          <SelectItem key={tz.value} value={tz.value}>
+                            {tz.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bio">Bio curta</Label>
+              <Textarea
+                id="bio"
+                rows={3}
+                placeholder="Conte brevemente como você atua na operação e quais métricas acompanha."
+                {...personalForm.register("bio")}
               />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="bio">Bio curta</Label>
-            <Textarea
-              id="bio"
-              rows={3}
-              placeholder="Conte brevemente como você atua na operação e quais métricas acompanha."
-              {...personalForm.register("bio")}
-            />
-            {personalForm.formState.errors.bio && (
-              <p className="text-xs text-destructive">{personalForm.formState.errors.bio.message}</p>
-            )}
-          </div>
-
-          <div className="flex items-center justify-end gap-3">
-            <Button type="button" variant="outline" onClick={() => personalForm.reset()}>
-              Descartar alterações
-            </Button>
-            <Button type="submit" disabled={updateProfile.isPending}>
-              {updateProfile.isPending ? "Salvando..." : "Salvar informações"}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
-
-    <Card className="border-border">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-xl">
-          <Lock className="h-5 w-5 text-primary" />
-          Segurança da Conta
-        </CardTitle>
-        <CardDescription>Altere email, senha e gerencie sessões conectadas.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="space-y-6" onSubmit={securityForm.handleSubmit(handleSecuritySubmit)}>
-          <div className="space-y-2">
-            <Label htmlFor="security-email" className="flex items-center gap-2 text-sm font-medium">
-              <Mail className="h-4 w-4 text-primary" />
-              Email de acesso
-            </Label>
-            <Input
-              id="security-email"
-              type="email"
-              placeholder="seuemail@empresa.com"
-              {...securityForm.register("email")}
-            />
-            <p className="text-xs text-muted-foreground">
-              Alterar o email enviará um link de verificação. O acesso atual permanece até a confirmação.
-            </p>
-            {securityForm.formState.errors.email && (
-              <p className="text-xs text-destructive">{securityForm.formState.errors.email.message}</p>
-            )}
-          </div>
-
-          <Separator />
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="password">Nova senha</Label>
-              <Input id="password" type="password" {...securityForm.register("password")} />
-              {securityForm.formState.errors.password && (
-                <p className="text-xs text-destructive">{securityForm.formState.errors.password.message}</p>
+              {personalForm.formState.errors.bio && (
+                <p className="text-xs text-destructive">{personalForm.formState.errors.bio.message}</p>
               )}
             </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => personalForm.reset()}>
+                Descartar alterações
+              </Button>
+              <Button type="submit" disabled={updateProfile.isPending}>
+                {updateProfile.isPending ? "Salvando..." : "Salvar informações"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <Lock className="h-5 w-5 text-primary" />
+            Segurança da Conta
+          </CardTitle>
+          <CardDescription>Altere email, senha e gerencie sessões conectadas.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="space-y-6" onSubmit={securityForm.handleSubmit(handleSecuritySubmit)}>
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirmar nova senha</Label>
-              <Input id="confirmPassword" type="password" {...securityForm.register("confirmPassword")} />
-              {securityForm.formState.errors.confirmPassword && (
-                <p className="text-xs text-destructive">{securityForm.formState.errors.confirmPassword.message}</p>
+              <Label htmlFor="security-email" className="flex items-center gap-2 text-sm font-medium">
+                <Mail className="h-4 w-4 text-primary" />
+                Email de acesso
+              </Label>
+              <Input
+                id="security-email"
+                type="email"
+                placeholder="seuemail@empresa.com"
+                {...securityForm.register("email")}
+              />
+              <p className="text-xs text-muted-foreground">
+                Alterar o email enviará um link de verificação. O acesso atual permanece até a confirmação.
+              </p>
+              {securityForm.formState.errors.email && (
+                <p className="text-xs text-destructive">{securityForm.formState.errors.email.message}</p>
               )}
             </div>
-          </div>
 
-          <div className="rounded-lg border border-border bg-muted/40 p-4 space-y-2 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground flex items-center gap-2">
-              <Smartphone className="h-4 w-4 text-primary" />
-              Sessões ativas
-            </p>
-            <p>
-              Desconectaremos sessões antigas quando você alterar a senha. Em breve você poderá visualizar sessões remotas
-              diretamente nesta tela.
-            </p>
-          </div>
+            <Separator />
 
-          <div className="flex items-center justify-end gap-3">
-            <Button type="button" variant="outline" onClick={() => securityForm.reset()}>
-              Limpar
-            </Button>
-            <Button type="submit">Atualizar credenciais</Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
-  </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="password">Nova senha</Label>
+                <Input id="password" type="password" {...securityForm.register("password")} />
+                {securityForm.formState.errors.password && (
+                  <p className="text-xs text-destructive">{securityForm.formState.errors.password.message}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirmar nova senha</Label>
+                <Input id="confirmPassword" type="password" {...securityForm.register("confirmPassword")} />
+                {securityForm.formState.errors.confirmPassword && (
+                  <p className="text-xs text-destructive">{securityForm.formState.errors.confirmPassword.message}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-muted/40 p-4 space-y-2 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground flex items-center gap-2">
+                <Smartphone className="h-4 w-4 text-primary" />
+                Sessões ativas
+              </p>
+              <p>
+                Desconectaremos sessões antigas quando você alterar a senha. Em breve você poderá visualizar sessões remotas
+                diretamente nesta tela.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => securityForm.reset()}>
+                Limpar
+              </Button>
+              <Button type="submit">Atualizar credenciais</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

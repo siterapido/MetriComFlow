@@ -2,26 +2,15 @@ import { useState, useMemo } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Plus, Search, Loader2, LayoutList, Filter, Upload } from "lucide-react";
+import { Plus, Search, Loader2, Upload, Edit, Trash2, X } from "lucide-react";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
 import { LeadImportModal } from "@/components/leads/LeadImportModal";
 import { LeadCard } from "@/components/leads/LeadCard";
 import { BulkEditDialog } from "@/components/leads/BulkEditDialog";
 import { StageValueCard } from "@/components/leads/StageValueCard";
-import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
 import { useToast } from "@/hooks/use-toast";
 import { useLeads, useDeleteLead, useUpdateLead, type Lead, useBulkDeleteLeads } from "@/hooks/useLeads";
-import { useAdAccounts, useAdCampaigns, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
-import type { FilterValues } from "@/components/meta-ads/MetaAdsFiltersV2";
 import { cn } from "@/lib/utils";
-import { X, Edit, Trash2 } from "lucide-react";
 
 // Define board stages
 const BOARD_STAGES = [
@@ -44,20 +33,12 @@ export default function LeadsLinear() {
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const { toast } = useToast();
 
-  // Filters state (sem filtro de data por padrão - mostra todos os leads)
-  const [filters, setFilters] = useState<FilterValues>({
-    dateRange: undefined, // Sem filtro de data - mostra todos os leads
-  });
-
   // Fetch data
   const { data: leads, isLoading, error } = useLeads();
   const deleteLead = useDeleteLead();
   const bulkDelete = useBulkDeleteLeads();
   const updateLead = useUpdateLead();
-  const { data: accounts } = useAdAccounts();
-  const { data: campaigns } = useAdCampaigns(filters.accountId);
 
-  // Group leads by stage and calculate values
   // Group leads by stage and calculate values
   const filteredLeads = useMemo(() => {
     if (!leads) return [];
@@ -68,31 +49,9 @@ export default function LeadsLinear() {
         ? lead.title.toLowerCase().includes(searchTerm.toLowerCase())
         : true;
 
-      // Filtro de data (verifica created_at)
-      const matchesDate = (() => {
-        if (filters.dateRange && lead.created_at) {
-          // Comparar apenas a parte da data (YYYY-MM-DD) para evitar problemas de fuso horário
-          const createdAt = new Date(lead.created_at);
-          const createdDateStr = createdAt.toISOString().split('T')[0];
-
-          return createdDateStr >= filters.dateRange.start && createdDateStr <= filters.dateRange.end;
-        }
-        return true;
-      })();
-
-      // Filtro de conta Meta Ads
-      const matchesAccount = filters.accountId
-        ? lead.source === "meta_ads"
-        : true;
-
-      // Filtro de campanha Meta Ads
-      const matchesCampaign = filters.campaignId
-        ? lead.campaign_id === filters.campaignId
-        : true;
-
-      return matchesSearch && matchesDate && matchesAccount && matchesCampaign;
+      return matchesSearch;
     });
-  }, [leads, searchTerm, filters]);
+  }, [leads, searchTerm]);
 
   const stageMetrics = useMemo(() => {
     return BOARD_STAGES.reduce((acc, stage) => {
@@ -135,9 +94,21 @@ export default function LeadsLinear() {
         description: "O lead foi removido com sucesso.",
       });
     } catch (error) {
+      console.error('[handleDeleteLead] Erro ao excluir lead:', error);
+      console.error('[handleDeleteLead] Lead ID:', id);
+      console.error('[handleDeleteLead] Tipo de erro:', typeof error);
+      console.error('[handleDeleteLead] Detalhes completos:', JSON.stringify(error, null, 2));
+
+      const anyErr = error as any;
+      const description =
+        anyErr?.message ||
+        anyErr?.error?.message ||
+        anyErr?.data?.message ||
+        (anyErr?.code ? `Código: ${anyErr.code}` : 'Não foi possível remover o lead.');
+
       toast({
         title: "Erro ao excluir lead",
-        description: "Não foi possível remover o lead.",
+        description,
         variant: "destructive",
       });
     }
@@ -234,127 +205,64 @@ export default function LeadsLinear() {
     <div className="h-screen flex flex-col animate-fade-in">
       {/* Header */}
       <div className="flex-shrink-0 space-y-4 pb-4">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-md">
-              <LayoutList className="w-7 h-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                CRM - Pipeline
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                Gestão horizontal de oportunidades e contratos
-              </p>
-            </div>
-          </div>
-
-          {/* Filters inline - Dashboard style */}
-          <div className="flex flex-wrap gap-2 items-center">
-            {/* Moved Select All to search row */}
-
-            <DateRangeFilter
-              value={filters.dateRange}
-              onChange={(dateRange) => setFilters({ ...filters, dateRange })}
+        <div className="flex flex-col xl:flex-row items-center justify-between gap-4 p-1">
+          {/* Search Bar - Left Side */}
+          <div className="relative w-full xl:w-72 2xl:w-96">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input
+              placeholder="Buscar leads..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 h-9 bg-background/50 border-border focus:bg-background transition-colors"
             />
-
-            <Select
-              value={filters.accountId || 'all'}
-              onValueChange={(value) => setFilters({
-                ...filters,
-                accountId: value === 'all' ? undefined : value,
-                campaignId: undefined
-              })}
-            >
-              <SelectTrigger className="w-[180px] bg-background">
-                <SelectValue placeholder="Todas as contas" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as contas</SelectItem>
-                {accounts?.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    {account.business_name || account.external_id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {filters.accountId && (
-              <Select
-                value={filters.campaignId || 'all'}
-                onValueChange={(value) => setFilters({
-                  ...filters,
-                  campaignId: value === 'all' ? undefined : value
-                })}
-              >
-                <SelectTrigger className="w-[200px] bg-background">
-                  <SelectValue placeholder="Todas as campanhas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as campanhas</SelectItem>
-                  {campaigns?.map((campaign) => (
-                    <SelectItem key={campaign.id} value={campaign.id}>
-                      {campaign.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
           </div>
-        </div>
 
-        {/* Search and New Lead Button */}
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1 max-w-md flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-              <Input
-                placeholder="Buscar leads..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 bg-input border-border"
-              />
-            </div>
-            {filteredLeads.length > 0 && (
+          {/* Right Side Controls - Unified Line */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 xl:pb-0 w-full xl:w-auto mt-2 xl:mt-0 no-scrollbar">
+            {/* Selection Status */}
+            {filteredLeads.length > 0 && selectedLeads.size > 0 && (
               <Button
                 variant="outline"
-                className={cn(
-                  "gap-2 whitespace-nowrap",
-                  selectedLeads.size > 0 && selectedLeads.size === filteredLeads.length ? "bg-primary/10 border-primary text-primary" : ""
-                )}
+                size="sm"
+                className="gap-2 h-9 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10"
                 onClick={handleSelectAll}
               >
-                <div className={cn(
-                  "w-4 h-4 rounded border flex items-center justify-center transition-colors",
-                  selectedLeads.size > 0 && selectedLeads.size === filteredLeads.length ? "bg-primary border-primary" : "border-muted-foreground"
-                )}>
-                  {selectedLeads.size > 0 && selectedLeads.size === filteredLeads.length && (
-                    <span className="text-primary-foreground">✓</span>
-                  )}
+                <div className="flex items-center justify-center w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px]">
+                  {selectedLeads.size === filteredLeads.length ? "✓" : selectedLeads.size}
                 </div>
-                <span>
-                  {selectedLeads.size > 0 && selectedLeads.size === filteredLeads.length ? "Desmarcar todos" : "Selecionar todos"}
+                <span className="whitespace-nowrap">
+                  {selectedLeads.size === filteredLeads.length ? "Todos selecionados" : "Selecionados"}
                 </span>
               </Button>
             )}
+
+            {/* Select All Toggle */}
+            {filteredLeads.length > 0 && selectedLeads.size === 0 && (
+              <Button variant="ghost" size="sm" onClick={handleSelectAll} className="h-9 px-2 text-muted-foreground hover:text-foreground">
+                Selecionar todos
+              </Button>
+            )}
+
+            {/* Actions */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 h-9"
+              onClick={() => setIsImportModalOpen(true)}
+            >
+              <Upload className="w-4 h-4" />
+              <span className="hidden sm:inline">Importar</span>
+            </Button>
+
+            <Button
+              size="sm"
+              className="gap-2 bg-primary hover:bg-primary/90 h-9"
+              onClick={() => setIsNewLeadModalOpen(true)}
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Novo Lead</span>
+            </Button>
           </div>
-
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setIsImportModalOpen(true)}
-          >
-            <Upload className="w-4 h-4" />
-            Importar
-          </Button>
-
-          <Button
-            className="gap-2 bg-primary hover:bg-primary/90"
-            onClick={() => setIsNewLeadModalOpen(true)}
-          >
-            <Plus className="w-4 h-4" />
-            Novo Lead
-          </Button>
         </div>
       </div>
 
@@ -431,7 +339,7 @@ export default function LeadsLinear() {
                                         {...provided.dragHandleProps}
                                         className={cn(
                                           "transition-all",
-                                          "mb-2", // Add explicit margin bottom since we use space-y-2 on container
+                                          "mb-2",
                                           snapshot.isDragging && "ring-2 ring-primary shadow-2xl scale-105 rotate-2"
                                         )}
                                       >
@@ -469,55 +377,57 @@ export default function LeadsLinear() {
         )
       }
 
-      {/* Modal para Novo Lead */}
+      {/* New Lead Modal */}
       <NewLeadModal
         open={isNewLeadModalOpen}
         onOpenChange={setIsNewLeadModalOpen}
         onSave={handleNewLead}
       />
 
-      {/* Modal para Importação */}
+      {/* Import Modal */}
       <LeadImportModal
         open={isImportModalOpen}
         onOpenChange={setIsImportModalOpen}
       />
 
       {/* Bulk Actions Floating Bar */}
-      {selectedLeads.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-foreground text-background px-6 py-3 rounded-full shadow-lg flex items-center gap-4 animate-in slide-in-from-bottom-5">
-          <div className="font-semibold text-sm">
-            {selectedLeads.size} selecionado{selectedLeads.size > 1 ? 's' : ''}
+      {
+        selectedLeads.size > 0 && (
+          <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-foreground text-background px-6 py-3 rounded-full shadow-lg flex items-center gap-4 animate-in slide-in-from-bottom-5">
+            <div className="font-semibold text-sm">
+              {selectedLeads.size} selecionado{selectedLeads.size > 1 ? 's' : ''}
+            </div>
+            <div className="h-4 w-px bg-background/20" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-background hover:bg-background/20 hover:text-background h-8 px-3"
+              onClick={() => setIsBulkEditOpen(true)}
+            >
+              <Edit className="w-4 h-4 mr-2" />
+              Editar
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-red-400 hover:bg-background/20 hover:text-red-300 h-8 px-3"
+              onClick={handleBulkDelete}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Excluir
+            </Button>
+            <div className="h-4 w-px bg-background/20" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-background hover:bg-background/20 hover:text-background h-8 w-8 rounded-full ml-auto"
+              onClick={handleClearSelection}
+            >
+              <X className="w-4 h-4" />
+            </Button>
           </div>
-          <div className="h-4 w-px bg-background/20" />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-background hover:bg-background/20 hover:text-background h-8 px-3"
-            onClick={() => setIsBulkEditOpen(true)}
-          >
-            <Edit className="w-4 h-4 mr-2" />
-            Editar
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-red-400 hover:bg-background/20 hover:text-red-300 h-8 px-3"
-            onClick={handleBulkDelete}
-          >
-            <Trash2 className="w-4 h-4 mr-2" />
-            Excluir
-          </Button>
-          <div className="h-4 w-px bg-background/20" />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-background hover:bg-background/20 hover:text-background h-8 w-8 rounded-full ml-auto"
-            onClick={handleClearSelection}
-          >
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
-      )}
+        )
+      }
 
       {/* Bulk Edit Dialog */}
       <BulkEditDialog
@@ -528,6 +438,6 @@ export default function LeadsLinear() {
           handleClearSelection();
         }}
       />
-    </div >
+    </div>
   );
 }

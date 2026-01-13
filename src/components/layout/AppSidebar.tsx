@@ -9,6 +9,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarFooter,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useUserPermissions } from "@/hooks/useUserPermissions";
@@ -24,27 +26,10 @@ interface NavItem {
 
 const items: NavItem[] = [
   {
-    title: "Dashboard Geral",
-    url: "/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
     title: "Leads",
     url: "/leads",
     icon: Users,
     requiresCRM: true,
-  },
-  {
-    title: "Formulários",
-    url: "/formularios",
-    icon: FileText,
-    requiresCRM: true,
-  },
-  {
-    title: "Métricas",
-    url: "/metricas",
-    icon: TrendingUp,
-    requiresMetrics: true,
   },
   {
     title: "Gestão de Equipe",
@@ -73,7 +58,6 @@ export function AppSidebar() {
   const isActive = (path: string) => location.pathname === path;
   const isCollapsed = state === "collapsed";
 
-  // Filter items based on user permissions
   const visibleItems = items.filter((item) => {
     if (item.requiresOwner && !permissions?.isOwner) return false;
     if (item.requiresCRM && !permissions?.hasCRMAccess) return false;
@@ -84,21 +68,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
-        <div className="p-4 border-b border-sidebar-border">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center">
-              <BarChart3 className="w-5 h-5 text-white" />
-            </div>
-            {!isCollapsed && (
-              <div>
-                <h2 className="font-bold text-sidebar-foreground">InsightFy</h2>
-                <p className="text-xs text-sidebar-foreground/60">System</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <SidebarGroup>
+        <SidebarGroup className="pt-4">
           <SidebarGroupLabel>Navegação</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -124,6 +94,11 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="p-4 border-t border-sidebar-border">
+        <div className="flex justify-center w-full">
+          <SidebarTrigger className="text-muted-foreground hover:text-foreground transition-colors" />
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
 }

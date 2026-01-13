@@ -24,7 +24,7 @@ const FIELD_SYNONYMS: Record<string, string[]> = {
 
     // Endereço
     zip_code: ['cep', 'zip_code', 'codigo_postal'],
-    address: ['logradouro', 'endereco', 'address', 'rua', 'avenida'],
+    address: ['logradouro', 'endereco', 'address', 'rua', 'avenida', 'street'],
     address_number: ['numero', 'number', 'num'],
     complement: ['complemento', 'complement', 'comp'],
     neighborhood: ['bairro', 'neighborhood', 'vicinity'],
@@ -40,10 +40,10 @@ const FIELD_SYNONYMS: Record<string, string[]> = {
     notes: ['notas', 'notes', 'observacoes', 'obs', 'comentarios', 'comments', 'descricao', 'description'],
 }
 
-// Status válidos para leads
+// Status válidos para leads (devem corresponder à constraint leads_status_check no banco)
 const VALID_STATUSES = [
-    'novo_lead', 'qualificacao', 'proposta', 'negociacao',
-    'fechado_ganho', 'fechado_perdido'
+    'novo_lead', 'qualificacao', 'reuniao', 'proposta', 'negociacao',
+    'fechado_ganho', 'fechado_perdido', 'follow_up', 'aguardando_resposta'
 ]
 
 // Fontes válidas para leads
@@ -277,6 +277,8 @@ function normalizeValue(value: string, dbField: string): any {
                 'new': 'novo_lead',
                 'qualificado': 'qualificacao',
                 'qualified': 'qualificacao',
+                'reuniao': 'reuniao',
+                'meeting': 'reuniao',
                 'proposta': 'proposta',
                 'proposal': 'proposta',
                 'negociacao': 'negociacao',
@@ -285,6 +287,12 @@ function normalizeValue(value: string, dbField: string): any {
                 'won': 'fechado_ganho',
                 'perdido': 'fechado_perdido',
                 'lost': 'fechado_perdido',
+                'follow_up': 'follow_up',
+                'followup': 'follow_up',
+                'acompanhamento': 'follow_up',
+                'aguardando': 'aguardando_resposta',
+                'aguardando_resposta': 'aguardando_resposta',
+                'waiting': 'aguardando_resposta',
             }
             const mappedStatus = statusMap[normalizedStatus] || normalizedStatus
             return VALID_STATUSES.includes(mappedStatus) ? mappedStatus : 'novo_lead'

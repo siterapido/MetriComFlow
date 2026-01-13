@@ -30,6 +30,8 @@ import {
   Users,
   BarChart3,
   ShoppingCart,
+  Mail,
+  Calendar,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -71,61 +73,65 @@ export function UnifiedMemberCard({
       case "owner":
         return {
           label: "Owner",
-          className: "bg-gradient-to-br from-primary to-secondary text-white",
+          className: "bg-primary/20 text-primary border-primary/20",
           icon: Crown,
         };
       case "admin":
         return {
           label: "Admin",
-          className: "bg-gradient-to-br from-purple-500 to-pink-500 text-white",
+          className: "bg-purple-500/10 text-purple-400 border-purple-500/20",
           icon: Shield,
         };
       case "manager":
         return {
-          label: "Manager",
-          className: "bg-gradient-to-br from-blue-500 to-cyan-500 text-white",
+          label: "Gerente",
+          className: "bg-blue-500/10 text-blue-400 border-blue-500/20",
           icon: Users,
         };
       case "member":
         return {
           label: "Membro",
-          className: "bg-muted text-muted-foreground",
+          className: "bg-muted text-muted-foreground border-border",
           icon: UserCog,
         };
     }
   };
 
-  const getUserTypeIcon = (userType: string) => {
+  const getUserTypeBadgeConfig = (userType: string) => {
     switch (userType) {
       case "owner":
-        return Shield;
+        return {
+          label: "Acesso Total",
+          className: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+          icon: Shield,
+        };
       case "traffic_manager":
-        return BarChart3;
+        return {
+          label: "Tráfego",
+          className: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+          icon: BarChart3,
+        };
       case "sales":
-        return ShoppingCart;
+        return {
+          label: "Vendas",
+          className: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+          icon: ShoppingCart,
+        };
       default:
-        return UserCog;
+        return {
+          label: "Padrão",
+          className: "bg-muted text-muted-foreground border-border",
+          icon: UserCog,
+        };
     }
   };
 
-  const getUserTypeBadgeColor = (userType: string) => {
-    switch (userType) {
-      case "owner":
-        return "bg-gradient-to-br from-amber-500 to-orange-500 text-white";
-      case "traffic_manager":
-        return "bg-gradient-to-br from-indigo-500 to-blue-500 text-white";
-      case "sales":
-        return "bg-gradient-to-br from-green-500 to-emerald-500 text-white";
-      default:
-        return "bg-muted text-muted-foreground";
-    }
-  };
+  const roleConfig = getRoleBadgeConfig(member.role);
+  const userTypeConfig = getUserTypeBadgeConfig(member.profile.user_type);
+  const RoleIcon = roleConfig.icon;
+  const UserTypeIcon = userTypeConfig.icon;
 
-  const roleBadge = getRoleBadgeConfig(member.role);
-  const RoleIcon = roleBadge.icon;
-  const UserTypeIcon = getUserTypeIcon(member.profile.user_type);
-
-  const disableManagement = isCurrentUser || !canManage || member.role === "owner";
+  const disableManagement = !canManage || member.role === "owner";
 
   const handleDelete = () => {
     onRemove();
@@ -134,163 +140,142 @@ export function UnifiedMemberCard({
 
   return (
     <>
-      <Card className="bg-card border-border hover-lift transition-all duration-300 group">
+      <Card className="bg-card/40 border-border/50 hover:bg-card/60 hover:border-primary/30 transition-all duration-300 group relative overflow-hidden backdrop-blur-sm">
+        <div className="absolute top-0 right-0 p-2 z-10">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                disabled={(isCurrentUser && member.role === "owner") || !canManage || isUpdating}
+              >
+                <MoreVertical className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 glass border-border">
+              <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground">Privilégios</DropdownMenuLabel>
+              <DropdownMenuItem
+                disabled={isUpdating || member.role === "member"}
+                onClick={() => onRoleChange("member")}
+              >
+                <UserCog className="h-4 w-4 mr-2" /> Membro
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isUpdating || member.role === "manager"}
+                onClick={() => onRoleChange("manager")}
+              >
+                <Users className="h-4 w-4 mr-2" /> Gerente
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isUpdating || member.role === "admin"}
+                onClick={() => onRoleChange("admin")}
+              >
+                <Shield className="h-4 w-4 mr-2" /> Admin
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator className="bg-border/50" />
+              <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground">Área de Atuação</DropdownMenuLabel>
+              <DropdownMenuItem
+                disabled={isUpdating || member.profile.user_type === "sales"}
+                onClick={() => onUserTypeChange("sales")}
+              >
+                <ShoppingCart className="h-4 w-4 mr-2" /> Vendas / CRM
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isUpdating || member.profile.user_type === "traffic_manager"}
+                onClick={() => onUserTypeChange("traffic_manager")}
+              >
+                <BarChart3 className="h-4 w-4 mr-2" /> Gestor de Tráfego
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isUpdating || member.profile.user_type === "owner"}
+                onClick={() => onUserTypeChange("owner")}
+              >
+                <Crown className="h-4 w-4 mr-2" /> Acesso Total
+              </DropdownMenuItem>
+
+              {!isCurrentUser && (
+                <>
+                  <DropdownMenuSeparator className="bg-border/50" />
+                  <DropdownMenuItem
+                    onClick={() => setShowDeleteDialog(true)}
+                    className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                    disabled={isUpdating}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" /> Remover do Time
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
         <CardContent className="p-6">
-          <div className="flex items-start justify-between gap-4">
-            {/* Avatar and Main Info */}
-            <div className="flex items-start gap-4 flex-1 min-w-0">
-              <Avatar className="h-14 w-14 ring-2 ring-primary/20 flex-shrink-0">
-                <AvatarImage src={member.profile.avatar_url || undefined} alt={member.profile.full_name} />
-                <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold text-lg">
+          <div className="flex flex-col items-center text-center space-y-4 pt-2">
+            <div className="relative">
+              <Avatar className="h-20 w-20 ring-4 ring-background shadow-xl">
+                <AvatarImage src={member.profile.avatar_url || undefined} />
+                <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-bold text-2xl">
                   {getInitials(member.profile.full_name)}
                 </AvatarFallback>
               </Avatar>
-
-              <div className="flex-1 min-w-0">
-                {/* Name and Current User Badge */}
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-lg font-semibold text-foreground truncate">
-                    {member.profile.full_name}
-                  </h3>
-                  {isCurrentUser && (
-                    <Badge variant="outline" className="text-xs shrink-0">
-                      Você
-                    </Badge>
-                  )}
-                </div>
-
-                {/* Email */}
-                <p className="text-sm text-muted-foreground mb-3 truncate">{member.profile.email}</p>
-
-                {/* Badges Row */}
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  {/* Role Badge */}
-                  <Badge className={`${roleBadge.className} gap-1.5`}>
-                    <RoleIcon className="h-3 w-3" />
-                    {roleBadge.label}
-                  </Badge>
-
-                  {/* User Type Badge */}
-                  <Badge className={`${getUserTypeBadgeColor(member.profile.user_type)} gap-1.5`}>
-                    <UserTypeIcon className="h-3 w-3" />
-                    {USER_TYPE_LABELS[member.profile.user_type]}
-                  </Badge>
-                </div>
-
-                {/* Joined Date */}
-                <p className="text-xs text-muted-foreground">
-                  Entrou em{" "}
-                  {format(new Date(member.joinedAt), "dd 'de' MMMM 'de' yyyy", {
-                    locale: ptBR,
-                  })}
-                </p>
+              <div className={`absolute -bottom-1 -right-1 p-1.5 rounded-full border-2 border-background shadow-lg ${roleConfig.className.split(' ')[0]} ${roleConfig.className.split(' ')[1]}`}>
+                <RoleIcon className="h-3.5 w-3.5" />
               </div>
             </div>
 
-            {/* Actions Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                  disabled={disableManagement || isUpdating}
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 bg-card border-border">
-                {/* Role Management */}
-                <DropdownMenuLabel>Função na Organização</DropdownMenuLabel>
-                <DropdownMenuItem
-                  disabled={isUpdating || member.role === "member"}
-                  onClick={() => onRoleChange("member")}
-                  className="cursor-pointer"
-                >
-                  <UserCog className="h-4 w-4 mr-2" />
-                  Membro
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={isUpdating || member.role === "manager"}
-                  onClick={() => onRoleChange("manager")}
-                  className="cursor-pointer"
-                >
-                  <Users className="h-4 w-4 mr-2" />
-                  Manager
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={isUpdating || member.role === "admin"}
-                  onClick={() => onRoleChange("admin")}
-                  className="cursor-pointer"
-                >
-                  <Shield className="h-4 w-4 mr-2" />
-                  Admin
-                </DropdownMenuItem>
+            <div className="space-y-1 w-full px-2">
+              <div className="flex items-center justify-center gap-2">
+                <h3 className="font-bold text-lg text-foreground truncate">
+                  {member.profile.full_name}
+                </h3>
+                {isCurrentUser && (
+                  <Badge variant="secondary" className="text-[10px] h-4 px-1.5 bg-primary/10 text-primary border-none uppercase font-bold tracking-tighter">
+                    Você
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground flex items-center justify-center gap-1.5 truncate opacity-70">
+                <Mail className="h-3.5 w-3.5" />
+                {member.profile.email}
+              </p>
+            </div>
 
-                <DropdownMenuSeparator />
+            <div className="flex flex-wrap justify-center gap-2 pt-1">
+              <Badge variant="outline" className={`${roleConfig.className} px-2.5 py-0.5 text-[11px] font-medium rounded-full transition-colors`}>
+                {roleConfig.label}
+              </Badge>
+              <Badge variant="outline" className={`${userTypeConfig.className} px-2.5 py-0.5 text-[11px] font-medium rounded-full transition-colors`}>
+                {userTypeConfig.label}
+              </Badge>
+            </div>
 
-                {/* User Type Management */}
-                <DropdownMenuLabel>Tipo de Acesso</DropdownMenuLabel>
-                <DropdownMenuItem
-                  disabled={isUpdating || member.profile.user_type === "sales"}
-                  onClick={() => onUserTypeChange("sales")}
-                  className="cursor-pointer"
-                >
-                  <ShoppingCart className="h-4 w-4 mr-2" />
-                  CRM / Vendas
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={isUpdating || member.profile.user_type === "traffic_manager"}
-                  onClick={() => onUserTypeChange("traffic_manager")}
-                  className="cursor-pointer"
-                >
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  Gestor de Tráfego
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={isUpdating || member.profile.user_type === "owner"}
-                  onClick={() => onUserTypeChange("owner")}
-                  className="cursor-pointer"
-                >
-                  <Crown className="h-4 w-4 mr-2" />
-                  Owner
-                </DropdownMenuItem>
-
-                <DropdownMenuSeparator />
-
-                {/* Remove Member */}
-                <DropdownMenuItem
-                  onClick={() => setShowDeleteDialog(true)}
-                  className="cursor-pointer text-destructive focus:text-destructive"
-                  disabled={isUpdating}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Remover membro
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="pt-4 mt-2 border-t border-border/30 w-full">
+              <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground/60 uppercase tracking-widest font-medium">
+                <Calendar className="h-3 w-3" />
+                Desde {format(new Date(member.joinedAt), "PP", { locale: ptBR })}
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent className="bg-card border-border">
+        <AlertDialogContent className="glass border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">Remover Membro</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
-              Tem certeza que deseja remover <strong>{member.profile.full_name}</strong> da organização?
-              O membro perderá acesso a todos os dados e funcionalidades.
+            <AlertDialogTitle>Remover Membro</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você está prestes a remover <strong>{member.profile.full_name}</strong>. Esta ação não pode ser desfeita e o usuário perderá acesso imediato.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border">Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="bg-destructive hover:bg-destructive/90"
-              disabled={isUpdating}
+              className="bg-destructive hover:bg-destructive/90 text-white"
             >
-              {isUpdating ? "Removendo..." : "Remover"}
+              Remover
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

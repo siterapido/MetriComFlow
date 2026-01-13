@@ -89,24 +89,12 @@ export default function Team() {
     <div className="space-y-8">
       <InviteMemberDialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen} />
 
-      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Equipe</h1>
-          <p className="text-sm text-muted-foreground">
-            {organizationLoading
-              ? "Carregando organização..."
-              : organization
-                ? `Gerencie membros e convites da organização ${organization.name}.`
-                : "Associe-se a uma organização para habilitar convites e gestão de equipe."}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={() => setInviteDialogOpen(true)} disabled={!isOwner} className="flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Convidar membro
-          </Button>
-        </div>
-      </header>
+      <div className="flex justify-end">
+        <Button onClick={() => setInviteDialogOpen(true)} disabled={!isOwner} className="flex items-center gap-2">
+          <Plus className="h-4 w-4" />
+          Convidar membro
+        </Button>
+      </div>
 
       <Tabs defaultValue="members">
         <TabsList>

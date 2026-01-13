@@ -8,13 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CalendarIcon, X, Plus, Loader2, Facebook } from "lucide-react";
+import { CalendarIcon, X, Plus, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useCreateLead } from "@/hooks/useLeads";
 import { useLabels, useAddLabelToLead } from "@/hooks/useLabels";
-import { useAdCampaigns } from "@/hooks/useMetaMetrics";
 import { useToast } from "@/hooks/use-toast";
 import { useAssignableUsers } from "@/hooks/useAssignableUsers";
 import { USER_TYPE_LABELS } from "@/hooks/useUserPermissions";
@@ -43,7 +42,6 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
   const createLead = useCreateLead();
   const { data: labels } = useLabels();
   const addLabelToLead = useAddLabelToLead();
-  const { data: campaigns } = useAdCampaigns();
   const { data: assignableUsers } = useAssignableUsers();
 
   const [formData, setFormData] = useState({
@@ -57,8 +55,7 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
     contractMonths: "1",
     assigneeId: "",
     status: "novo_lead",
-    source: "manual" as 'manual' | 'meta_ads',
-    campaign_id: undefined as string | undefined,
+    source: "manual" as 'manual',
     // New fields
     cnpj: "",
     legal_name: "",
@@ -122,7 +119,6 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
         assignee_name: selectedAssigneeName,
         position: 0,
         source: formData.source,
-        campaign_id: formData.source === 'meta_ads' ? formData.campaign_id : null,
         // New fields
         cnpj: formData.cnpj || null,
         legal_name: formData.legal_name || null,
@@ -185,7 +181,6 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
       assigneeId: "",
       status: "novo_lead",
       source: "manual",
-      campaign_id: undefined,
       cnpj: "",
       legal_name: "",
       trade_name: "",
@@ -523,7 +518,7 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
               <Label className="text-foreground">Origem do Lead</Label>
               <Select
                 value={formData.source}
-                onValueChange={(value: 'manual' | 'meta_ads') => setFormData({ ...formData, source: value, campaign_id: value === 'manual' ? undefined : formData.campaign_id })}
+                onValueChange={(value: 'manual') => setFormData({ ...formData, source: value })}
                 disabled={isSubmitting}
               >
                 <SelectTrigger className="bg-input border-border">
@@ -531,44 +526,9 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="manual">Manual</SelectItem>
-                  <SelectItem value="meta_ads">
-                    <div className="flex items-center gap-2">
-                      <Facebook className="w-4 h-4" />
-                      Meta Ads
-                    </div>
-                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Campanha (somente se source = meta_ads) */}
-            {formData.source === 'meta_ads' && (
-              <div className="space-y-2 md:col-span-2">
-                <Label className="text-foreground">Campanha Meta Ads</Label>
-                <Select
-                  value={formData.campaign_id}
-                  onValueChange={(value) => setFormData({ ...formData, campaign_id: value })}
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger className="bg-input border-border">
-                    <SelectValue placeholder="Selecione a campanha" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {campaigns && campaigns.length > 0 ? (
-                      campaigns.map((campaign) => (
-                        <SelectItem key={campaign.id} value={campaign.id}>
-                          {campaign.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="none" disabled>
-                        Nenhuma campanha disponível
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
             {/* Responsável */}
             <div className="space-y-2">

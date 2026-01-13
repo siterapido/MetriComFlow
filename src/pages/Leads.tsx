@@ -19,15 +19,18 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useLeads, useUpdateLead, type LeadStatus, type LeadFilters } from "@/hooks/useLeads";
 import { useLeadActivity } from "@/hooks/useLeads";
-import type { Database } from "@/lib/database.types";
-import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
-import { useAdCampaigns } from "@/hooks/useMetaMetrics";
+import { useBulkDeleteLeads, type Lead } from "@/hooks/useLeads";
 import { LeadCard } from "@/components/leads/LeadCard";
 import { BulkEditDialog } from "@/components/leads/BulkEditDialog";
-import { useBulkDeleteLeads, type Lead } from "@/hooks/useLeads";
-import { CheckCheckbox } from "@/components/ui/checkbox"; // Assuming this might be needed or just reused standard Checkbox logic if implemented in LeadCard. actually LeadCard has it.
+
 // We need to implement the floating bar.
 import { X, Edit, Trash2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const BOARD_CONFIG = [
   { id: "novo_lead", title: "Novo Lead" },
@@ -50,8 +53,9 @@ interface KanbanColumnProps {
 
 function KanbanColumn({ status, title, baseFilters, onNewLead, selectedLeads, onToggleSelect }: KanbanColumnProps) {
   const [limit, setLimit] = useState(50);
+  const observerTarget = React.useRef<HTMLDivElement>(null);
 
-  // Reset limit when base filters change (except pagination)
+  // Reset limit when base filters change
   useEffect(() => {
     setLimit(50);
   }, [baseFilters.search, baseFilters.source, baseFilters.campaign_id, baseFilters.hideMetaLeads]);
@@ -64,6 +68,24 @@ function KanbanColumn({ status, title, baseFilters, onNewLead, selectedLeads, on
 
   const { data: leads, isLoading } = useLeads(filters);
   const hasMore = leads && leads.length >= limit;
+
+  // Infinite Scroll Logic
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoading) {
+          setLimit(prev => prev + 50);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
+    }
+
+    return () => observer.disconnect();
+  }, [hasMore, isLoading]);
 
   return (
     <div className="min-w-[320px] flex flex-col h-full">
@@ -85,7 +107,7 @@ function KanbanColumn({ status, title, baseFilters, onNewLead, selectedLeads, on
               ref={provided.innerRef}
               {...provided.droppableProps}
               className={cn(
-                "p-3 space-y-3 flex-1 overflow-y-auto min-h-[150px]",
+                "p-3 space-y-3 flex-1 overflow-y-auto min-h-[150px] scrollbar-thin scrollbar-thumb-border/40",
                 snapshot.isDraggingOver && "bg-primary/5"
               )}
             >
@@ -106,7 +128,7 @@ function KanbanColumn({ status, title, baseFilters, onNewLead, selectedLeads, on
                           className="mb-3"
                         >
                           <LeadCard
-                            lead={lead}
+                            lead={lead as any}
                             className={cn(
                               snapshot.isDragging && "ring-2 ring-primary rotate-2 shadow-xl opacity-90"
                             )}
@@ -121,25 +143,14 @@ function KanbanColumn({ status, title, baseFilters, onNewLead, selectedLeads, on
 
                   {provided.placeholder}
 
-                  {hasMore && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full mt-2 text-xs text-muted-foreground hover:text-primary"
-                      onClick={() => setLimit(prev => prev + 50)}
-                      disabled={isLoading}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="w-3 h-3 animate-spin mr-2" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3 mr-2" />
-                      )}
-                      Carregar mais
-                    </Button>
-                  )}
+                  {/* Infinite Scroll Sentinel */}
+                  <div ref={observerTarget} className="h-4 flex items-center justify-center">
+                    {isLoading && hasMore && (
+                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/50" />
+                    )}
+                  </div>
 
-                  {/* Add New Card Button - Only for first column usually, or strictly new_lead? 
-                      The original design had it in every column. Keeping it. */}
+                  {/* Add New Card Button */}
                   <Button
                     variant="ghost"
                     className="w-full h-10 border border-dashed border-border hover:border-primary hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all mt-2"
@@ -169,90 +180,47 @@ export default function Leads() {
   const { toast } = useToast();
   const bulkDelete = useBulkDeleteLeads();
 
-  // Construct base filters to pass to columns AND for global selection
+  // Header compacting and grouping
   const baseFilters = useMemo<LeadFilters>(() => ({
     search: searchTerm,
     source: sourceFilter === 'all' ? undefined : sourceFilter,
     campaign_id: campaignFilter === 'all' ? undefined : campaignFilter,
-    hideMetaLeads
-  }), [searchTerm, sourceFilter, campaignFilter, hideMetaLeads]);
+  }), [searchTerm, sourceFilter, campaignFilter]);
 
-  // Fetch all leads that match current filters for "Select All" functionality
-  // Note: This fetches ALL leads matching filters, ignoring pagination for selection purposes
+  // Fetch only IDs for bulk selection? No, the hook fetches everything. 
+  // Let's at least ensure we don't trigger too many re-renders.
   const { data: allMatchingLeads } = useLeads(baseFilters);
 
   const handleToggleSelect = (id: string) => {
     setSelectedLeads(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
-  const handleClearSelection = () => {
-    setSelectedLeads(new Set());
-  };
+  const handleClearSelection = () => setSelectedLeads(new Set());
 
   const handleSelectAll = () => {
     if (!allMatchingLeads) return;
-
-    if (selectedLeads.size === allMatchingLeads.length) {
-      handleClearSelection();
-    } else {
-      setSelectedLeads(new Set(allMatchingLeads.map(l => l.id)));
-    }
+    if (selectedLeads.size === allMatchingLeads.length) handleClearSelection();
+    else setSelectedLeads(new Set(allMatchingLeads.map(l => l.id)));
   };
 
   const handleBulkDelete = async () => {
     if (selectedLeads.size === 0) return;
-
-    // Optimistic UI or wait for confirmation? Let's confirm via toast or just do it. 
-    // Usually a confirmation dialog is better for delete.
     if (!confirm(`Tem certeza que deseja excluir ${selectedLeads.size} leads?`)) return;
-
     try {
       await bulkDelete.mutateAsync(Array.from(selectedLeads));
       handleClearSelection();
-    } catch (error) {
-      // Error handling is inside the hook
-    }
+    } catch (error) { }
   };
 
-  const {
-    hasActiveConnection: hasMetaConnection,
-    isLoading: metaStatusLoading,
-    isFetching: metaStatusFetching,
-  } = useMetaConnectionStatus();
-  const metaStatusPending = metaStatusLoading || metaStatusFetching;
-  const hideMetaLeads = !metaStatusPending && !hasMetaConnection;
-
-  useEffect(() => {
-    if (hideMetaLeads && sourceFilter === 'meta_ads') {
-      setSourceFilter('all');
-    }
-  }, [hideMetaLeads, sourceFilter]);
-
-  // Fetch aux data
-  const { data: campaigns } = useAdCampaigns(undefined, { enabled: hasMetaConnection });
-  type LeadActivity = Database['public']['Tables']['lead_activity']['Row']
-  const { data: activitiesData } = useLeadActivity();
   const updateLead = useUpdateLead();
+  const { data: activitiesData } = useLeadActivity();
 
-  const recentActivities = useMemo<LeadActivity[]>(() => {
-    return (activitiesData ?? []).slice(0, 10)
-  }, [activitiesData])
-
-  const handleNewLead = () => {
-    setIsNewLeadModalOpen(false);
-    toast({
-      title: "Lead criado com sucesso!",
-      description: "O lead foi adicionado ao sistema.",
-    });
-  };
+  const recentActivities = useMemo(() => (activitiesData ?? []).slice(0, 3), [activitiesData]);
 
   const onDragEnd = async (result: DropResult) => {
     const { source, destination, draggableId } = result;
@@ -265,7 +233,6 @@ export default function Leads() {
     const newStatus = destination.droppableId as LeadStatus;
     const oldStatus = source.droppableId;
 
-    // Update lead status
     try {
       await updateLead.mutateAsync({
         id: draggableId,
@@ -293,296 +260,184 @@ export default function Leads() {
     }
   };
 
-  // Construct base filters moved up
-
   return (
-    <div className="space-y-6 animate-fade-in h-[calc(100vh-100px)] flex flex-col">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Leads - Kanban</h1>
-          <p className="text-muted-foreground">Gestão de oportunidades e projetos</p>
-        </div>
-
-        <div className="flex gap-2">
-          <Button variant="outline" className="gap-2">
-            <Filter className="w-4 h-4" />
-            Filtros
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setIsImportModalOpen(true)}
-          >
-            <Upload className="w-4 h-4" />
-            Importar
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            title="Corrigir nomes dos leads (Nome Fantasia > Razão Social)"
-            onClick={async () => {
-              if (!allMatchingLeads) return;
-
-              const updates = [];
-              const isValidName = (name: string | null | undefined) => {
-                return name && name.trim() !== '' && name.trim() !== '-';
-              }
-
-              toast({ title: "Verificando leads...", description: "Analisando consistência dos nomes..." });
-
-              for (const lead of allMatchingLeads) {
-                let newTitle = lead.title;
-
-                const tradeName = (lead as any).trade_name;
-                const legalName = (lead as any).legal_name;
-
-                // Determine the desired name
-                let desiredTitle = null;
-                if (isValidName(tradeName)) {
-                  desiredTitle = tradeName;
-                } else if (isValidName(legalName)) {
-                  desiredTitle = legalName;
-                }
-
-                // If we found a valid name, check if we need to update
-                if (desiredTitle) {
-                  // Update if current title is invalid ("-", empty) OR if it differs from the desired one
-                  if (!isValidName(lead.title) || lead.title !== desiredTitle) {
-                    newTitle = desiredTitle;
-                  }
-                }
-
-                if (newTitle !== lead.title) {
-                  updates.push({ id: lead.id, title: newTitle });
-                }
-              }
-
-              if (updates.length === 0) {
-                toast({ title: "Tudo certo", description: "Todos os leads já estão com os nomes corretos." });
-                return;
-              }
-
-              toast({ title: "Atualizando...", description: `Corrigindo nomes de ${updates.length} leads...` });
-
-              // Atualizar em lotes
-              try {
-                const BATCH_SIZE = 10;
-                for (let i = 0; i < updates.length; i += BATCH_SIZE) {
-                  const chunk = updates.slice(i, i + BATCH_SIZE);
-                  await Promise.all(chunk.map(u =>
-                    updateLead.mutateAsync({ id: u.id, updates: { title: u.title } })
-                  ));
-                }
-                toast({ title: "Sucesso", description: `${updates.length} leads atualizados.` });
-                // Recarregar a página para garantir que tudo atualize visualmente
-                window.location.reload();
-              } catch (err) {
-                toast({ title: "Erro", description: "Falha ao atualizar alguns leads.", variant: "destructive" });
-              }
-            }}
-          >
-            <RefreshCw className="w-4 h-4" />
-          </Button>
-          <Button
-            className="gap-2 bg-primary hover:bg-primary/90"
-            onClick={() => setIsNewLeadModalOpen(true)}
-          >
-            <Plus className="w-4 h-4" />
-            Novo Lead
-          </Button>
-        </div>
-      </div>
-
-      {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row gap-4 shrink-0">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+    <div className="flex flex-col h-[calc(100vh-80px)] space-y-2 animate-in fade-in duration-500">
+      {/* Ultra-Minimalist Control Bar */}
+      <div className="flex flex-wrap items-center gap-1.5 bg-muted/10 p-1 rounded-md border border-border/20">
+        <div className="relative flex-1 min-w-[200px] max-w-[320px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground/50" />
           <Input
-            placeholder="Buscar leads..."
+            placeholder="Buscar..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-input border-border"
+            className="pl-7 h-7 text-[11px] bg-transparent border-none focus-visible:ring-1 focus-visible:ring-primary/10"
           />
         </div>
 
-        <Select
-          value={sourceFilter}
-          onValueChange={(value) => setSourceFilter(value as 'all' | 'meta_ads' | 'manual')}
-        >
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Filtrar por origem" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas as Origens</SelectItem>
-            <SelectItem value="manual">Manual</SelectItem>
-            <SelectItem value="meta_ads" disabled={hideMetaLeads}>
-              <div className="flex items-center gap-2">
-                <Facebook className="w-4 h-4" />
-                Meta Ads
+        <div className="flex items-center gap-1.5 ml-auto">
+          {allMatchingLeads && allMatchingLeads.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSelectAll}
+              className={cn(
+                "h-7 text-[10px] gap-1.5 font-medium hover:bg-primary/5 px-2",
+                selectedLeads.size > 0 && selectedLeads.size === allMatchingLeads.length ? "text-primary" : "text-muted-foreground"
+              )}
+            >
+              {selectedLeads.size === allMatchingLeads.length ? "Desmarcar" : "Selecionar Todos"}
+              <span className="opacity-40">{allMatchingLeads.length}</span>
+            </Button>
+          )}
+
+          <div className="w-px h-3 bg-border/20 mx-0.5" />
+
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-[10px] gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+              onClick={() => setIsImportModalOpen(true)}
+            >
+              <Upload className="w-3 h-3" />
+              Importar
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 px-3 text-[10px] gap-1.5 shadow-none font-medium h-7"
+              onClick={() => setIsNewLeadModalOpen(true)}
+            >
+              <Plus className="w-3 h-3" />
+              Novo Lead
+            </Button>
+          </div>
+
+          <div className="w-px h-3 bg-border/20 mx-0.5" />
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50">
+                <Filter className="w-3 h-3" />
+                Filtros
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <div className="p-2 space-y-2">
+                <div className="space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50">Origem</span>
+                  <Select value={sourceFilter} onValueChange={(v) => setSourceFilter(v as any)}>
+                    <SelectTrigger className="h-7 text-[10px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      <SelectItem value="manual">Manual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="pt-1.5 border-t mt-1.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start h-7 text-[10px] gap-1.5 text-muted-foreground hover:text-foreground"
+                    onClick={async () => {
+                      if (!allMatchingLeads) return;
+                      const updates = allMatchingLeads.filter(l => {
+                        const trade = (l as any).trade_name;
+                        const legal = (l as any).legal_name;
+                        const desired = trade || legal;
+                        return desired && l.title !== desired;
+                      }).map(l => ({ id: l.id, title: (l as any).trade_name || (l as any).legal_name }));
+
+                      if (updates.length > 0) {
+                        toast({ title: "Corrigindo nomes...", description: `${updates.length} leads sendo atualizados.` });
+                        const chunks = [];
+                        for (let i = 0; i < updates.length; i += 10) chunks.push(updates.slice(i, i + 10));
+                        for (const chunk of chunks) await Promise.all(chunk.map(u => updateLead.mutateAsync({ id: u.id, updates: { title: u.title } })));
+                        window.location.reload();
+                      } else {
+                        toast({ title: "Tudo certo", description: "Nomes consistentes." });
+                      }
+                    }}
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Corrigir Nomes
+                  </Button>
+                </div>
               </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Global Select All for Kanban */}
-        {allMatchingLeads && allMatchingLeads.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm" // Changed form icon to sm to fit text if needed, maintaining style
-            onClick={handleSelectAll}
-            className={cn(
-              "gap-2 ml-auto sm:ml-0", // Adjust spacing
-              selectedLeads.size > 0 && selectedLeads.size === allMatchingLeads.length ? "bg-primary/10 border-primary text-primary" : ""
-            )}
-            title="Selecionar todos os leads filtrados"
-          >
-            {selectedLeads.size > 0 && selectedLeads.size === allMatchingLeads.length ? "Desmarcar todos" : "Selecionar todos"}
-          </Button>
-        )}
-
-        {/* Campaign Filter */}
-        {hasMetaConnection && campaigns && campaigns.length > 0 && (
-          <Select
-            value={campaignFilter}
-            onValueChange={setCampaignFilter}
-          >
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Filtrar por campanha" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as Campanhas</SelectItem>
-              {campaigns.map((campaign) => (
-                <SelectItem key={campaign.id} value={campaign.id}>
-                  <span className="truncate max-w-[160px]" title={campaign.name}>
-                    {campaign.name}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
-      {hideMetaLeads && (
-        <Alert className="shrink-0">
-          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>Leads vinculados a campanhas do Meta Ads estão ocultos até que a integração seja reativada. Eles permanecem salvos para uso futuro.</span>
-            <Button variant="outline" size="sm" asChild>
-              <a href="/metricas">Reativar Meta Ads</a>
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Kanban Board */}
-      <DragDropContext onDragEnd={onDragEnd}>
-        <div className="flex-1 overflow-x-auto pb-4">
-          <div className="flex gap-6 h-full min-w-max px-1">
-            {BOARD_CONFIG.map((board) => (
-              <KanbanColumn
-                key={board.id}
-                title={board.title}
-                status={board.id}
-                baseFilters={baseFilters}
-                onNewLead={() => setIsNewLeadModalOpen(true)}
-                selectedLeads={selectedLeads}
-                onToggleSelect={handleToggleSelect}
-              />
-            ))}
-          </div>
-        </div>
-      </DragDropContext>
-
-      {/* Bulk Actions Floating Bar */}
-      {selectedLeads.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-foreground text-background px-6 py-3 rounded-full shadow-lg flex items-center gap-4 animate-in slide-in-from-bottom-5">
-          <div className="font-semibold text-sm">
-            {selectedLeads.size} selecionado{selectedLeads.size > 1 ? 's' : ''}
-          </div>
-          <div className="h-4 w-px bg-background/20" />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-background hover:bg-background/20 hover:text-background h-8 px-3"
-            onClick={() => setIsBulkEditOpen(true)}
-          >
-            <Edit className="w-4 h-4 mr-2" />
-            Editar
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-red-400 hover:bg-background/20 hover:text-red-300 h-8 px-3"
-            onClick={handleBulkDelete}
-          >
-            <Trash2 className="w-4 h-4 mr-2" />
-            Excluir
-          </Button>
-          <div className="h-4 w-px bg-background/20" />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-background hover:bg-background/20 hover:text-background h-8 w-8 rounded-full ml-auto"
-            onClick={handleClearSelection}
-          >
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
-      )}
-
-      {/* Bulk Edit Dialog */}
-      <BulkEditDialog
-        open={isBulkEditOpen}
-        onOpenChange={setIsBulkEditOpen}
-        selectedIds={Array.from(selectedLeads)}
-        onSuccess={() => {
-          handleClearSelection();
-        }}
-      />
-
-      {/* Modal para Novo Lead */}
-      <NewLeadModal
-        open={isNewLeadModalOpen}
-        onOpenChange={setIsNewLeadModalOpen}
-        onSave={handleNewLead}
-      />
-
-      {/* Modal para Importação */}
-      <LeadImportModal
-        open={isImportModalOpen}
-        onOpenChange={setIsImportModalOpen}
-      />
-
-      {/* Histórico de movimentações - Keeping slightly minimal here or moving to separate logic if needed, 
-          but reducing prominence to focus on the board */}
-      <div className="shrink-0 pt-4 border-t border-border">
-        <Card className="border-border bg-card">
-          <CardHeader className="pb-3 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <History className="w-4 h-4" />
-                <CardTitle className="text-sm font-semibold text-foreground">Histórico recente</CardTitle>
-              </div>
+      {/* Kanban Board Container */}
+      <div className="flex-1 min-h-0 relative">
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="absolute inset-0 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-border/40 scrollbar-track-transparent">
+            <div className="flex gap-4 h-full min-w-max px-1">
+              {BOARD_CONFIG.map((board) => (
+                <KanbanColumn
+                  key={board.id}
+                  title={board.title}
+                  status={board.id}
+                  baseFilters={baseFilters}
+                  onNewLead={() => setIsNewLeadModalOpen(true)}
+                  selectedLeads={selectedLeads}
+                  onToggleSelect={handleToggleSelect}
+                />
+              ))}
             </div>
-          </CardHeader>
-          <CardContent className="space-y-1 py-2">
-            {recentActivities.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Nenhuma movimentação registrada ainda.</p>
-            ) : (
-              recentActivities.slice(0, 3).map((activity) => (
-                <div key={activity.id} className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground mr-2">
-                    {new Date(activity.created_at).toLocaleString("pt-BR")}
-                  </span>
-                  <span className="font-medium truncate">
-                    "{activity.lead_title}" {activity.from_status} → {activity.to_status}
-                  </span>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+          </div>
+        </DragDropContext>
+      </div>
+
+      {/* Floating Action Bar */}
+      {selectedLeads.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-zinc-900 dark:bg-zinc-100 text-zinc-100 dark:text-zinc-900 px-4 py-2 rounded-full shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-5 duration-300">
+          <span className="text-xs font-bold px-2 py-0.5 bg-primary/20 text-primary rounded-full">
+            {selectedLeads.size}
+          </span>
+          <div className="flex items-center gap-1 border-l border-white/10 dark:border-black/10 pl-4">
+            <Button variant="ghost" size="sm" className="h-8 text-xs gap-2 hover:bg-white/5 active:bg-white/10" onClick={() => setIsBulkEditOpen(true)}>
+              <Edit className="w-3.5 h-3.5" />
+              Editar
+            </Button>
+            <Button variant="ghost" size="sm" className="h-8 text-xs gap-2 text-red-400 hover:bg-red-500/10 hover:text-red-300" onClick={handleBulkDelete}>
+              <Trash2 className="w-3.5 h-3.5" />
+              Excluir
+            </Button>
+          </div>
+          <Button variant="ghost" size="icon" className="h-7 w-7 ml-2 rounded-full hover:bg-white/5" onClick={handleClearSelection}>
+            <X className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      )}
+
+      {/* Modals & Dialogs */}
+      <BulkEditDialog open={isBulkEditOpen} onOpenChange={setIsBulkEditOpen} selectedIds={Array.from(selectedLeads)} onSuccess={handleClearSelection} />
+      <NewLeadModal open={isNewLeadModalOpen} onOpenChange={setIsNewLeadModalOpen} onSave={() => toast({ title: "Sucesso", description: "Lead criado!" })} />
+      <LeadImportModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
+
+      {/* Footer Activities */}
+      <div className="flex items-center gap-4 px-2 py-1 bg-muted/5 rounded-md border border-border/20 text-[10px] text-muted-foreground overflow-hidden">
+        <div className="flex items-center gap-1.5 shrink-0 opacity-80">
+          <History className="w-3 h-3" />
+          <span className="font-bold uppercase tracking-wider">Histórico:</span>
+        </div>
+        <div className="flex gap-4 overflow-hidden mask-fade-right">
+          {recentActivities.length === 0 ? (
+            <span>Nenhuma atividade recente.</span>
+          ) : (
+            recentActivities.map(activity => (
+              <div key={activity.id} className="flex items-center gap-2 whitespace-nowrap">
+                <span className="opacity-50">{format(new Date(activity.created_at), "HH:mm")}</span>
+                <span className="font-medium">"{activity.lead_title}"</span>
+                <span className="opacity-70">{activity.from_status} → {activity.to_status}</span>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

@@ -438,18 +438,29 @@ export const useUpdateLead = () => {
 
 export function useDeleteLead() {
   const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
 
   return useMutation({
     mutationFn: async (id: string) => {
       logDebug('[useDeleteLead] Deletando lead:', id)
 
+      if (!org?.id) {
+        const error = new Error('Organização ativa não definida')
+        console.error('[useDeleteLead]', error.message)
+        throw error
+      }
+
       const { error } = await supabase
         .from('leads')
         .delete()
         .eq('id', id)
+        .eq('organization_id', org.id)
 
       if (error) {
         console.error('[useDeleteLead] Erro ao deletar lead:', error)
+        console.error('[useDeleteLead] Código:', error.code)
+        console.error('[useDeleteLead] Mensagem:', error.message)
+        console.error('[useDeleteLead] Detalhes:', error.details)
         throw error
       }
 
@@ -469,7 +480,9 @@ export function useDeleteLead() {
     },
     onError: (error) => {
       console.error('[useDeleteLead] Erro ao deletar lead:', error)
-      toast.error('Erro ao remover lead')
+      const anyErr = error as any
+      const message = anyErr?.message || anyErr?.error || (anyErr?.code ? `Código: ${anyErr.code}` : 'Erro ao remover lead')
+      toast.error(message)
     }
   })
 }

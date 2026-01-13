@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useMemo, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   MessageSquare,
@@ -15,12 +15,12 @@ import {
   Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format, formatDistanceToNowStrict, addHours, addDays, isPast, isToday } from "date-fns";
+import { format, formatDistanceToNowStrict, addDays, isPast, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { LeadEditDialog } from "./LeadEditDialog";
 import type { Tables } from "@/lib/database.types";
 import { stripNonNumeric, validatePhone } from "@/lib/cpf-cnpj-validator";
-import { useUpdateLead } from "@/hooks/useLeads";
+import { useUpdateLead, useLeads } from "@/hooks/useLeads";
 import { useToast } from "@/hooks/use-toast";
 import {
   DropdownMenu,
@@ -31,11 +31,7 @@ import {
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/lib/supabase";
 
 type Lead = Tables<"leads"> & {
   lead_labels?: Array<{
@@ -46,9 +42,9 @@ type Lead = Tables<"leads"> & {
     name: string;
     external_id: string;
   } | null;
-  // Optional fields that may exist in the schema
   phone?: string | null;
   contact_name?: string | null;
+  comments_count: number;
 };
 
 interface LeadCardProps {
@@ -61,53 +57,41 @@ interface LeadCardProps {
   selectionMode?: boolean;
 }
 
-export function LeadCard({ lead, onDelete, onUpdate, className, isSelected, onToggleSelect, selectionMode }: LeadCardProps) {
+export const LeadCard = React.memo(({ lead, className, isSelected, onToggleSelect, selectionMode }: LeadCardProps) => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const updateLead = useUpdateLead();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const { user } = useAuth();
-  const [quickComment, setQuickComment] = useState("");
-  const [linkFU, setLinkFU] = useState<boolean>(!!lead.next_follow_up_date);
-
-  const contractTypeLabels = {
-    monthly: "Mensal",
-    annual: "Anual",
-    one_time: "Único",
-  };
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
       currency: "BRL",
+      maximumFractionDigits: 0,
     }).format(value);
   };
 
   const getLabelColor = (name: string) => {
     const colors: { [key: string]: string } = {
-      Urgente: "bg-destructive text-destructive-foreground",
-      Comercial: "bg-primary text-primary-foreground",
-      Reunião: "bg-secondary text-secondary-foreground",
-      Desenvolvimento: "bg-accent text-accent-foreground",
-      "Alta Prioridade": "bg-warning text-warning-foreground",
-      Concluído: "bg-success text-success-foreground",
-      Faturado: "bg-muted text-muted-foreground",
-      Proposta: "bg-primary text-primary-foreground",
-      Negociação: "bg-accent text-accent-foreground",
-      Contrato: "bg-success text-success-foreground",
-      "Baixa Prioridade": "bg-muted text-muted-foreground",
+      Urgente: "bg-red-500/10 text-red-600 border-red-200",
+      Comercial: "bg-blue-500/10 text-blue-600 border-blue-200",
+      Reunião: "bg-purple-500/10 text-purple-600 border-purple-200",
+      Desenvolvimento: "bg-indigo-500/10 text-indigo-600 border-indigo-200",
+      "Alta Prioridade": "bg-orange-500/10 text-orange-600 border-orange-200",
+      Concluído: "bg-emerald-500/10 text-emerald-600 border-emerald-200",
+      Faturado: "bg-zinc-500/10 text-zinc-600 border-zinc-200",
+      Proposta: "bg-primary/10 text-primary border-primary/20",
+      Negociação: "bg-amber-500/10 text-amber-600 border-amber-200",
+      Contrato: "bg-emerald-500/10 text-emerald-600 border-emerald-200",
+      "Baixa Prioridade": "bg-zinc-500/10 text-zinc-600 border-zinc-200",
     };
-    return colors[name] || "bg-muted text-muted-foreground";
+    return colors[name] || "bg-muted text-muted-foreground border-transparent";
   };
 
-  // Best-effort phone resolution (supports upcoming `phone` field or attempts to extract from description)
   const resolvedPhone = useMemo(() => {
-    if (lead.phone && validatePhone(lead.phone)) return lead.phone as string;
-    // Try to extract a phone from description (10-11 digit sequences common in BR)
+    if (lead.phone && validatePhone(lead.phone)) return lead.phone;
     if (lead.description) {
       const digits = (lead.description.match(/\d[\d\s().-]{8,}\d/g) || [])
         .map((m) => stripNonNumeric(m))
-        .find((n) => n.length === 10 || n.length === 11 || n.length === 12 || n.length === 13);
+        .find((n) => n.length >= 10 && n.length <= 13);
       if (digits) return digits;
     }
     return null;
@@ -116,81 +100,21 @@ export function LeadCard({ lead, onDelete, onUpdate, className, isSelected, onTo
   const whatsappHref = useMemo(() => {
     if (!resolvedPhone) return null;
     const raw = stripNonNumeric(resolvedPhone);
-    // If already includes country code (55..), keep; otherwise prefix BR code
     const withCC = raw.startsWith("55") ? raw : `55${raw}`;
     return `https://wa.me/${withCC}`;
   }, [resolvedPhone]);
 
-  const SourceBadge = () => {
+  const SourceIcon = () => {
     const source = lead.source || "manual";
-    const commonClasses = "text-[10px] px-1.5 py-0.5 border flex items-center gap-0.5 w-fit";
     switch (source) {
-      case "meta_ads":
-        return (
-          <div className="flex flex-wrap gap-1">
-            <Badge
-              variant="outline"
-              className={cn(
-                commonClasses,
-                "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
-              )}
-            >
-              <Facebook className="w-2.5 h-2.5" />
-              Meta Ads
-            </Badge>
-            {lead.ad_campaigns?.name && (
-              <Badge
-                variant="outline"
-                className="text-[10px] bg-primary/10 text-primary border-primary/30 px-1.5 py-0.5 max-w-[140px] truncate"
-                title={lead.ad_campaigns.name}
-              >
-                {lead.ad_campaigns.name}
-              </Badge>
-            )}
-          </div>
-        );
-      case "whatsapp":
-        return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-emerald-50 border-emerald-200 text-emerald-700")}>
-            <MessageCircle className="w-2.5 h-2.5" /> WhatsApp
-          </Badge>
-        );
-      case "google_ads":
-        return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-yellow-50 border-yellow-200 text-yellow-700")}>
-            <Megaphone className="w-2.5 h-2.5" /> Google Ads
-          </Badge>
-        );
-      case "site":
-        return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-slate-50 border-slate-200 text-slate-700")}>
-            <Globe className="w-2.5 h-2.5" /> Site
-          </Badge>
-        );
-      case "email":
-        return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-indigo-50 border-indigo-200 text-indigo-700")}>
-            <Mail className="w-2.5 h-2.5" /> E-mail
-          </Badge>
-        );
-      case "telefone":
-        return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-zinc-50 border-zinc-200 text-zinc-700")}>
-            <Phone className="w-2.5 h-2.5" /> Telefone
-          </Badge>
-        );
-      case "indicacao":
-        return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-fuchsia-50 border-fuchsia-200 text-fuchsia-700")}>
-            <Users className="w-2.5 h-2.5" /> Indicação
-          </Badge>
-        );
-      default:
-        return (
-          <Badge variant="outline" className={cn(commonClasses, "bg-muted/50 text-muted-foreground")}>
-            Manual
-          </Badge>
-        );
+      case "meta_ads": return <Facebook className="w-3 h-3 text-blue-600" />;
+      case "whatsapp": return <MessageCircle className="w-3 h-3 text-emerald-600" />;
+      case "google_ads": return <Megaphone className="w-3 h-3 text-yellow-600" />;
+      case "site": return <Globe className="w-3 h-3 text-slate-600" />;
+      case "email": return <Mail className="w-3 h-3 text-indigo-600" />;
+      case "telefone": return <Phone className="w-3 h-3 text-zinc-600" />;
+      case "indicacao": return <Users className="w-3 h-3 text-fuchsia-600" />;
+      default: return <User className="w-3 h-3 text-muted-foreground" />;
     }
   };
 
@@ -198,19 +122,17 @@ export function LeadCard({ lead, onDelete, onUpdate, className, isSelected, onTo
     <>
       <Card
         className={cn(
-          "group relative overflow-hidden bg-card hover:bg-accent/5 transition-all duration-300 border-border/60 hover:border-primary/30 hover:shadow-md cursor-pointer",
+          "group relative overflow-hidden bg-card hover:bg-accent/5 transition-all duration-200 border-border/40 hover:border-primary/20 hover:shadow-sm cursor-pointer",
+          isSelected && "ring-1 ring-primary bg-primary/5 border-primary/30",
           className
         )}
         onClick={() => setIsEditOpen(true)}
       >
-        {/* Hover Strip */}
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary/0 group-hover:bg-primary transition-all duration-300" />
-
         {/* Selection Checkbox */}
         {(selectionMode || isSelected || onToggleSelect) && (
           <div
             className={cn(
-              "absolute top-2 left-2 z-10 transition-opacity duration-200",
+              "absolute top-2.5 left-2.5 z-10 transition-opacity duration-200",
               isSelected || selectionMode ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             )}
             onClick={(e) => e.stopPropagation()}
@@ -218,78 +140,90 @@ export function LeadCard({ lead, onDelete, onUpdate, className, isSelected, onTo
             <Checkbox
               checked={isSelected}
               onCheckedChange={() => onToggleSelect?.(lead.id)}
-              className="h-4 w-4 bg-background border-primary/50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+              className="h-3.5 w-3.5 border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
             />
           </div>
         )}
 
-        <CardContent className="p-3 space-y-3">
-          {/* Header: Title & Actions */}
-          <div className={cn("flex items-start justify-between gap-2 pl-2", ((selectionMode || isSelected) ? "pl-6" : ""))}>
-            <div className="space-y-1 overflow-hidden">
-              <h3 className="font-semibold text-sm text-foreground leading-tight truncate pr-2" title={lead.title}>
-                {lead.title}
-              </h3>
-              {lead.description && (
-                <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
-                  {lead.description}
-                </p>
+        <CardContent className="p-3 space-y-2.5">
+          {/* Header Area */}
+          <div className={cn("space-y-1", (selectionMode || isSelected || onToggleSelect) ? "pl-5" : "")}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <SourceIcon />
+                <h3 className="font-semibold text-[13px] text-foreground leading-tight truncate" title={lead.title}>
+                  {lead.title}
+                </h3>
+              </div>
+              {whatsappHref && (
+                <a
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full text-emerald-600 hover:bg-emerald-50 transition-colors"
+                  title="WhatsApp"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                </a>
               )}
             </div>
-            {whatsappHref && (
-              <a
-                href={whatsappHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:scale-110 transition-all focus:outline-none focus:ring-1 focus:ring-emerald-400 border border-emerald-200"
-                title="Conversar no WhatsApp"
-              >
-                <MessageCircle className="w-3.5 h-3.5" />
-              </a>
+
+            {lead.description && (
+              <p className="text-[11px] text-muted-foreground line-clamp-1 opacity-70">
+                {lead.description}
+              </p>
             )}
           </div>
 
-          {/* Value Section - Elegant Display */}
-          <div className="bg-muted/40 rounded-md p-2 border border-border/40 flex items-center justify-between group-hover:bg-muted/60 transition-colors ml-2">
-            <span className="text-[10px] text-muted-foreground bg-background/50 px-1.5 py-0.5 rounded">
-              Proposta
-            </span>
-            <span className="text-sm font-bold text-primary font-mono tracking-tight">
-              {lead.value ? formatCurrency(lead.value) : "R$ 0,00"}
-            </span>
+          {/* Value and Labels */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-1 min-w-0">
+              {lead.lead_labels?.slice(0, 2).map((labelRel, index) => (
+                <Badge
+                  key={index}
+                  variant="outline"
+                  className={cn(
+                    "text-[9px] px-1.5 py-0 font-normal border min-w-0 truncate max-w-[80px]",
+                    getLabelColor(labelRel.labels.name)
+                  )}
+                >
+                  {labelRel.labels.name}
+                </Badge>
+              ))}
+              {lead.lead_labels && lead.lead_labels.length > 2 && (
+                <span className="text-[9px] text-muted-foreground font-medium">+{lead.lead_labels.length - 2}</span>
+              )}
+            </div>
+            <div className="shrink-0 text-[12px] font-bold text-foreground/80 bg-muted/30 px-2 py-0.5 rounded-sm border border-border/20">
+              {lead.value ? formatCurrency(lead.value) : "R$ 0"}
+            </div>
           </div>
 
-          {/* Badges & Tags */}
-          <div className="flex flex-wrap gap-1.5 pl-2">
-            <SourceBadge />
-            {lead.lead_labels && lead.lead_labels.length > 0 && lead.lead_labels.map((labelRel, index) => (
-              <Badge
-                key={index}
-                variant="outline"
-                className={`text-[10px] px-1.5 py-0 border-transparent bg-opacity-15 font-normal ${getLabelColor(labelRel.labels.name)}`}
-              >
-                {labelRel.labels.name}
-              </Badge>
-            ))}
-          </div>
-
-          {/* Footer: Date, Comments, FollowUp */}
-          <div className="flex items-center justify-between pt-2 mt-1 border-t border-border/30 pl-2">
-            <div className="flex items-center gap-3 text-muted-foreground">
+          {/* Footer Info */}
+          <div className="flex items-center justify-between pt-2 border-t border-border/10">
+            <div className="flex items-center gap-2.5 text-muted-foreground/60">
               {lead.due_date && (
-                <div className="flex items-center gap-1 text-[10px]" title="Data de vencimento">
-                  <Calendar className="w-3 h-3" />
-                  <span>{format(new Date(lead.due_date), "dd/MM", { locale: ptBR })}</span>
+                <div className="flex items-center gap-0.5 text-[10px]" title="Vencimento">
+                  <Calendar className="w-2.5 h-2.5" />
+                  <span>{format(new Date(lead.due_date), "dd/MM")}</span>
                 </div>
               )}
-              <div className="flex items-center gap-1 text-[10px]" title="Comentários">
-                <MessageSquare className="w-3 h-3" />
-                <span>{lead.comments_count || 0}</span>
+              {lead.comments_count > 0 && (
+                <div className="flex items-center gap-0.5 text-[10px]" title="Comentários">
+                  <MessageSquare className="w-2.5 h-2.5" />
+                  <span>{lead.comments_count}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-0.5 text-[10px]" title="Criado em">
+                <Clock className="w-2.5 h-2.5" />
+                <span className="truncate max-w-[40px]">
+                  {formatDistanceToNowStrict(new Date(lead.created_at), { addSuffix: false, locale: ptBR }).replace('atrás', '').trim()}
+                </span>
               </div>
             </div>
 
-            {/* Follow Up Component */}
+            {/* Follow-up Action */}
             <div onClick={(e) => e.stopPropagation()}>
               {(() => {
                 const fu = lead.next_follow_up_date ? new Date(lead.next_follow_up_date) : null;
@@ -303,10 +237,9 @@ export function LeadCard({ lead, onDelete, onUpdate, className, isSelected, onTo
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 px-2 text-[10px] hover:bg-primary/5 hover:text-primary gap-1"
+                          className="h-5 px-1.5 text-[9px] text-muted-foreground hover:text-primary transition-colors"
                         >
-                          <Clock className="w-3 h-3" />
-                          Follow-up
+                          + Follow-up
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-32">
@@ -318,14 +251,6 @@ export function LeadCard({ lead, onDelete, onUpdate, className, isSelected, onTo
                           const date = addDays(new Date(), 1);
                           updateLead.mutate({ id: lead.id, updates: { next_follow_up_date: date.toISOString().split('T')[0] } });
                         }}>Amanhã</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => {
-                          const date = addDays(new Date(), 2);
-                          updateLead.mutate({ id: lead.id, updates: { next_follow_up_date: date.toISOString().split('T')[0] } });
-                        }}>+2 dias</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => {
-                          const date = addDays(new Date(), 7);
-                          updateLead.mutate({ id: lead.id, updates: { next_follow_up_date: date.toISOString().split('T')[0] } });
-                        }}>+1 semana</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   );
@@ -338,14 +263,13 @@ export function LeadCard({ lead, onDelete, onUpdate, className, isSelected, onTo
                         variant="ghost"
                         size="sm"
                         className={cn(
-                          "h-6 px-2 text-[10px] gap-1 font-medium ring-1 ring-inset",
-                          isLate ? "bg-destructive/10 text-destructive ring-destructive/20 hover:bg-destructive/20" :
-                            isTodayFu ? "bg-amber-500/10 text-amber-600 ring-amber-500/20 hover:bg-amber-500/20" :
-                              "bg-blue-500/10 text-blue-600 ring-blue-500/20 hover:bg-blue-500/20"
+                          "h-5 px-1.5 text-[9px] font-medium rounded-sm ring-1 ring-inset",
+                          isLate ? "bg-red-500/10 text-red-600 ring-red-500/20" :
+                            isTodayFu ? "bg-amber-500/10 text-amber-600 ring-amber-500/20" :
+                              "bg-blue-500/10 text-blue-600 ring-blue-500/20"
                         )}
                       >
-                        <Clock className="w-3 h-3" />
-                        {format(fu, "dd/MM", { locale: ptBR })}
+                        {format(fu, "dd/MM")}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="end">
@@ -363,10 +287,10 @@ export function LeadCard({ lead, onDelete, onUpdate, className, isSelected, onTo
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 text-xs text-destructive hover:text-destructive"
+                          className="h-7 text-xs text-destructive"
                           onClick={() => updateLead.mutate({ id: lead.id, updates: { next_follow_up_date: null } })}
                         >
-                          Remover Data
+                          Remover
                         </Button>
                       </div>
                     </PopoverContent>
@@ -378,8 +302,9 @@ export function LeadCard({ lead, onDelete, onUpdate, className, isSelected, onTo
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
       <LeadEditDialog lead={lead} open={isEditOpen} onOpenChange={setIsEditOpen} />
     </>
   );
-}
+});
+
+LeadCard.displayName = "LeadCard";

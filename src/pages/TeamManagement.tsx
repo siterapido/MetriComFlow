@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,29 +11,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, Plus, Search, Filter, Mail } from "lucide-react";
+import { Users, Search, Filter, UserPlus, Settings2, ShieldAlert } from "lucide-react";
 import { useTeamManagement, type MemberFilter, type UserTypeFilter } from "@/hooks/useTeamManagement";
 import { UnifiedMemberCard } from "@/components/team/UnifiedMemberCard";
-import { InvitationCard } from "@/components/team/InvitationCard";
 import OrganizationNameEditor from "@/components/organization/OrganizationNameEditor";
+import { CreateMemberModal } from "@/components/team/CreateMemberModal";
 import { useToast } from "@/hooks/use-toast";
 
 function MembersSkeleton() {
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: 6 }).map((_, idx) => (
-        <Card key={idx} className="bg-card border-border">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {Array.from({ length: 8 }).map((_, idx) => (
+        <Card key={idx} className="bg-card/50 border-border animate-pulse">
           <CardContent className="p-6">
             <div className="flex items-start gap-4">
-              <Skeleton className="h-14 w-14 rounded-full shrink-0" />
+              <Skeleton className="h-12 w-12 rounded-full shrink-0" />
               <div className="space-y-2 flex-1">
-                <Skeleton className="h-5 w-32" />
-                <Skeleton className="h-4 w-48" />
-                <div className="flex gap-2">
-                  <Skeleton className="h-5 w-20" />
-                  <Skeleton className="h-5 w-24" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-32" />
+                <div className="flex gap-2 mt-2">
+                  <Skeleton className="h-5 w-16 rounded-full" />
                 </div>
-                <Skeleton className="h-3 w-40" />
               </div>
             </div>
           </CardContent>
@@ -46,18 +43,16 @@ function MembersSkeleton() {
 
 export default function TeamManagement() {
   const { toast } = useToast();
+  const [showOrgSettings, setShowOrgSettings] = useState(false);
 
   const {
     organization,
     members,
-    invitations,
     isOwner,
     currentUserId,
     updateMemberRole,
     updateMemberUserType,
     removeMember,
-    sendInvitation,
-    revokeInvitation,
     isLoading,
     isProcessing,
     filters,
@@ -66,8 +61,6 @@ export default function TeamManagement() {
     setUserTypeFilter,
     stats,
   } = useTeamManagement();
-
-  // Query client kept for future actions; renome handled by OrganizationNameEditor
 
   const handleRoleChange = (membershipId: string, role: "owner" | "admin" | "manager" | "member") => {
     void updateMemberRole({ membershipId, role });
@@ -84,98 +77,74 @@ export default function TeamManagement() {
     void removeMember(membershipId);
   };
 
-  const handleRevokeInvitation = (invitationId: string) => {
-    void revokeInvitation(invitationId);
-  };
-
-  // Área de convite por link (sem popup)
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const [generating, setGenerating] = useState(false);
-
-  async function handleGenerateInvite() {
-    try {
-      setGenerating(true);
-      setInviteLink(null);
-      // Para convites genéricos (sem email), basta não incluir o email
-      // A Edge Function detecta isso e cria um link genérico
-      const res = await sendInvitation({
-        email: "", // Email vazio = convite genérico
-        role: "member",
-        user_type: "sales",
-      });
-      const link = (res as any)?.invite_link as string | undefined;
-      if (link) setInviteLink(link);
-      toast({ title: "Convite criado", description: "Link gerado para copiar." });
-    } catch (e) {
-      toast({ title: "Erro ao gerar convite", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
-    } finally {
-      setGenerating(false);
-    }
-  }
+  const [createMemberModalOpen, setCreateMemberModalOpen] = useState(false);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500">
 
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-md">
-            <Users className="w-7 h-7 text-white" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Gestão de Equipe</h1>
-            <div className="mt-1 flex flex-col gap-2">
-              <p className="text-muted-foreground">
-                {organization
-                  ? `Gerencie membros, convites e permissões de ${organization.name}`
-                  : "Carregando organização..."}
-              </p>
-              {organization && (
-                <OrganizationNameEditor canEdit={isOwner} />
-              )}
+      {/* Header Section */}
+      <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between border-b border-border/50 pb-8">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Users className="w-5 h-5 text-primary" />
             </div>
+            <span className="text-sm font-medium text-primary uppercase tracking-wider">Workspace</span>
           </div>
+          <h1 className="text-4xl font-bold tracking-tight text-foreground flex items-center gap-3">
+            Gestão de Equipe
+            <span className="text-sm font-normal py-1 px-2.5 bg-muted rounded-full text-muted-foreground">
+              {stats.totalMembers} {stats.totalMembers === 1 ? 'membro' : 'membros'}
+            </span>
+          </h1>
+          <p className="text-muted-foreground text-lg max-w-2xl">
+            {organization
+              ? `Gerencie os acessos e permissões para ${organization.name}`
+              : "Visualize e gerencie quem faz parte do seu time."}
+          </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-3">
+          {isOwner && (
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => setShowOrgSettings(!showOrgSettings)}
+              className={`gap-2 transition-all ${showOrgSettings ? 'bg-primary/10 border-primary text-primary' : ''}`}
+            >
+              <Settings2 className="h-4 w-4" />
+              Configurar Empresa
+            </Button>
+          )}
           <Button
-            onClick={handleGenerateInvite}
-            disabled={!isOwner || generating}
-            className="bg-primary hover:bg-primary/90 gap-2"
+            size="lg"
+            onClick={() => setCreateMemberModalOpen(true)}
+            disabled={!isOwner}
+            className="bg-primary hover:bg-primary/90 text-white gap-2 shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
-            <Plus className="h-4 w-4" />
-            {generating ? "Gerando..." : "Gerar link de convite"}
+            <UserPlus className="h-5 w-5" />
+            Novo Membro
           </Button>
         </div>
       </div>
 
-      {isOwner && (
-        <Card className="bg-card border-border">
-          <CardContent className="p-4 space-y-2">
-            <p className="text-sm text-muted-foreground">Use o link abaixo para convidar qualquer pessoa. Ao acessar, poderá criar conta ou entrar e será vinculada à organização.</p>
-            <div className="flex gap-2">
-              <Input readOnly value={inviteLink ?? "Clique em 'Gerar link de convite'"} className="text-xs" />
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={!inviteLink}
-                onClick={async () => {
-                  if (!inviteLink) return;
-                  try {
-                    await navigator.clipboard.writeText(inviteLink);
-                    toast({ title: "Link copiado" });
-                  } catch (error) {
-                    console.error("Falha ao copiar convite", error);
-                    toast({
-                      title: "Não foi possível copiar",
-                      description: "Copie manualmente o link no campo ao lado.",
-                      variant: "destructive",
-                    });
-                  }
-                }}
-              >
-                Copiar
-              </Button>
+      {/* Organization Settings Panel (Collapsible) */}
+      {showOrgSettings && isOwner && (
+        <Card className="glass border-primary/20 overflow-hidden animate-in slide-in-from-top-4 duration-300">
+          <CardContent className="p-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="space-y-1">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  Preferências da Organização
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Estas configurações afetam como sua empresa é exibida no sistema.
+                </p>
+              </div>
+              <OrganizationNameEditor
+                canEdit={isOwner}
+                className="w-full md:w-auto"
+              />
             </div>
           </CardContent>
         </Card>
@@ -183,198 +152,120 @@ export default function TeamManagement() {
 
       {/* Permission Warning */}
       {!isOwner && (
-        <Alert className="bg-accent/20 border-border">
-          <AlertDescription className="text-muted-foreground">
-            Você não tem permissão para gerenciar membros. Apenas proprietários (owners) podem convidar,
-            editar ou remover membros da equipe.
+        <Alert className="bg-amber-500/10 border-amber-500/20 text-amber-500 py-3">
+          <ShieldAlert className="h-4 w-4 text-amber-500" />
+          <AlertDescription className="text-sm font-medium">
+            Visualização restrita. Apenas proprietários podem gerenciar perfis e acessos.
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="bg-gradient-to-br from-card to-accent/20 border-border">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Users className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total de Membros</p>
-                <p className="text-2xl font-bold text-foreground">{stats.totalMembers}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Search and Filters Bar */}
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="relative flex-1 group">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+          <Input
+            placeholder="Buscar por nome ou email..."
+            value={filters.search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 h-12 bg-card/30 border-border/50 focus:border-primary/50 focus:ring-primary/20"
+          />
+        </div>
 
-        <Card className="bg-gradient-to-br from-card to-accent/20 border-border">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-warning/10 rounded-lg flex items-center justify-center">
-                <Mail className="h-5 w-5 text-warning" />
+        <div className="flex gap-3">
+          <Select
+            value={filters.roleFilter}
+            onValueChange={(value) => setRoleFilter(value as MemberFilter)}
+          >
+            <SelectTrigger className="w-[180px] h-12 bg-card/30 border-border/50">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <SelectValue placeholder="Função" />
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Convites Pendentes</p>
-                <p className="text-2xl font-bold text-foreground">{stats.pendingInvitations}</p>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as funções</SelectItem>
+              <SelectItem value="owner">Owner</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value="member">Membro</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filters.userTypeFilter}
+            onValueChange={(value) => setUserTypeFilter(value as UserTypeFilter)}
+          >
+            <SelectTrigger className="w-[200px] h-12 bg-card/30 border-border/50">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <SelectValue placeholder="Acesso" />
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os acessos</SelectItem>
+              <SelectItem value="owner">Acesso Total</SelectItem>
+              <SelectItem value="traffic_manager">Gestor de Tráfego</SelectItem>
+              <SelectItem value="sales">CRM / Vendas</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      {/* Search and Filters */}
-      <Card className="bg-card border-border">
-        <CardContent className="p-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            {/* Search */}
-            <div className="relative md:col-span-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nome ou email..."
-                value={filters.search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 bg-background border-border"
-              />
+      {/* Members List Section */}
+      <div className="min-h-[400px]">
+        {isLoading ? (
+          <MembersSkeleton />
+        ) : members.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center glass rounded-2xl border-dashed border-2">
+            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+              <Users className="h-8 w-8 text-muted-foreground/50" />
             </div>
-
-            {/* Role Filter */}
-            <div className="relative">
-              <Select
-                value={filters.roleFilter}
-                onValueChange={(value) => setRoleFilter(value as MemberFilter)}
+            <h3 className="text-xl font-semibold mb-2">
+              {filters.search || filters.roleFilter !== "all" || filters.userTypeFilter !== "all"
+                ? "Nenhum resultado encontrado"
+                : "Seu time está vazio"}
+            </h3>
+            <p className="text-muted-foreground max-w-xs mx-auto mb-8">
+              {filters.search || filters.roleFilter !== "all" || filters.userTypeFilter !== "all"
+                ? "Tente ajustar seus filtros ou termos de busca para encontrar o que procura."
+                : "Convide sua equipe para começar a colaborar agora mesmo."}
+            </p>
+            {isOwner && !filters.search && (
+              <Button
+                onClick={() => setCreateMemberModalOpen(true)}
+                className="bg-primary hover:bg-primary/90"
               >
-                <SelectTrigger className="bg-background border-border">
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4 text-muted-foreground" />
-                    <SelectValue placeholder="Filtrar por função" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  <SelectItem value="all">Todas as funções</SelectItem>
-                  <SelectItem value="owner">Owner</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="member">Membro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* User Type Filter */}
-            <div className="relative">
-              <Select
-                value={filters.userTypeFilter}
-                onValueChange={(value) => setUserTypeFilter(value as UserTypeFilter)}
-              >
-                <SelectTrigger className="bg-background border-border">
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4 text-muted-foreground" />
-                    <SelectValue placeholder="Filtrar por tipo" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  <SelectItem value="all">Todos os tipos</SelectItem>
-                  <SelectItem value="owner">Owner (Acesso total)</SelectItem>
-                  <SelectItem value="traffic_manager">Gestor de Tráfego</SelectItem>
-                  <SelectItem value="sales">CRM / Vendas</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                Adicionar Membro
+              </Button>
+            )}
           </div>
-        </CardContent>
-      </Card>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {members.map((member) => (
+              <UnifiedMemberCard
+                key={member.membershipId}
+                member={member}
+                isCurrentUser={member.profile.id === currentUserId}
+                canManage={isOwner}
+                onRoleChange={(role) => handleRoleChange(member.membershipId, role)}
+                onUserTypeChange={(userType) => handleUserTypeChange(member.profile.id, userType)}
+                onRemove={() => handleRemoveMember(member.membershipId)}
+                isUpdating={isProcessing}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="members" className="space-y-6">
-        <TabsList className="bg-muted">
-          <TabsTrigger value="members" className="gap-2">
-            <Users className="h-4 w-4" />
-            Membros ({stats.totalMembers})
-          </TabsTrigger>
-          <TabsTrigger value="invitations" className="gap-2">
-            <Mail className="h-4 w-4" />
-            Convites Pendentes ({stats.pendingInvitations})
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Members Tab */}
-        <TabsContent value="members" className="space-y-4">
-          {isLoading ? (
-            <MembersSkeleton />
-          ) : members.length === 0 ? (
-            <Card className="bg-card border-border">
-              <CardContent className="p-12 text-center">
-                <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-foreground mb-2">
-                  {filters.search || filters.roleFilter !== "all" || filters.userTypeFilter !== "all"
-                    ? "Nenhum membro encontrado"
-                    : "Nenhum membro cadastrado"}
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  {filters.search || filters.roleFilter !== "all" || filters.userTypeFilter !== "all"
-                    ? "Tente ajustar os filtros de busca"
-                    : "Convide sua equipe para colaborar nas metas, leads e métricas da organização."}
-                </p>
-                {isOwner && !filters.search && filters.roleFilter === "all" && filters.userTypeFilter === "all" && (
-                  <Button onClick={handleGenerateInvite} className="bg-primary hover:bg-primary/90 gap-2">
-                    <Plus className="h-4 w-4" />
-                    Gerar link de convite
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {members.map((member) => (
-                <UnifiedMemberCard
-                  key={member.membershipId}
-                  member={member}
-                  isCurrentUser={member.profile.id === currentUserId}
-                  canManage={isOwner}
-                  onRoleChange={(role) => handleRoleChange(member.membershipId, role)}
-                  onUserTypeChange={(userType) => handleUserTypeChange(member.profile.id, userType)}
-                  onRemove={() => handleRemoveMember(member.membershipId)}
-                  isUpdating={isProcessing}
-                />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* Invitations Tab */}
-        <TabsContent value="invitations" className="space-y-4">
-          {isLoading ? (
-            <MembersSkeleton />
-          ) : invitations.length === 0 ? (
-            <Card className="bg-card border-border">
-              <CardContent className="p-12 text-center">
-                <Mail className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-foreground mb-2">
-                  Nenhum convite pendente
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  Todos os convites foram aceitos ou expirados.
-                </p>
-                {isOwner && (
-                  <Button onClick={handleGenerateInvite} className="bg-primary hover:bg-primary/90 gap-2">
-                    <Plus className="h-4 w-4" />
-                    Gerar link de convite
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {invitations.map((invitation) => (
-                <InvitationCard
-                  key={invitation.id}
-                  invitation={invitation}
-                  onRevoke={() => handleRevokeInvitation(invitation.id)}
-                  isProcessing={isProcessing}
-                />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+      <CreateMemberModal
+        open={createMemberModalOpen}
+        onOpenChange={setCreateMemberModalOpen}
+        onSuccess={() => {
+          toast({ title: "Sucesso", description: "Membro criado com sucesso!" });
+          // Ideally use a refetch from useTeamManagement instead of reload
+          window.location.reload();
+        }}
+      />
     </div>
   );
 }

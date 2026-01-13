@@ -37,7 +37,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useInteractions } from "@/hooks/useInteractions";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useLabels, useAddLabelToLead, useRemoveLabelFromLead } from "@/hooks/useLabels";
-import { useAdCampaigns } from "@/hooks/useMetaMetrics";
 import { useToast } from "@/hooks/use-toast";
 import { useAssignableUsers } from "@/hooks/useAssignableUsers";
 import { USER_TYPE_LABELS } from "@/hooks/useUserPermissions";
@@ -90,7 +89,6 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
   const { data: labels } = useLabels();
   const addLabelToLead = useAddLabelToLead();
   const removeLabelFromLead = useRemoveLabelFromLead();
-  const { data: campaigns } = useAdCampaigns();
   const { data: assignableUsers } = useAssignableUsers();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -124,8 +122,7 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
     contractMonths: String(lead.contract_months || 1),
     assigneeId: lead.assignee_id || "",
     status: lead.status,
-    source: lead.source as "manual" | "meta_ads",
-    campaign_id: lead.campaign_id || undefined,
+    source: lead.source as "manual",
     // New fields
     cnpj: lead.cnpj || "",
     legal_name: lead.legal_name || "",
@@ -202,7 +199,6 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
           assignee_name: selectedAssigneeName,
           source: formData.source,
           // Nunca envie string vazia para UUIDs; use null quando não selecionado
-          campaign_id: formData.source === "meta_ads" ? (formData.campaign_id ?? null) : null,
           // New fields updates
           cnpj: formData.cnpj || null,
           legal_name: formData.legal_name || null,
@@ -293,9 +289,21 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
       });
       onOpenChange(false);
     } catch (error) {
+      console.error('[handleDelete] Erro ao excluir lead:', error);
+      console.error('[handleDelete] Lead ID:', lead.id);
+      console.error('[handleDelete] Tipo de erro:', typeof error);
+      console.error('[handleDelete] Detalhes completos:', JSON.stringify(error, null, 2));
+
+      const anyErr = error as any;
+      const description =
+        anyErr?.message ||
+        anyErr?.error?.message ||
+        anyErr?.data?.message ||
+        (anyErr?.code ? `Código: ${anyErr.code}` : 'Não foi possível remover o lead.');
+
       toast({
         title: "Erro ao excluir lead",
-        description: "Não foi possível remover o lead.",
+        description,
         variant: "destructive",
       });
     }
@@ -590,26 +598,7 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
                     </div>
                   </div>
 
-                  {/* Origem / Campanha / Criativo */}
-                  <div className="rounded border border-border/60 p-3 space-y-2">
-                    <div className="text-xs uppercase text-muted-foreground tracking-wide">Origem e Campanha</div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                      <div>
-                        <div className="text-xs text-muted-foreground">Origem</div>
-                        <div className="font-medium">{lead.source || '—'}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Campanha</div>
-                        <div className="font-medium" title={lead.ad_campaigns?.name || undefined}>
-                          {lead.ad_campaigns?.name || '—'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Criativo</div>
-                        <div className="font-medium" title={lead.ad_id || undefined}>{lead.ad_id || '—'}</div>
-                      </div>
-                    </div>
-                  </div>
+
 
                   {/* Datas movidas para Comentários / Follow-up */}
 
@@ -756,55 +745,21 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
                     <Label className="text-foreground">Origem do Lead</Label>
                     <Select
                       value={formData.source}
-                      onValueChange={(value: "manual" | "meta_ads") => setFormData({
+                      onValueChange={(value: "manual") => setFormData({
                         ...formData,
                         source: value,
-                        campaign_id: value === "manual" ? undefined : formData.campaign_id,
                       })}
-                      disabled={isSubmitting || lead.source === "meta_ads"}
+                      disabled={isSubmitting}
                     >
                       <SelectTrigger className="bg-input border-border">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="manual">Manual</SelectItem>
-                        <SelectItem value="meta_ads">
-                          <div className="flex items-center gap-2">
-                            <Facebook className="w-4 h-4" />
-                            Meta Ads
-                          </div>
-                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {formData.source === "meta_ads" && (
-                    <div className="space-y-2">
-                      <Label className="text-foreground">Campanha Meta Ads</Label>
-                      <Select
-                        value={formData.campaign_id}
-                        onValueChange={(value) => setFormData({ ...formData, campaign_id: value })}
-                        disabled={isSubmitting}
-                      >
-                        <SelectTrigger className="bg-input border-border">
-                          <SelectValue placeholder="Selecione a campanha" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {campaigns && campaigns.length > 0 ? (
-                            campaigns.map((campaign) => (
-                              <SelectItem key={campaign.id} value={campaign.id}>
-                                {campaign.name}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            <SelectItem value="none" disabled>
-                              Nenhuma campanha disponível
-                            </SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
 
                 </form>
               </TabsContent>
@@ -1052,11 +1007,11 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
               )}
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </DialogContent >
+      </Dialog >
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      < Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm} >
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-foreground">Confirmar Exclusão</DialogTitle>
@@ -1074,7 +1029,7 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog >
     </>
   );
 }

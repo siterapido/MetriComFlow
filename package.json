@@ -1,7 +1,7 @@
 {
   "name": "insightfy",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,6 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "verify:meta": "node scripts/verify-meta-config.cjs",
     "sync:envs": "bash scripts/sync-envs.sh --prod",
     "test": "vitest run",
     "test:watch": "vitest",

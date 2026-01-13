@@ -52,22 +52,7 @@ export default function Users() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-md">
-            <UsersIcon className="w-7 h-7 text-white" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
-              Gestão de Usuários
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Gerenciar usuários e permissões do sistema
-            </p>
-          </div>
-        </div>
-
+      <div className="flex justify-end">
         {canManageUsers && (
           <Button
             onClick={handleCreateUser}

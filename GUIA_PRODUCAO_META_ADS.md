@@ -15,7 +15,7 @@ Este guia detalha os passos para configurar completamente a integração Meta Ad
 - **URL de Produção**: https://www.insightfy.com.br
 - **Redirect URI OAuth**: https://www.insightfy.com.br/meta-ads-config
 - **Meta App ID**: 3361128087359379
-- **Supabase URL**: https://fjoaliipjfcnokermkhy.supabase.co
+- **Supabase URL**: https://kyysmixnhdqrxynxjbwk.supabase.co
 
 ---
 
@@ -66,7 +66,7 @@ Execute os seguintes comandos no terminal:
 npx supabase login
 
 # 2. Link com o projeto (se ainda não estiver linkado)
-npx supabase link --project-ref fjoaliipjfcnokermkhy
+npx supabase link --project-ref kyysmixnhdqrxynxjbwk
 
 # 3. Configurar secrets do Meta App
 npx supabase secrets set META_APP_ID="3361128087359379"

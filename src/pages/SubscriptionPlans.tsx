@@ -44,8 +44,8 @@ export default function SubscriptionPlans() {
   // Garantir tipagem segura de "limits" para evitar problemas de NoInfer do react-query
   const limitsSafe: OrganizationPlanLimits | null =
     limits && typeof limits === "object" &&
-    "current_ad_accounts" in (limits as Record<string, unknown>) &&
-    "current_users" in (limits as Record<string, unknown>)
+      "current_ad_accounts" in (limits as Record<string, unknown>) &&
+      "current_users" in (limits as Record<string, unknown>)
       ? (limits as OrganizationPlanLimits)
       : null;
 
@@ -134,40 +134,23 @@ export default function SubscriptionPlans() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-md">
-            <CreditCard className="w-7 h-7 text-white" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
-              Planos e Assinatura
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              {org ? `Gerencie o plano de ${org.name}` : "Escolha o plano ideal para sua equipe"}
-            </p>
-          </div>
-        </div>
-
-        {/* Current Plan Badge */}
-        {currentPlan && (
-          <div className="flex items-center gap-2">
-            <Badge
-              className="bg-primary text-primary-foreground px-4 py-2 text-sm"
-              data-testid="current-plan-badge"
-            >
-              Plano Atual: {currentPlan.name}
+      {/* Current Plan Badges */}
+      {currentPlan && (
+        <div className="flex items-center gap-2 justify-end">
+          <Badge
+            className="bg-primary text-primary-foreground px-4 py-2 text-sm"
+            data-testid="current-plan-badge"
+          >
+            Plano Atual: {currentPlan.name}
+          </Badge>
+          {isOnTrial && (
+            <Badge className="bg-warning text-warning-foreground px-4 py-2 text-sm">
+              <Clock className="w-4 h-4 mr-1" />
+              Trial: {trialDaysRemaining} {trialDaysRemaining === 1 ? "dia" : "dias"} restantes
             </Badge>
-            {isOnTrial && (
-              <Badge className="bg-warning text-warning-foreground px-4 py-2 text-sm">
-                <Clock className="w-4 h-4 mr-1" />
-                Trial: {trialDaysRemaining} {trialDaysRemaining === 1 ? "dia" : "dias"} restantes
-              </Badge>
-            )}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Payment Status Alerts */}
       {!currentSubscription && (

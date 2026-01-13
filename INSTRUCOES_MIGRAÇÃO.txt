@@ -1,0 +1,112 @@
+MIGRAÇÃO ESSENCIAL: Adicionar Campos de Empresa e Endereço à Tabela Leads
+================================================================================
+
+PROBLEMA IDENTIFICADO:
+O sistema está tentando importar leads com informações de endereço (CEP, logradouro, 
+número, bairro, cidade, estado), mas esses campos não existem na tabela 'leads'.
+
+Erro atual: "Could not find the 'address' column of 'leads' in the schema cache"
+Resultado: 1217 falhas na importação
+
+SOLUÇÃO:
+Execute a migração SQL abaixo no Supabase Dashboard para adicionar os campos necessários.
+
+================================================================================
+COMO APLICAR A MIGRAÇÃO:
+================================================================================
+
+1. Acesse: https://supabase.com/dashboard/project/pzmlrdlkcmgejsxakxgb/sql
+2. Clique em "New Query"
+3. Cole o SQL abaixo
+4. Clique em "Run"
+
+================================================================================
+SQL DA MIGRAÇÃO:
+================================================================================
+
+-- Migration: Add company and address fields to leads table
+-- Date: 2026-01-13
+
+BEGIN;
+
+-- Add company information fields
+ALTER TABLE public.leads
+ADD COLUMN IF NOT EXISTS trade_name TEXT,
+ADD COLUMN IF NOT EXISTS legal_name TEXT,
+ADD COLUMN IF NOT EXISTS cnpj TEXT,
+ADD COLUMN IF NOT EXISTS secondary_phone TEXT,
+ADD COLUMN IF NOT EXISTS size TEXT,
+ADD COLUMN IF NOT EXISTS share_capital DECIMAL(15, 2),
+ADD COLUMN IF NOT EXISTS opening_date DATE,
+ADD COLUMN IF NOT EXISTS main_activity TEXT,
+ADD COLUMN IF NOT EXISTS product_interest TEXT;
+
+-- Add address fields
+ALTER TABLE public.leads
+ADD COLUMN IF NOT EXISTS zip_code TEXT,
+ADD COLUMN IF NOT EXISTS street TEXT,
+ADD COLUMN IF NOT EXISTS address_number TEXT,
+ADD COLUMN IF NOT EXISTS complement TEXT,
+ADD COLUMN IF NOT EXISTS neighborhood TEXT,
+ADD COLUMN IF NOT EXISTS city TEXT,
+ADD COLUMN IF NOT EXISTS state TEXT;
+
+-- Create indexes for commonly queried fields
+CREATE INDEX IF NOT EXISTS idx_leads_cnpj ON public.leads(cnpj) WHERE cnpj IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_leads_city ON public.leads(city) WHERE city IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_leads_state ON public.leads(state) WHERE state IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_leads_zip_code ON public.leads(zip_code) WHERE zip_code IS NOT NULL;
+
+-- Add comments to document the new fields
+COMMENT ON COLUMN public.leads.trade_name IS 'Nome fantasia da empresa';
+COMMENT ON COLUMN public.leads.legal_name IS 'Razão social da empresa';
+COMMENT ON COLUMN public.leads.cnpj IS 'CNPJ da empresa';
+COMMENT ON COLUMN public.leads.secondary_phone IS 'Telefone secundário';
+COMMENT ON COLUMN public.leads.size IS 'Porte da empresa (MEI, ME, EPP, etc.)';
+COMMENT ON COLUMN public.leads.share_capital IS 'Capital social da empresa';
+COMMENT ON COLUMN public.leads.opening_date IS 'Data de abertura da empresa';
+COMMENT ON COLUMN public.leads.main_activity IS 'Atividade principal (CNAE)';
+COMMENT ON COLUMN public.leads.product_interest IS 'Produto ou serviço de interesse';
+COMMENT ON COLUMN public.leads.zip_code IS 'CEP';
+COMMENT ON COLUMN public.leads.street IS 'Logradouro (rua, avenida, etc.)';
+COMMENT ON COLUMN public.leads.address_number IS 'Número do endereço';
+COMMENT ON COLUMN public.leads.complement IS 'Complemento do endereço';
+COMMENT ON COLUMN public.leads.neighborhood IS 'Bairro';
+COMMENT ON COLUMN public.leads.city IS 'Cidade';
+COMMENT ON COLUMN public.leads.state IS 'Estado (UF)';
+
+COMMIT;
+
+================================================================================
+APÓS APLICAR A MIGRAÇÃO:
+================================================================================
+
+1. Recarregue a página do InsightFy
+2. Tente importar os leads novamente
+3. Os 1217 registros devem ser importados com sucesso!
+
+================================================================================
+CAMPOS ADICIONADOS:
+================================================================================
+
+Informações da Empresa:
+  ✓ trade_name         - Nome Fantasia
+  ✓ legal_name         - Razão Social
+  ✓ cnpj               - CNPJ
+  ✓ secondary_phone    - Telefone Secundário
+  ✓ size               - Porte da Empresa
+  ✓ share_capital      - Capital Social
+  ✓ opening_date       - Data de Abertura
+  ✓ main_activity      - Atividade Principal
+  ✓ product_interest   - Produto/Serviço de Interesse
+
+Endereço:
+  ✓ zip_code           - CEP
+  ✓ street             - Logradouro
+  ✓ address_number     - Número
+  ✓ complement         - Complemento
+  ✓ neighborhood       - Bairro
+  ✓ city               - Cidade
+  ✓ state              - Estado (UF)
+
+================================================================================
