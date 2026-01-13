@@ -13,18 +13,21 @@ import { Plus, Search, Loader2, LayoutList, Filter, Upload } from "lucide-react"
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
 import { LeadImportModal } from "@/components/leads/LeadImportModal";
 import { LeadCard } from "@/components/leads/LeadCard";
+import { BulkEditDialog } from "@/components/leads/BulkEditDialog";
 import { StageValueCard } from "@/components/leads/StageValueCard";
 import { DateRangeFilter } from "@/components/meta-ads/DateRangeFilter";
 import { useToast } from "@/hooks/use-toast";
-import { useLeads, useDeleteLead, useUpdateLead, type Lead } from "@/hooks/useLeads";
+import { useLeads, useDeleteLead, useUpdateLead, type Lead, useBulkDeleteLeads } from "@/hooks/useLeads";
 import { useAdAccounts, useAdCampaigns, getLastNDaysDateRange } from "@/hooks/useMetaMetrics";
 import type { FilterValues } from "@/components/meta-ads/MetaAdsFiltersV2";
 import { cn } from "@/lib/utils";
+import { X, Edit, Trash2 } from "lucide-react";
 
 // Define board stages
 const BOARD_STAGES = [
   { id: "novo_lead", title: "Novo Lead", color: "from-blue-500/20 to-cyan-500/20" },
   { id: "qualificacao", title: "Qualificação", color: "from-purple-500/20 to-pink-500/20" },
+  { id: "reuniao", title: "Reunião", color: "from-indigo-500/20 to-violet-500/20" },
   { id: "proposta", title: "Proposta", color: "from-yellow-500/20 to-orange-500/20" },
   { id: "negociacao", title: "Negociação", color: "from-green-500/20 to-emerald-500/20" },
   { id: "fechado_ganho", title: "Fechado - Ganho", color: "from-success/20 to-success/30" },
@@ -37,6 +40,8 @@ export default function LeadsLinear() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const { toast } = useToast();
 
   // Filters state (sem filtro de data por padrão - mostra todos os leads)
@@ -47,15 +52,17 @@ export default function LeadsLinear() {
   // Fetch data
   const { data: leads, isLoading, error } = useLeads();
   const deleteLead = useDeleteLead();
+  const bulkDelete = useBulkDeleteLeads();
   const updateLead = useUpdateLead();
   const { data: accounts } = useAdAccounts();
   const { data: campaigns } = useAdCampaigns(filters.accountId);
 
   // Group leads by stage and calculate values
-  const stageMetrics = useMemo(() => {
-    if (!leads) return {};
+  // Group leads by stage and calculate values
+  const filteredLeads = useMemo(() => {
+    if (!leads) return [];
 
-    const filteredLeads = leads.filter((lead) => {
+    return leads.filter((lead) => {
       // Filtro de busca
       const matchesSearch = searchTerm
         ? lead.title.toLowerCase().includes(searchTerm.toLowerCase())
@@ -85,7 +92,9 @@ export default function LeadsLinear() {
 
       return matchesSearch && matchesDate && matchesAccount && matchesCampaign;
     });
+  }, [leads, searchTerm, filters]);
 
+  const stageMetrics = useMemo(() => {
     return BOARD_STAGES.reduce((acc, stage) => {
       const stageLeads = filteredLeads.filter((lead) => lead.status === stage.id);
       const totalValue = stageLeads.reduce((sum, lead) => sum + (lead.value || 0), 0);
@@ -100,7 +109,15 @@ export default function LeadsLinear() {
 
       return acc;
     }, {} as Record<StageId, { leads: Lead[]; totalValue: number; averageValue: number; count: number }>);
-  }, [leads, searchTerm, filters]);
+  }, [filteredLeads]);
+
+  const handleSelectAll = () => {
+    if (selectedLeads.size === filteredLeads.length) {
+      handleClearSelection();
+    } else {
+      setSelectedLeads(new Set(filteredLeads.map(l => l.id)));
+    }
+  };
 
   const handleNewLead = () => {
     setIsNewLeadModalOpen(false);
@@ -123,6 +140,35 @@ export default function LeadsLinear() {
         description: "Não foi possível remover o lead.",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedLeads(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedLeads(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedLeads.size === 0) return;
+
+    if (!confirm(`Tem certeza que deseja excluir ${selectedLeads.size} leads?`)) return;
+
+    try {
+      await bulkDelete.mutateAsync(Array.from(selectedLeads));
+      handleClearSelection();
+    } catch (error) {
+      // Error handled in hook
     }
   };
 
@@ -204,7 +250,9 @@ export default function LeadsLinear() {
           </div>
 
           {/* Filters inline - Dashboard style */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
+            {/* Moved Select All to search row */}
+
             <DateRangeFilter
               value={filters.dateRange}
               onChange={(dateRange) => setFilters({ ...filters, dateRange })}
@@ -257,14 +305,38 @@ export default function LeadsLinear() {
 
         {/* Search and New Lead Button */}
         <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder="Buscar leads..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-input border-border"
-            />
+          <div className="relative flex-1 max-w-md flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <Input
+                placeholder="Buscar leads..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 bg-input border-border"
+              />
+            </div>
+            {filteredLeads.length > 0 && (
+              <Button
+                variant="outline"
+                className={cn(
+                  "gap-2 whitespace-nowrap",
+                  selectedLeads.size > 0 && selectedLeads.size === filteredLeads.length ? "bg-primary/10 border-primary text-primary" : ""
+                )}
+                onClick={handleSelectAll}
+              >
+                <div className={cn(
+                  "w-4 h-4 rounded border flex items-center justify-center transition-colors",
+                  selectedLeads.size > 0 && selectedLeads.size === filteredLeads.length ? "bg-primary border-primary" : "border-muted-foreground"
+                )}>
+                  {selectedLeads.size > 0 && selectedLeads.size === filteredLeads.length && (
+                    <span className="text-primary-foreground">✓</span>
+                  )}
+                </div>
+                <span>
+                  {selectedLeads.size > 0 && selectedLeads.size === filteredLeads.length ? "Desmarcar todos" : "Selecionar todos"}
+                </span>
+              </Button>
+            )}
           </div>
 
           <Button
@@ -359,18 +431,21 @@ export default function LeadsLinear() {
                                         {...provided.dragHandleProps}
                                         className={cn(
                                           "transition-all",
+                                          "mb-2", // Add explicit margin bottom since we use space-y-2 on container
                                           snapshot.isDragging && "ring-2 ring-primary shadow-2xl scale-105 rotate-2"
                                         )}
                                       >
                                         <LeadCard
                                           lead={lead}
                                           onDelete={handleDeleteLead}
+                                          isSelected={selectedLeads.has(lead.id)}
+                                          onToggleSelect={(id) => handleToggleSelect(id)}
+                                          selectionMode={selectedLeads.size > 0}
                                         />
                                       </div>
                                     )}
                                   </Draggable>
                                 ))}
-                                {provided.placeholder}
                                 {/* Add Lead Button at bottom */}
                                 <button
                                   onClick={() => setIsNewLeadModalOpen(true)}
@@ -381,6 +456,7 @@ export default function LeadsLinear() {
                                 </button>
                               </>
                             )}
+                            {provided.placeholder}
                           </div>
                         )}
                       </Droppable>
@@ -404,6 +480,53 @@ export default function LeadsLinear() {
       <LeadImportModal
         open={isImportModalOpen}
         onOpenChange={setIsImportModalOpen}
+      />
+
+      {/* Bulk Actions Floating Bar */}
+      {selectedLeads.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-foreground text-background px-6 py-3 rounded-full shadow-lg flex items-center gap-4 animate-in slide-in-from-bottom-5">
+          <div className="font-semibold text-sm">
+            {selectedLeads.size} selecionado{selectedLeads.size > 1 ? 's' : ''}
+          </div>
+          <div className="h-4 w-px bg-background/20" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-background hover:bg-background/20 hover:text-background h-8 px-3"
+            onClick={() => setIsBulkEditOpen(true)}
+          >
+            <Edit className="w-4 h-4 mr-2" />
+            Editar
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-red-400 hover:bg-background/20 hover:text-red-300 h-8 px-3"
+            onClick={handleBulkDelete}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Excluir
+          </Button>
+          <div className="h-4 w-px bg-background/20" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-background hover:bg-background/20 hover:text-background h-8 w-8 rounded-full ml-auto"
+            onClick={handleClearSelection}
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
+
+      {/* Bulk Edit Dialog */}
+      <BulkEditDialog
+        open={isBulkEditOpen}
+        onOpenChange={setIsBulkEditOpen}
+        selectedIds={Array.from(selectedLeads)}
+        onSuccess={() => {
+          handleClearSelection();
+        }}
       />
     </div >
   );

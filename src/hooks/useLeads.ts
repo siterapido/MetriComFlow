@@ -29,7 +29,7 @@ export type LeadActivity = Tables<'lead_activity'>
 export type Comment = Tables<'comments'>
 
 // Novos tipos para CRM
-export type LeadStatus = 'novo' | 'contato_inicial' | 'qualificado' | 'proposta' | 'negociacao' | 'fechado_ganho' | 'fechado_perdido' | 'follow_up' | 'aguardando_resposta'
+export type LeadStatus = 'novo' | 'novo_lead' | 'contato_inicial' | 'qualificado' | 'qualificacao' | 'reuniao' | 'proposta' | 'negociacao' | 'fechado_ganho' | 'fechado_perdido' | 'follow_up' | 'aguardando_resposta'
 export type LeadPriority = 'baixa' | 'media' | 'alta' | 'urgente'
 export type LeadSource = 'meta_ads' | 'google_ads' | 'whatsapp' | 'indicacao' | 'site' | 'telefone' | 'email' | 'evento' | 'manual'
 
@@ -46,6 +46,9 @@ export interface LeadFilters {
     start: string
     end: string
   }
+  search?: string
+  limit?: number
+  hideMetaLeads?: boolean
 }
 
 export function useLeads(filters?: LeadFilters, campaignId?: string) {
@@ -183,6 +186,18 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
 
       if (campaignId) {
         query = query.eq('campaign_id', campaignId)
+      }
+
+      if (filters?.search) {
+        query = query.ilike('title', `%${filters.search}%`)
+      }
+
+      if (filters?.limit) {
+        query = query.limit(filters.limit)
+      }
+
+      if (filters?.hideMetaLeads) {
+        query = query.neq('source', 'meta_ads').is('campaign_id', null)
       }
 
       const { data, error } = await query
@@ -367,23 +382,39 @@ export const useUpdateLead = () => {
       return data
     },
     onMutate: async ({ id, updates }) => {
+      // Cancelar todas as queries de leads
       await queryClient.cancelQueries({ queryKey: ['leads'] })
 
-      const previousLeads = queryClient.getQueryData(['leads'])
+      // Snapshot do estado anterior (difícil capturar perfeitamente com múltiplas queries, 
+      // mas podemos tentar salvar algo ou apenas confiar na invalidação em caso de erro)
+      // Para simplificar, não vamos salvar "previousLeads" complexos para rollback granular neste cenário
+      // de múltiplas queries, mas a invalidação no onError/onSettled garantirá consistência.
 
-      queryClient.setQueryData(['leads'], (old: Lead[] | undefined) => {
-        if (!old) return old
-        return old.map(lead =>
-          lead.id === id ? { ...lead, ...updates } : lead
-        )
+      queryClient.setQueriesData({ queryKey: ['leads'] }, (old: Lead[] | undefined) => {
+        if (!old || !Array.isArray(old)) return old
+
+        // Verificar se o lead existe nesta lista
+        const exists = old.find(l => l.id === id)
+
+        if (exists) {
+          return old.map(lead =>
+            lead.id === id ? { ...lead, ...updates } : lead
+          )
+        }
+
+        // Se estamos movendo de status, ele pode não estar na lista de destino ainda (se for fetch por status).
+        // Adicionar o lead se a query for da coluna de destino seria ideal, mas complexo de detectar aqui.
+        // Por enquanto, apenas atualizamos se já existir (optimistic update local).
+        // O refetchOnSettled corrigirá a movimentação entre listas.
+        return old
       })
 
-      return { previousLeads }
+      return {} // previousLeads simplificado
     },
     onError: (err, variables, context) => {
-      if (context?.previousLeads) {
-        queryClient.setQueryData(['leads'], context.previousLeads)
-      }
+      // Em caso de erro, invalidamos tudo para garantir consistência
+      queryClient.invalidateQueries({ queryKey: ['leads'] })
+
       console.error('[useUpdateLead] Erro ao atualizar lead:', err)
       const anyErr = err as any
       const message = anyErr?.message || anyErr?.error || (anyErr?.code ? `Código: ${anyErr.code}` : 'Erro ao atualizar lead')
@@ -535,7 +566,7 @@ export function usePipelineStats() {
       data.forEach(lead => {
         // Contar por status
         stats.byStatus[lead.status] = (stats.byStatus[lead.status] || 0) + 1
-        
+
         // Contar por prioridade
         if (lead.priority) {
           stats.byPriority[lead.priority] = (stats.byPriority[lead.priority] || 0) + 1
@@ -569,7 +600,7 @@ export function useLeadsFollowUp() {
     queryFn: async () => {
       if (!org?.id) throw new Error('Organização ativa não definida')
       const today = new Date().toISOString().split('T')[0]
-      
+
       const { data, error } = await supabase
         .from('leads')
         .select('id, title, assignee_name, next_follow_up_date, last_contact_date, priority')
@@ -659,5 +690,88 @@ export function useLeadSourceDetails() {
       return details.sort()
     },
     staleTime: 300000, // 5 minutos
+  })
+}
+
+// Hook para deletar leads em massa
+export function useBulkDeleteLeads() {
+  const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
+
+  return useMutation({
+    mutationFn: async (leadIds: string[]) => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
+
+      // Process in chunks to avoid URL length limits (400 Bad Request)
+      const chunkSize = 50;
+      const chunks = [];
+      for (let i = 0; i < leadIds.length; i += chunkSize) {
+        chunks.push(leadIds.slice(i, i + chunkSize));
+      }
+
+      // Execute queries in parallel
+      await Promise.all(chunks.map(async (chunkIds) => {
+        const { error } = await supabase
+          .from('leads')
+          .delete()
+          .in('id', chunkIds)
+          .eq('organization_id', org.id)
+
+        if (error) throw error;
+      }));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+      queryClient.invalidateQueries({ queryKey: ['pipeline-metrics'] })
+      toast.success('Leads excluídos com sucesso!')
+    },
+    onError: (error) => {
+      console.error('[useBulkDeleteLeads] Erro ao deletar leads:', error)
+      toast.error('Erro ao excluir leads')
+    }
+  })
+}
+
+// Hook para atualizar leads em massa
+export function useBulkUpdateLeads() {
+  const queryClient = useQueryClient()
+  const { data: org } = useActiveOrganization()
+
+  return useMutation({
+    mutationFn: async ({ leadIds, updates }: { leadIds: string[], updates: LeadUpdate }) => {
+      if (!org?.id) throw new Error('Organização ativa não definida')
+
+      // Process in chunks to avoid URL length limits
+      const chunkSize = 50;
+      const chunks = [];
+      for (let i = 0; i < leadIds.length; i += chunkSize) {
+        chunks.push(leadIds.slice(i, i + chunkSize));
+      }
+
+      const results = await Promise.all(chunks.map(async (chunkIds) => {
+        const { data, error } = await supabase
+          .from('leads')
+          .update(updates)
+          .in('id', chunkIds)
+          .eq('organization_id', org.id)
+          .select()
+
+        if (error) throw error
+        return data || []
+      }));
+
+      return results.flat();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+      queryClient.invalidateQueries({ queryKey: ['pipeline-metrics'] })
+      toast.success('Leads atualizados com sucesso!')
+    },
+    onError: (error) => {
+      console.error('[useBulkUpdateLeads] Erro ao atualizar leads:', error)
+      toast.error('Erro ao atualizar leads')
+    }
   })
 }

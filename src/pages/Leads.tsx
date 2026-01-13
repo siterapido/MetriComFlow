@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -12,58 +12,215 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Filter, Calendar, MessageSquare, Paperclip, User, History, Loader2, Facebook, Upload } from "lucide-react";
+import { Plus, Search, Filter, History, Loader2, Facebook, Upload, ArrowDown, RefreshCw } from "lucide-react";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
 import { LeadImportModal } from "@/components/leads/LeadImportModal";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { useLeads, useUpdateLead, type LeadWithLabels } from "@/hooks/useLeads";
+import { useLeads, useUpdateLead, type LeadStatus, type LeadFilters } from "@/hooks/useLeads";
 import { useLeadActivity } from "@/hooks/useLeads";
 import type { Database } from "@/lib/database.types";
 import { useMetaConnectionStatus } from "@/hooks/useMetaConnectionStatus";
 import { useAdCampaigns } from "@/hooks/useMetaMetrics";
-
-const getLabelColor = (label: string) => {
-  const colors: { [key: string]: string } = {
-    "Urgente": "bg-destructive text-destructive-foreground",
-    "Comercial": "bg-primary text-primary-foreground",
-    "Reunião": "bg-secondary text-secondary-foreground",
-    "Desenvolvimento": "bg-accent text-accent-foreground",
-    "Alta Prioridade": "bg-warning text-warning-foreground",
-    "Concluído": "bg-success text-success-foreground",
-    "Faturado": "bg-muted text-muted-foreground",
-    "Proposta": "bg-primary text-primary-foreground",
-    "Negociação": "bg-accent text-accent-foreground",
-    "Contrato": "bg-success text-success-foreground",
-    "Baixa Prioridade": "bg-muted text-muted-foreground"
-  };
-  return colors[label] || "bg-muted text-muted-foreground";
-};
+import { LeadCard } from "@/components/leads/LeadCard";
+import { BulkEditDialog } from "@/components/leads/BulkEditDialog";
+import { useBulkDeleteLeads, type Lead } from "@/hooks/useLeads";
+import { CheckCheckbox } from "@/components/ui/checkbox"; // Assuming this might be needed or just reused standard Checkbox logic if implemented in LeadCard. actually LeadCard has it.
+// We need to implement the floating bar.
+import { X, Edit, Trash2 } from "lucide-react";
 
 const BOARD_CONFIG = [
   { id: "novo_lead", title: "Novo Lead" },
   { id: "qualificacao", title: "Qualificação" },
+  { id: "reuniao", title: "Reunião" },
   { id: "proposta", title: "Proposta" },
   { id: "negociacao", title: "Negociação" },
   { id: "fechado_ganho", title: "Fechado - Ganho" },
   { id: "fechado_perdido", title: "Fechado - Perdido" }
 ];
 
-// Allowed lead statuses for Kanban columns
-type LeadStatus =
-  | 'novo_lead'
-  | 'qualificacao'
-  | 'proposta'
-  | 'negociacao'
-  | 'fechado_ganho'
-  | 'fechado_perdido';
+interface KanbanColumnProps {
+  status: string; // Using string to match BOARD_CONFIG id
+  title: string;
+  baseFilters: LeadFilters;
+  onNewLead: () => void;
+  selectedLeads: Set<string>;
+  onToggleSelect: (id: string, shiftKey?: boolean) => void;
+}
+
+function KanbanColumn({ status, title, baseFilters, onNewLead, selectedLeads, onToggleSelect }: KanbanColumnProps) {
+  const [limit, setLimit] = useState(50);
+
+  // Reset limit when base filters change (except pagination)
+  useEffect(() => {
+    setLimit(50);
+  }, [baseFilters.search, baseFilters.source, baseFilters.campaign_id, baseFilters.hideMetaLeads]);
+
+  const filters = useMemo(() => ({
+    ...baseFilters,
+    status: status as LeadStatus,
+    limit
+  }), [baseFilters, status, limit]);
+
+  const { data: leads, isLoading } = useLeads(filters);
+  const hasMore = leads && leads.length >= limit;
+
+  return (
+    <div className="min-w-[320px] flex flex-col h-full">
+      <Card className="flex flex-col h-full border-border bg-card shadow-sm">
+        <CardHeader className="pb-3 border-b border-border/40 shrink-0">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg font-semibold text-foreground">
+              {title}
+            </CardTitle>
+            <Badge variant="secondary" className="text-xs">
+              {leads?.length || 0}
+            </Badge>
+          </div>
+        </CardHeader>
+
+        <Droppable droppableId={status} type="CARD">
+          {(provided, snapshot) => (
+            <CardContent
+              ref={provided.innerRef}
+              {...provided.droppableProps}
+              className={cn(
+                "p-3 space-y-3 flex-1 overflow-y-auto min-h-[150px]",
+                snapshot.isDraggingOver && "bg-primary/5"
+              )}
+            >
+              {isLoading && limit === 50 ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary/50" />
+                </div>
+              ) : (
+                <>
+                  {leads?.map((lead, index) => (
+                    <Draggable draggableId={lead.id} index={index} key={lead.id}>
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          style={{ ...provided.draggableProps.style }}
+                          className="mb-3"
+                        >
+                          <LeadCard
+                            lead={lead}
+                            className={cn(
+                              snapshot.isDragging && "ring-2 ring-primary rotate-2 shadow-xl opacity-90"
+                            )}
+                            isSelected={selectedLeads.has(lead.id)}
+                            onToggleSelect={(id) => onToggleSelect(id)}
+                            selectionMode={selectedLeads.size > 0}
+                          />
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+
+                  {provided.placeholder}
+
+                  {hasMore && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full mt-2 text-xs text-muted-foreground hover:text-primary"
+                      onClick={() => setLimit(prev => prev + 50)}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <Loader2 className="w-3 h-3 animate-spin mr-2" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 mr-2" />
+                      )}
+                      Carregar mais
+                    </Button>
+                  )}
+
+                  {/* Add New Card Button - Only for first column usually, or strictly new_lead? 
+                      The original design had it in every column. Keeping it. */}
+                  <Button
+                    variant="ghost"
+                    className="w-full h-10 border border-dashed border-border hover:border-primary hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all mt-2"
+                    onClick={onNewLead}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Adicionar
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          )}
+        </Droppable>
+      </Card>
+    </div>
+  );
+}
+
 export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewLeadModalOpen, setIsNewLeadModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [sourceFilter, setSourceFilter] = useState<'all' | 'meta_ads' | 'manual'>('all');
   const [campaignFilter, setCampaignFilter] = useState<string>('all');
+  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const { toast } = useToast();
+  const bulkDelete = useBulkDeleteLeads();
+
+  // Construct base filters to pass to columns AND for global selection
+  const baseFilters = useMemo<LeadFilters>(() => ({
+    search: searchTerm,
+    source: sourceFilter === 'all' ? undefined : sourceFilter,
+    campaign_id: campaignFilter === 'all' ? undefined : campaignFilter,
+    hideMetaLeads
+  }), [searchTerm, sourceFilter, campaignFilter, hideMetaLeads]);
+
+  // Fetch all leads that match current filters for "Select All" functionality
+  // Note: This fetches ALL leads matching filters, ignoring pagination for selection purposes
+  const { data: allMatchingLeads } = useLeads(baseFilters);
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedLeads(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedLeads(new Set());
+  };
+
+  const handleSelectAll = () => {
+    if (!allMatchingLeads) return;
+
+    if (selectedLeads.size === allMatchingLeads.length) {
+      handleClearSelection();
+    } else {
+      setSelectedLeads(new Set(allMatchingLeads.map(l => l.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedLeads.size === 0) return;
+
+    // Optimistic UI or wait for confirmation? Let's confirm via toast or just do it. 
+    // Usually a confirmation dialog is better for delete.
+    if (!confirm(`Tem certeza que deseja excluir ${selectedLeads.size} leads?`)) return;
+
+    try {
+      await bulkDelete.mutateAsync(Array.from(selectedLeads));
+      handleClearSelection();
+    } catch (error) {
+      // Error handling is inside the hook
+    }
+  };
 
   const {
     hasActiveConnection: hasMetaConnection,
@@ -79,8 +236,7 @@ export default function Leads() {
     }
   }, [hideMetaLeads, sourceFilter]);
 
-  // Fetch data
-  const { data: leads, isLoading, error } = useLeads();
+  // Fetch aux data
   const { data: campaigns } = useAdCampaigns(undefined, { enabled: hasMetaConnection });
   type LeadActivity = Database['public']['Tables']['lead_activity']['Row']
   const { data: activitiesData } = useLeadActivity();
@@ -89,39 +245,6 @@ export default function Leads() {
   const recentActivities = useMemo<LeadActivity[]>(() => {
     return (activitiesData ?? []).slice(0, 10)
   }, [activitiesData])
-
-  // Group leads by status
-  const boards = useMemo(() => {
-    if (!leads) return BOARD_CONFIG.map(config => ({ ...config, cards: [] }));
-
-    const filteredLeads = leads.filter(lead => {
-      // Search filter
-      const matchesSearch = searchTerm
-        ? lead.title.toLowerCase().includes(searchTerm.toLowerCase())
-        : true;
-
-      // Source filter
-      const matchesSource = sourceFilter === 'all'
-        ? true
-        : lead.source === sourceFilter;
-
-      // Campaign filter
-      const matchesCampaign = campaignFilter === 'all'
-        ? true
-        : lead.campaign_id === campaignFilter;
-
-      const matchesVisibility = hideMetaLeads
-        ? (lead.source !== 'meta_ads' && !lead.campaign_id)
-        : true;
-
-      return matchesSearch && matchesSource && matchesCampaign && matchesVisibility;
-    });
-
-    return BOARD_CONFIG.map(config => ({
-      ...config,
-      cards: filteredLeads.filter(lead => lead.status === config.id)
-    }));
-  }, [leads, searchTerm, sourceFilter, campaignFilter, hideMetaLeads]);
 
   const handleNewLead = () => {
     setIsNewLeadModalOpen(false);
@@ -138,9 +261,6 @@ export default function Leads() {
     if (source.droppableId === destination.droppableId && source.index === destination.index) {
       return;
     }
-
-    const lead = leads?.find(l => l.id === draggableId);
-    if (!lead) return;
 
     const newStatus = destination.droppableId as LeadStatus;
     const oldStatus = source.droppableId;
@@ -161,7 +281,7 @@ export default function Leads() {
 
         toast({
           title: "Lead movido",
-          description: `"${lead.title}": ${fromBoard?.title} → ${toBoard?.title}`,
+          description: `${fromBoard?.title} → ${toBoard?.title}`,
         });
       }
     } catch (error) {
@@ -173,73 +293,12 @@ export default function Leads() {
     }
   };
 
-  if (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
-    const isAuthError = errorMessage.toLowerCase().includes('autenticado') || errorMessage.toLowerCase().includes('autenticação')
-
-    return (
-      <div className="flex items-center justify-center h-96">
-        <Card className="max-w-lg border-destructive">
-          <CardHeader>
-            <CardTitle className="text-destructive flex items-center gap-2">
-              <span className="text-2xl">⚠️</span>
-              Erro ao carregar leads
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
-              <p className="text-sm text-foreground font-medium">
-                {errorMessage}
-              </p>
-            </div>
-
-            {isAuthError && (
-              <div className="bg-warning/10 border border-warning/20 rounded-lg p-4">
-                <p className="text-sm text-foreground">
-                  <strong>Solução:</strong> Faça logout e login novamente para renovar sua sessão.
-                </p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">
-                <strong>Passos para debug:</strong>
-              </p>
-              <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-1">
-                <li>Abra o console do navegador (F12)</li>
-                <li>Verifique os logs do hook [useLeads]</li>
-                <li>Verifique se você está autenticado</li>
-                <li>Tente fazer logout e login novamente</li>
-              </ol>
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                onClick={() => window.location.reload()}
-                className="flex-1"
-              >
-                Recarregar página
-              </Button>
-              {isAuthError && (
-                <Button
-                  variant="outline"
-                  onClick={() => window.location.href = '/'}
-                  className="flex-1"
-                >
-                  Ir para Login
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // Construct base filters moved up
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in h-[calc(100vh-100px)] flex flex-col">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Leads - Kanban</h1>
           <p className="text-muted-foreground">Gestão de oportunidades e projetos</p>
@@ -259,6 +318,73 @@ export default function Leads() {
             Importar
           </Button>
           <Button
+            variant="outline"
+            className="gap-2"
+            title="Corrigir nomes dos leads (Nome Fantasia > Razão Social)"
+            onClick={async () => {
+              if (!allMatchingLeads) return;
+
+              const updates = [];
+              const isValidName = (name: string | null | undefined) => {
+                return name && name.trim() !== '' && name.trim() !== '-';
+              }
+
+              toast({ title: "Verificando leads...", description: "Analisando consistência dos nomes..." });
+
+              for (const lead of allMatchingLeads) {
+                let newTitle = lead.title;
+
+                const tradeName = (lead as any).trade_name;
+                const legalName = (lead as any).legal_name;
+
+                // Determine the desired name
+                let desiredTitle = null;
+                if (isValidName(tradeName)) {
+                  desiredTitle = tradeName;
+                } else if (isValidName(legalName)) {
+                  desiredTitle = legalName;
+                }
+
+                // If we found a valid name, check if we need to update
+                if (desiredTitle) {
+                  // Update if current title is invalid ("-", empty) OR if it differs from the desired one
+                  if (!isValidName(lead.title) || lead.title !== desiredTitle) {
+                    newTitle = desiredTitle;
+                  }
+                }
+
+                if (newTitle !== lead.title) {
+                  updates.push({ id: lead.id, title: newTitle });
+                }
+              }
+
+              if (updates.length === 0) {
+                toast({ title: "Tudo certo", description: "Todos os leads já estão com os nomes corretos." });
+                return;
+              }
+
+              toast({ title: "Atualizando...", description: `Corrigindo nomes de ${updates.length} leads...` });
+
+              // Atualizar em lotes
+              try {
+                const BATCH_SIZE = 10;
+                for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+                  const chunk = updates.slice(i, i + BATCH_SIZE);
+                  await Promise.all(chunk.map(u =>
+                    updateLead.mutateAsync({ id: u.id, updates: { title: u.title } })
+                  ));
+                }
+                toast({ title: "Sucesso", description: `${updates.length} leads atualizados.` });
+                // Recarregar a página para garantir que tudo atualize visualmente
+                window.location.reload();
+              } catch (err) {
+                toast({ title: "Erro", description: "Falha ao atualizar alguns leads.", variant: "destructive" });
+              }
+            }}
+          >
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+          <Button
             className="gap-2 bg-primary hover:bg-primary/90"
             onClick={() => setIsNewLeadModalOpen(true)}
           >
@@ -269,7 +395,7 @@ export default function Leads() {
       </div>
 
       {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col sm:flex-row gap-4 shrink-0">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
           <Input
@@ -289,17 +415,33 @@ export default function Leads() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas as Origens</SelectItem>
+            <SelectItem value="manual">Manual</SelectItem>
             <SelectItem value="meta_ads" disabled={hideMetaLeads}>
               <div className="flex items-center gap-2">
                 <Facebook className="w-4 h-4" />
                 Meta Ads
               </div>
             </SelectItem>
-            <SelectItem value="manual">Manual</SelectItem>
           </SelectContent>
         </Select>
 
-        {/* Campaign Filter (only show if Meta Ads filter is active or All) */}
+        {/* Global Select All for Kanban */}
+        {allMatchingLeads && allMatchingLeads.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm" // Changed form icon to sm to fit text if needed, maintaining style
+            onClick={handleSelectAll}
+            className={cn(
+              "gap-2 ml-auto sm:ml-0", // Adjust spacing
+              selectedLeads.size > 0 && selectedLeads.size === allMatchingLeads.length ? "bg-primary/10 border-primary text-primary" : ""
+            )}
+            title="Selecionar todos os leads filtrados"
+          >
+            {selectedLeads.size > 0 && selectedLeads.size === allMatchingLeads.length ? "Desmarcar todos" : "Selecionar todos"}
+          </Button>
+        )}
+
+        {/* Campaign Filter */}
         {hasMetaConnection && campaigns && campaigns.length > 0 && (
           <Select
             value={campaignFilter}
@@ -323,7 +465,7 @@ export default function Leads() {
       </div>
 
       {hideMetaLeads && (
-        <Alert>
+        <Alert className="shrink-0">
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span>Leads vinculados a campanhas do Meta Ads estão ocultos até que a integração seja reativada. Eles permanecem salvos para uso futuro.</span>
             <Button variant="outline" size="sm" asChild>
@@ -333,177 +475,71 @@ export default function Leads() {
         </Alert>
       )}
 
-      {/* Loading State */}
-      {isLoading && (
-        <div className="flex items-center justify-center h-96">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      {/* Kanban Board */}
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className="flex-1 overflow-x-auto pb-4">
+          <div className="flex gap-6 h-full min-w-max px-1">
+            {BOARD_CONFIG.map((board) => (
+              <KanbanColumn
+                key={board.id}
+                title={board.title}
+                status={board.id}
+                baseFilters={baseFilters}
+                onNewLead={() => setIsNewLeadModalOpen(true)}
+                selectedLeads={selectedLeads}
+                onToggleSelect={handleToggleSelect}
+              />
+            ))}
+          </div>
+        </div>
+      </DragDropContext>
+
+      {/* Bulk Actions Floating Bar */}
+      {selectedLeads.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-foreground text-background px-6 py-3 rounded-full shadow-lg flex items-center gap-4 animate-in slide-in-from-bottom-5">
+          <div className="font-semibold text-sm">
+            {selectedLeads.size} selecionado{selectedLeads.size > 1 ? 's' : ''}
+          </div>
+          <div className="h-4 w-px bg-background/20" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-background hover:bg-background/20 hover:text-background h-8 px-3"
+            onClick={() => setIsBulkEditOpen(true)}
+          >
+            <Edit className="w-4 h-4 mr-2" />
+            Editar
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-red-400 hover:bg-background/20 hover:text-red-300 h-8 px-3"
+            onClick={handleBulkDelete}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Excluir
+          </Button>
+          <div className="h-4 w-px bg-background/20" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-background hover:bg-background/20 hover:text-background h-8 w-8 rounded-full ml-auto"
+            onClick={handleClearSelection}
+          >
+            <X className="w-4 h-4" />
+          </Button>
         </div>
       )}
 
-      {/* Kanban Board */}
-      {!isLoading && (
-        <DragDropContext onDragEnd={onDragEnd}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-x-auto">
-            {boards.map((board) => (
-              <div key={board.id} className="min-w-[320px]">
-                <Card className="h-full border-border bg-card">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg font-semibold text-foreground">
-                        {board.title}
-                      </CardTitle>
-                      <Badge variant="secondary" className="text-xs">
-                        {board.cards.length}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-
-                  <Droppable droppableId={board.id} type="CARD">
-                    {(provided, snapshot) => (
-                      <CardContent
-                        ref={provided.innerRef}
-                        {...provided.droppableProps}
-                        className={cn(
-                          "space-y-3 rounded-lg min-h-24 transition-colors",
-                          snapshot.isDraggingOver && "bg-primary/5"
-                        )}
-                      >
-                        {board.cards.map((card, index) => (
-                          <Draggable draggableId={card.id} index={index} key={card.id}>
-                            {(provided, snapshot) => (
-                              <Card
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={cn(
-                                  "p-4 bg-muted border-border hover:shadow-lg transition-all duration-200 cursor-grab hover-lift",
-                                  snapshot.isDragging && "ring-2 ring-primary scale-[1.02]"
-                                )}
-                              >
-                                <div className="space-y-3">
-                                  {/* Title */}
-                                  <h3 className="font-medium text-foreground text-sm leading-tight">
-                                    {card.title}
-                                  </h3>
-
-                                  {/* Description */}
-                                  {card.description && (
-                                    <p className="text-xs text-muted-foreground line-clamp-2">
-                                      {card.description}
-                                    </p>
-                                  )}
-
-                                  {/* Meta Ads Information */}
-                                  {card.source === 'meta_ads' && (
-                                    <div className="space-y-1">
-                                      <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 flex items-center gap-1 w-fit">
-                                        <Facebook className="w-3 h-3" />
-                                        Meta Ads
-                                      </Badge>
-                                      {card.external_lead_id && (
-                                        <p className="text-xs text-muted-foreground">
-                                          ID: {card.external_lead_id.substring(0, 20)}...
-                                        </p>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* Labels */}
-                                  {card.lead_labels && card.lead_labels.length > 0 && (
-                                    <div className="flex flex-wrap gap-1">
-                                      {card.lead_labels.map((labelRel, index) => (
-                                        <Badge
-                                          key={index}
-                                          className={`text-xs px-2 py-1 ${getLabelColor(labelRel.labels.name)}`}
-                                        >
-                                          {labelRel.labels.name}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  )}
-
-                                  {/* Value */}
-                                  {card.value > 0 && (
-                                    <div className="text-sm font-semibold text-primary">
-                                      R$ {card.value.toLocaleString("pt-BR")}
-                                    </div>
-                                  )}
-
-                                  {/* Due Date */}
-                                  {card.due_date && (
-                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                      <Calendar className="w-3 h-3" />
-                                      {new Date(card.due_date).toLocaleDateString("pt-BR")}
-                                    </div>
-                                  )}
-
-                                  {/* Progress Bar */}
-                                  {card.checklist_items && card.checklist_items.length > 0 && (
-                                    <div className="space-y-1">
-                                      <div className="flex justify-between text-xs text-muted-foreground">
-                                        <span>Checklist</span>
-                                        <span>
-                                          {card.checklist_items.filter(i => i.completed).length}/
-                                          {card.checklist_items.length}
-                                        </span>
-                                      </div>
-                                      <div className="w-full bg-border rounded-full h-1">
-                                        <div
-                                          className="bg-primary h-1 rounded-full transition-all duration-300"
-                                          style={{
-                                            width: `${(card.checklist_items.filter(i => i.completed).length / card.checklist_items.length) * 100}%`
-                                          }}
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Footer */}
-                                  <div className="flex items-center justify-between pt-2">
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                      <div className="flex items-center gap-1">
-                                        <MessageSquare className="w-3 h-3" />
-                                        {card.comments_count || 0}
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        <Paperclip className="w-3 h-3" />
-                                        {card.attachments_count || 0}
-                                      </div>
-                                    </div>
-
-                                    {card.assignee_name && (
-                                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                        <User className="w-3 h-3" />
-                                        <span className="truncate max-w-[80px]">{card.assignee_name}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </Card>
-                            )}
-                          </Draggable>
-                        ))}
-
-                        {provided.placeholder}
-
-                        {/* Add New Card Button */}
-                        <Button
-                          variant="ghost"
-                          className="w-full h-12 border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all"
-                          onClick={() => setIsNewLeadModalOpen(true)}
-                        >
-                          <Plus className="w-4 h-4 mr-2" />
-                          Adicionar cartão
-                        </Button>
-                      </CardContent>
-                    )}
-                  </Droppable>
-                </Card>
-              </div>
-            ))}
-          </div>
-        </DragDropContext>
-      )}
+      {/* Bulk Edit Dialog */}
+      <BulkEditDialog
+        open={isBulkEditOpen}
+        onOpenChange={setIsBulkEditOpen}
+        selectedIds={Array.from(selectedLeads)}
+        onSuccess={() => {
+          handleClearSelection();
+        }}
+      />
 
       {/* Modal para Novo Lead */}
       <NewLeadModal
@@ -518,31 +554,36 @@ export default function Leads() {
         onOpenChange={setIsImportModalOpen}
       />
 
-      {/* Histórico de movimentações */}
-      <Card className="border-border bg-card">
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <History className="w-4 h-4" />
-            <CardTitle className="text-lg font-semibold text-foreground">Histórico de movimentações</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {recentActivities.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma movimentação registrada ainda.</p>
-          ) : (
-            recentActivities.map((activity) => (
-              <div key={activity.id} className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  {new Date(activity.created_at).toLocaleString("pt-BR")}
-                </span>
-                <span className="font-medium">
-                  "{activity.lead_title}" {activity.from_status} → {activity.to_status}
-                </span>
+      {/* Histórico de movimentações - Keeping slightly minimal here or moving to separate logic if needed, 
+          but reducing prominence to focus on the board */}
+      <div className="shrink-0 pt-4 border-t border-border">
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-3 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4" />
+                <CardTitle className="text-sm font-semibold text-foreground">Histórico recente</CardTitle>
               </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-1 py-2">
+            {recentActivities.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhuma movimentação registrada ainda.</p>
+            ) : (
+              recentActivities.slice(0, 3).map((activity) => (
+                <div key={activity.id} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground mr-2">
+                    {new Date(activity.created_at).toLocaleString("pt-BR")}
+                  </span>
+                  <span className="font-medium truncate">
+                    "{activity.lead_title}" {activity.from_status} → {activity.to_status}
+                  </span>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

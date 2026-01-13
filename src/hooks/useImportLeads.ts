@@ -53,7 +53,7 @@ const VALID_SOURCES = [
 ]
 
 // Prioridades válidas
-const VALID_PRIORITIES = ['baixa', 'media', 'alta', 'urgente']
+const VALID_PRIORITIES = ['low', 'medium', 'high', 'urgent']
 
 export interface FieldMapping {
     csvColumn: string
@@ -292,13 +292,20 @@ function normalizeValue(value: string, dbField: string): any {
         case 'priority':
             const normalizedPriority = normalizeString(trimmed)
             const priorityMap: Record<string, string> = {
-                'low': 'baixa',
-                'medium': 'media',
-                'high': 'alta',
-                'urgent': 'urgente',
+                'baixa': 'low',
+                'baixo': 'low',
+                'low': 'low',
+                'media': 'medium',
+                'medio': 'medium',
+                'medium': 'medium',
+                'alta': 'high',
+                'alto': 'high',
+                'high': 'high',
+                'urgente': 'urgent',
+                'urgent': 'urgent',
             }
-            const mappedPriority = priorityMap[normalizedPriority] || normalizedPriority
-            return VALID_PRIORITIES.includes(mappedPriority) ? mappedPriority : 'media'
+            const mappedPriority = priorityMap[normalizedPriority] || 'medium'
+            return VALID_PRIORITIES.includes(mappedPriority) ? mappedPriority : 'medium'
 
         case 'source':
             const normalizedSource = normalizeString(trimmed)
@@ -328,16 +335,79 @@ function normalizeValue(value: string, dbField: string): any {
             return phone.length >= 8 ? phone : null
 
         case 'opening_date':
-            // Tenta converter data (aceita DD/MM/YYYY ou YYYY-MM-DD)
+            // Tenta converter data (aceita DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD ou Serial Excel)
             try {
+                // Se for número (Excel Serial Date) -> ex: "34731"
+                if (/^\d+(\.\d+)?$/.test(trimmed)) {
+                    const serial = parseFloat(trimmed)
+                    // Excel base date aproximada
+                    const date = new Date((serial - 25569) * 86400 * 1000)
+                    date.setUTCHours(12)
+                    return date.toISOString().split('T')[0]
+                }
+
                 if (trimmed.includes('/')) {
                     const parts = trimmed.split('/')
                     if (parts.length === 3) {
-                        return `${parts[2]}-${parts[1]}-${parts[0]}`
+                        let day: number
+                        let month: number
+                        let year: number
+
+                        // Tenta identificar onde está o ano (4 dígitos)
+                        if (parts[2].length === 4) {
+                            // Formato DD/MM/YYYY ou MM/DD/YYYY
+                            year = parseInt(parts[2])
+                            const p0 = parseInt(parts[0])
+                            const p1 = parseInt(parts[1])
+
+                            // Heurística para Dia e Mês
+                            if (p1 > 12) {
+                                // Se o segundo numero > 12, ele só pode ser DIA (então formato MM/DD/YYYY)
+                                month = p0
+                                day = p1
+                            } else {
+                                // Padrão DD/MM/YYYY
+                                day = p0
+                                month = p1
+                            }
+                        } else if (parts[0].length === 4) {
+                            // Formato YYYY/MM/DD
+                            year = parseInt(parts[0])
+                            month = parseInt(parts[1])
+                            day = parseInt(parts[2])
+                        } else {
+                            // Assume DD/MM/YY (2 dígitos ano no fim)
+                            year = parseInt(parts[2]) + 2000 // Assume século 21
+                            const p1 = parseInt(parts[1])
+                            if (p1 > 12) {
+                                month = parseInt(parts[0])
+                                day = p1
+                            } else {
+                                day = parseInt(parts[0])
+                                month = p1
+                            }
+                        }
+
+                        // Validação básica
+                        if (month < 1 || month > 12 || day < 1 || day > 31) return null
+
+                        // Garante formato YYYY-MM-DD
+                        const isoDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+
+                        // Valida se a data realmente existe (ex: não aceita 30/02)
+                        const dateObj = new Date(isoDate)
+                        if (isNaN(dateObj.getTime()) || dateObj.toISOString().split('T')[0] !== isoDate) {
+                            return null
+                        }
+
+                        return isoDate
                     }
                 }
+
                 const date = new Date(trimmed)
-                return isNaN(date.getTime()) ? null : trimmed
+                if (isNaN(date.getTime())) return null
+
+                return date.toISOString().split('T')[0]
             } catch {
                 return null
             }
@@ -382,22 +452,27 @@ export function useImportLeads() {
                 }
             })
 
-            // Processar cada linha
-            const leadsToInsert: any[] = []
-            const existingEmails = new Set<string>()
+            // Mapa de email -> ID para leads existentes
+            const emailToId = new Map<string, string>()
 
-            // Buscar emails existentes para verificar duplicados
+            // Buscar leads existentes (id e email) para verificar duplicados e permitir update
+            // Limitando a 10000 para garantir que pegamos a maioria em casos de bases grandes
+            // Idealmente isso seria paginado ou filtrado, mas para o escopo atual vamos aumentar o limite
             const { data: existingLeads } = await supabase
                 .from('leads')
-                .select('email')
+                .select('id, email')
                 .eq('organization_id', org.id)
                 .not('email', 'is', null)
+                .limit(10000)
 
             existingLeads?.forEach(lead => {
                 if (lead.email) {
-                    existingEmails.add(lead.email.toLowerCase())
+                    emailToId.set(lead.email.toLowerCase(), lead.id)
                 }
             })
+
+            const leadsToUpsertMap = new Map<string, any>()
+            const leadsToInsertWithoutEmail: any[] = []
 
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i]
@@ -408,7 +483,7 @@ export function useImportLeads() {
                         organization_id: org.id,
                         status: 'novo_lead', // Status padrão
                         source: 'manual', // Fonte padrão para importação
-                        priority: 'media', // Prioridade padrão
+                        priority: 'medium', // Prioridade padrão
                     }
 
                     // Mapear valores da linha
@@ -422,14 +497,13 @@ export function useImportLeads() {
                         }
                     }
 
-                    // Se não tiver title, mas tiver trade_name (Nome Fantasia) ou legal_name (Razão Social), usar
+                    // Definir o título do lead (nome de exibição)
+                    // Regra: Nome Fantasia > Razão Social > Outros fallbacks
                     if (!leadData.title) {
                         if (leadData.trade_name) {
                             leadData.title = leadData.trade_name
                         } else if (leadData.legal_name) {
                             leadData.title = leadData.legal_name
-                        } else if (leadData.name) {
-                            leadData.title = leadData.name
                         } else if (leadData.email) {
                             leadData.title = leadData.email.split('@')[0]
                         } else {
@@ -437,26 +511,24 @@ export function useImportLeads() {
                         }
                     }
 
-                    // Se name não estiver definido mas tiver title, usar title
-                    if (!leadData.name && !leadData.trade_name && !leadData.legal_name) {
-                        // name não é uma coluna padrão, mas se usarmos, deve vir do title
-                    }
-
-                    // Verificar duplicados por email
-                    if (leadData.email && existingEmails.has(leadData.email.toLowerCase())) {
-                        result.duplicates++
-                        result.errors.push({
-                            row: rowNumber,
-                            message: `Email duplicado: ${leadData.email}`
-                        })
-                        continue
-                    }
-
-                    // Adicionar à lista para inserção
-                    leadsToInsert.push(leadData)
-
+                    // Verificar se já existe no banco ou no arquivo atual
                     if (leadData.email) {
-                        existingEmails.add(leadData.email.toLowerCase())
+                        const email = leadData.email.toLowerCase()
+
+                        // Verifica se existe no banco
+                        const existingId = emailToId.get(email)
+
+                        // Se existir, adiciona o ID para que o upsert faça update
+                        if (existingId) {
+                            leadData.id = existingId
+                            // Não incrementamos duplicates erro, pois será um update (sucesso)
+                        }
+
+                        // Adiciona ao mapa (se já houver no arquivo, sobrescreve - último vence)
+                        leadsToUpsertMap.set(email, leadData)
+                    } else {
+                        // Sem email, sempre insere como novo
+                        leadsToInsertWithoutEmail.push(leadData)
                     }
 
                 } catch (error) {
@@ -468,14 +540,17 @@ export function useImportLeads() {
                 }
             }
 
-            // Inserir leads em lotes de 50
+            // Combinar todos os leads para processar
+            const leadsToProcess = [...leadsToUpsertMap.values(), ...leadsToInsertWithoutEmail]
+
+            // Inserir/Atualizar leads em lotes de 50
             const BATCH_SIZE = 50
-            for (let i = 0; i < leadsToInsert.length; i += BATCH_SIZE) {
-                const batch = leadsToInsert.slice(i, i + BATCH_SIZE)
+            for (let i = 0; i < leadsToProcess.length; i += BATCH_SIZE) {
+                const batch = leadsToProcess.slice(i, i + BATCH_SIZE)
 
                 const { data, error } = await supabase
                     .from('leads')
-                    .insert(batch)
+                    .upsert(batch, { onConflict: 'id' }) // Usa ID para conflito (update), ou insere se não tiver ID
                     .select('id')
 
                 if (error) {

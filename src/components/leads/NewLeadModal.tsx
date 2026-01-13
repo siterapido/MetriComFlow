@@ -31,6 +31,7 @@ interface NewLeadModalProps {
 const statusOptions = [
   { value: "novo_lead", label: "Novo Lead" },
   { value: "qualificacao", label: "Qualificação" },
+  { value: "reuniao", label: "Reunião" },
   { value: "proposta", label: "Proposta" },
   { value: "negociacao", label: "Negociação" },
   { value: "fechado_ganho", label: "Fechado - Ganho" },

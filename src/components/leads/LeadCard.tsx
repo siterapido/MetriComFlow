@@ -56,9 +56,12 @@ interface LeadCardProps {
   onDelete?: (id: string) => void;
   onUpdate?: (id: string, data: Partial<Lead>) => void;
   className?: string;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
+  selectionMode?: boolean;
 }
 
-export function LeadCard({ lead, onDelete, onUpdate, className }: LeadCardProps) {
+export function LeadCard({ lead, onDelete, onUpdate, className, isSelected, onToggleSelect, selectionMode }: LeadCardProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const updateLead = useUpdateLead();
   const { toast } = useToast();
@@ -203,9 +206,26 @@ export function LeadCard({ lead, onDelete, onUpdate, className }: LeadCardProps)
         {/* Hover Strip */}
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary/0 group-hover:bg-primary transition-all duration-300" />
 
+        {/* Selection Checkbox */}
+        {(selectionMode || isSelected || onToggleSelect) && (
+          <div
+            className={cn(
+              "absolute top-2 left-2 z-10 transition-opacity duration-200",
+              isSelected || selectionMode ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => onToggleSelect?.(lead.id)}
+              className="h-4 w-4 bg-background border-primary/50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+            />
+          </div>
+        )}
+
         <CardContent className="p-3 space-y-3">
           {/* Header: Title & Actions */}
-          <div className="flex items-start justify-between gap-2 pl-2">
+          <div className={cn("flex items-start justify-between gap-2 pl-2", ((selectionMode || isSelected) ? "pl-6" : ""))}>
             <div className="space-y-1 overflow-hidden">
               <h3 className="font-semibold text-sm text-foreground leading-tight truncate pr-2" title={lead.title}>
                 {lead.title}
