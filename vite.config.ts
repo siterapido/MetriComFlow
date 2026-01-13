@@ -70,7 +70,7 @@ const gitInfo = resolveGitInfo();
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
-    port: 8082,
+    port: 8080,
   },
   plugins: [
     react(),
@@ -102,8 +102,8 @@ export default defineConfig(({ mode }) => ({
   },
   optimizeDeps: {
     include: [
-      'react', 
-      'react-dom', 
+      'react',
+      'react-dom',
       '@tanstack/react-query',
       '@supabase/supabase-js',
       'react-router-dom',

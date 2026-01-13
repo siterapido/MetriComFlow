@@ -14,7 +14,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:plan-upgrade": "node scripts/test-plan-upgrade.js"
+    "test:plan-upgrade": "node scripts/test-plan-upgrade.js",
+    "vercel:env:list": "node scripts/vercel-env.js list",
+    "vercel:env:sync": "node scripts/vercel-env.js sync",
+    "vercel:env:add": "node scripts/vercel-env.js add",
+    "vercel:env:remove": "node scripts/vercel-env.js remove",
+    "vercel:env:export": "node scripts/vercel-env.js export",
+    "vercel:env:list:preview": "node scripts/vercel-env.js list --env preview",
+    "vercel:env:sync:preview": "node scripts/vercel-env.js sync --env preview",
+    "vercel:env:sync:dev": "node scripts/vercel-env.js sync --env development"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
