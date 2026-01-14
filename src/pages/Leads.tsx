@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Filter, History, Loader2, Facebook, Upload, ArrowDown, RefreshCw } from "lucide-react";
+import { Plus, Search, Filter, History, Loader2, Facebook, Upload, ArrowDown, RefreshCw, User, Users } from "lucide-react";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
 import { LeadImportModal } from "@/components/leads/LeadImportModal";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +22,7 @@ import { useLeadActivity } from "@/hooks/useLeads";
 import { useBulkDeleteLeads, type Lead } from "@/hooks/useLeads";
 import { LeadCard } from "@/components/leads/LeadCard";
 import { BulkEditDialog } from "@/components/leads/BulkEditDialog";
+import { LeadDistributionModal } from "@/components/leads/LeadDistributionModal";
 
 // We need to implement the floating bar.
 import { X, Edit, Trash2 } from "lucide-react";
@@ -208,6 +209,14 @@ export default function Leads() {
     else setSelectedLeads(new Set(allMatchingLeads.map(l => l.id)));
   };
 
+  const [isDistributeOpen, setIsDistributeOpen] = useState(false);
+
+  const handleSelectCount = (count: number) => {
+    if (!allMatchingLeads) return;
+    const toSelect = allMatchingLeads.slice(0, count);
+    setSelectedLeads(new Set(toSelect.map(l => l.id)));
+  };
+
   const handleBulkDelete = async () => {
     if (selectedLeads.size === 0) return;
     if (!confirm(`Tem certeza que deseja excluir ${selectedLeads.size} leads?`)) return;
@@ -276,23 +285,46 @@ export default function Leads() {
 
         <div className="flex items-center gap-1.5 ml-auto">
           {allMatchingLeads && allMatchingLeads.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleSelectAll}
-              className={cn(
-                "h-7 text-[10px] gap-1.5 font-medium hover:bg-primary/5 px-2",
-                selectedLeads.size > 0 && selectedLeads.size === allMatchingLeads.length ? "text-primary" : "text-muted-foreground"
-              )}
-            >
-              {selectedLeads.size === allMatchingLeads.length ? "Desmarcar" : "Selecionar Todos"}
-              <span className="opacity-40">{allMatchingLeads.length}</span>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className={cn(
+                  "h-7 text-[10px] gap-1.5 font-medium hover:bg-primary/5 px-2",
+                  selectedLeads.size > 0 ? "text-primary" : "text-muted-foreground"
+                )}>
+                  {selectedLeads.size > 0 ? `Selecionados (${selectedLeads.size})` : "Selecionar"}
+                  <ArrowDown className="w-3 h-3 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={handleSelectAll}>
+                  {selectedLeads.size === allMatchingLeads.length ? "Desmarcar Todos" : "Selecionar Todos"}
+                  <span className="ml-auto text-xs opacity-50">({allMatchingLeads.length})</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => handleSelectCount(10)}>
+                  Selecionar 10
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => handleSelectCount(30)}>
+                  Selecionar 30
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => handleSelectCount(50)}>
+                  Selecionar 50
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
 
           <div className="w-px h-3 bg-border/20 mx-0.5" />
 
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-[10px] gap-1.5 text-primary hover:text-primary hover:bg-primary/5 transition-colors border border-primary/20"
+              onClick={() => setIsDistributeOpen(true)}
+            >
+              <Users className="w-3 h-3" />
+              Distribuição
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -415,9 +447,28 @@ export default function Leads() {
       )}
 
       {/* Modals & Dialogs */}
-      <BulkEditDialog open={isBulkEditOpen} onOpenChange={setIsBulkEditOpen} selectedIds={Array.from(selectedLeads)} onSuccess={handleClearSelection} />
+      <BulkEditDialog
+        open={isBulkEditOpen || isDistributeOpen}
+        onOpenChange={(open) => {
+          setIsBulkEditOpen(open);
+          if (!open) setIsDistributeOpen(false);
+        }}
+        selectedIds={Array.from(selectedLeads)}
+        onSuccess={handleClearSelection}
+        initialField={isDistributeOpen ? "assignee" : undefined}
+      />
       <NewLeadModal open={isNewLeadModalOpen} onOpenChange={setIsNewLeadModalOpen} onSave={() => toast({ title: "Sucesso", description: "Lead criado!" })} />
       <LeadImportModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
+      <LeadDistributionModal
+        open={isDistributeOpen}
+        onOpenChange={setIsDistributeOpen}
+        onSuccess={() => {
+          toast({
+            title: "Sucesso",
+            description: "Leads distribuídos com sucesso!"
+          });
+        }}
+      />
 
       {/* Footer Activities */}
       <div className="flex items-center gap-4 px-2 py-1 bg-muted/5 rounded-md border border-border/20 text-[10px] text-muted-foreground overflow-hidden">

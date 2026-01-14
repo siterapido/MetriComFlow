@@ -2,6 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { useActiveOrganization } from '@/hooks/useActiveOrganization'
+import { useUserPermissions } from '@/hooks/useUserPermissions'
+import { useAuth } from '@/hooks/useAuth'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 
@@ -432,6 +434,8 @@ function normalizeValue(value: string, dbField: string): any {
 export function useImportLeads() {
     const queryClient = useQueryClient()
     const { data: org } = useActiveOrganization()
+    const { data: permissions } = useUserPermissions()
+    const { user } = useAuth()
 
     return useMutation({
         mutationFn: async ({
@@ -487,11 +491,14 @@ export function useImportLeads() {
                 const rowNumber = i + 2 // +2 porque linha 1 é header e começamos em 0
 
                 try {
+                    const isSeller = permissions?.userType === 'sales' || org?.role === 'member'
                     const leadData: Record<string, any> = {
                         organization_id: org.id,
                         status: 'novo_lead', // Status padrão
                         source: 'manual', // Fonte padrão para importação
                         priority: 'medium', // Prioridade padrão
+                        assignee_id: isSeller ? user?.id : null,
+                        assignee_name: isSeller ? (user?.user_metadata?.full_name || user?.email) : null,
                     }
 
                     // Mapear valores da linha

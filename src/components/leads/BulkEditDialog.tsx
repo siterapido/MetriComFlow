@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,6 +26,7 @@ interface BulkEditDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onSuccess?: () => void;
+    initialField?: "status" | "assignee";
 }
 
 const statusOptions = [
@@ -38,13 +39,24 @@ const statusOptions = [
     { value: "fechado_perdido", label: "Fechado - Perdido" },
 ];
 
-export function BulkEditDialog({ selectedIds, open, onOpenChange, onSuccess }: BulkEditDialogProps) {
+export function BulkEditDialog({ selectedIds, open, onOpenChange, onSuccess, initialField }: BulkEditDialogProps) {
     const bulkUpdate = useBulkUpdateLeads();
     const { data: assignableUsers } = useAssignableUsers();
 
     const [fieldToUpdate, setFieldToUpdate] = useState<"status" | "assignee" | "">("");
     const [newValue, setNewValue] = useState<string>("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Update fieldToUpdate when initialField changes or dialog opens
+    useEffect(() => {
+        if (open && initialField) {
+            setFieldToUpdate(initialField);
+        } else if (!open) {
+            // Reset when closing (optional, but good for consistent state)
+            setFieldToUpdate("");
+            setNewValue("");
+        }
+    }, [open, initialField]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

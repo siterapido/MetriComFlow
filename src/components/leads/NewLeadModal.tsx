@@ -16,7 +16,9 @@ import { useCreateLead } from "@/hooks/useLeads";
 import { useLabels, useAddLabelToLead } from "@/hooks/useLabels";
 import { useToast } from "@/hooks/use-toast";
 import { useAssignableUsers } from "@/hooks/useAssignableUsers";
-import { USER_TYPE_LABELS } from "@/hooks/useUserPermissions";
+import { USER_TYPE_LABELS, useUserPermissions } from "@/hooks/useUserPermissions";
+import { useActiveOrganization } from "@/hooks/useActiveOrganization";
+import { useAuth } from "@/hooks/useAuth";
 
 interface NewLeadModalProps {
   open: boolean;
@@ -43,6 +45,9 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
   const { data: labels } = useLabels();
   const addLabelToLead = useAddLabelToLead();
   const { data: assignableUsers } = useAssignableUsers();
+  const { data: permissions } = useUserPermissions();
+  const { data: org } = useActiveOrganization();
+  const { user } = useAuth();
 
   const [formData, setFormData] = useState({
     title: "",
@@ -530,37 +535,39 @@ export function NewLeadModal({ open, onOpenChange, onSave }: NewLeadModalProps) 
               </Select>
             </div>
 
-            {/* Responsável */}
-            <div className="space-y-2">
-              <Label className="text-foreground">Responsável</Label>
-              <Select
-                value={formData.assigneeId}
-                onValueChange={(value) => setFormData({ ...formData, assigneeId: value })}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger className="bg-input border-border">
-                  <SelectValue placeholder="Selecione o responsável" />
-                </SelectTrigger>
-                <SelectContent>
-                  {assignableUsers && assignableUsers.length > 0 ? (
-                    assignableUsers.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        <div className="flex flex-col">
-                          <span>{user.full_name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {USER_TYPE_LABELS[user.user_type]}
-                          </span>
-                        </div>
+            {/* Responsável (apenas para owners/admins/managers) */}
+            {(permissions?.isOwner || org?.role === 'owner' || org?.role === 'admin' || org?.role === 'manager') && (
+              <div className="space-y-2">
+                <Label className="text-foreground">Responsável</Label>
+                <Select
+                  value={formData.assigneeId}
+                  onValueChange={(value) => setFormData({ ...formData, assigneeId: value })}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger className="bg-input border-border focus:ring-primary">
+                    <SelectValue placeholder="Selecione o responsável" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {assignableUsers && assignableUsers.length > 0 ? (
+                      assignableUsers.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          <div className="flex flex-col">
+                            <span>{user.full_name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {USER_TYPE_LABELS[user.user_type]}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="none" disabled>
+                        Nenhum usuário disponível
                       </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="none" disabled>
-                      Nenhum usuário disponível
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Tipo de Contrato */}
             <div className="space-y-2">

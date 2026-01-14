@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CalendarIcon, X, Loader2, Facebook, Trash2, MessageCircle, Phone, Mail, MessageSquare, ArrowRightLeft, User as UserIcon, DollarSign, Clock, AlertCircle } from "lucide-react";
+import { CalendarIcon, X, Loader2, Facebook, Trash2, MessageCircle, Phone, Mail, MessageSquare, ArrowRightLeft, User as UserIcon, DollarSign, Clock, AlertCircle, Building2, MapPin, Banknote, FileText } from "lucide-react";
 import { format, formatDistanceToNowStrict, isToday, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -39,7 +39,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useLabels, useAddLabelToLead, useRemoveLabelFromLead } from "@/hooks/useLabels";
 import { useToast } from "@/hooks/use-toast";
 import { useAssignableUsers } from "@/hooks/useAssignableUsers";
-import { USER_TYPE_LABELS } from "@/hooks/useUserPermissions";
+import { USER_TYPE_LABELS, useUserPermissions } from "@/hooks/useUserPermissions";
+import { getWhatsAppUrl } from "@/lib/whatsapp-utils";
 import type { Tables } from "@/lib/database.types";
 
 type Lead = Tables<"leads"> & {
@@ -65,6 +66,7 @@ type Lead = Tables<"leads"> & {
   state?: string | null;
   zip_code?: string | null;
   main_activity?: string | null;
+  whatsapp_phone?: string | null;
 };
 
 interface LeadEditDialogProps {
@@ -91,24 +93,8 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
   const removeLabelFromLead = useRemoveLabelFromLead();
   const { data: assignableUsers } = useAssignableUsers();
   const { user } = useAuth();
+  const { data: permissions } = useUserPermissions();
   const queryClient = useQueryClient();
-
-  // Resolve phone for WhatsApp CTA in footer
-  const resolvedPhone: string | null = (() => {
-    const p = (lead as any).phone as string | undefined;
-    const extractPhone = (text?: string | null) => {
-      if (!text) return null;
-      const match = (text.match(/\d[\d\s().-]{8,}\d/g) || [])
-        .map((m) => m.replace(/\D/g, ""))
-        .find((n) => n.length >= 10 && n.length <= 13);
-      return match || null;
-    };
-    const fromDesc = extractPhone(lead.description);
-    return p || fromDesc || null;
-  })();
-  const whatsappHref = resolvedPhone
-    ? `https://wa.me/${String(resolvedPhone).replace(/\D/g, "").replace(/^((?!55).*)$/, "55$1")}`
-    : null;
 
   const [formData, setFormData] = useState({
     title: lead.title,
@@ -141,10 +127,31 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
     state: lead.state || "",
     zip_code: lead.zip_code || "",
     main_activity: lead.main_activity || "",
+    whatsapp_phone: lead.whatsapp_phone || "",
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Resolve phone for WhatsApp CTA - prioriza whatsapp_phone se preenchido
+  const resolvedPhone: string | null = (() => {
+    // Primeiro, tenta usar whatsapp_phone (campo alternativo)
+    if (formData.whatsapp_phone?.trim()) {
+      return formData.whatsapp_phone.replace(/\D/g, "");
+    }
+    // Fallback para phone principal
+    const p = formData.phone || (lead as any).phone as string | undefined;
+    const extractPhone = (text?: string | null) => {
+      if (!text) return null;
+      const match = (text.match(/\d[\d\s().-]{8,}\d/g) || [])
+        .map((m) => m.replace(/\D/g, ""))
+        .find((n) => n.length >= 10 && n.length <= 13);
+      return match || null;
+    };
+    const fromDesc = extractPhone(lead.description);
+    return p?.replace(/\D/g, "") || fromDesc || null;
+  })();
+  const whatsappHref = getWhatsAppUrl(resolvedPhone, '11', lead.title);
 
   // Initialize contract value
   useEffect(() => {
@@ -217,6 +224,7 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
           state: formData.state || null,
           zip_code: formData.zip_code || null,
           main_activity: formData.main_activity || null,
+          whatsapp_phone: formData.whatsapp_phone || null,
         },
       });
 
@@ -281,6 +289,14 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
   };
 
   const handleDelete = async () => {
+    if (!permissions?.canDeleteLeads) {
+      toast({
+        title: "Erro",
+        description: "Você não tem permissão para excluir leads.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       await deleteLead.mutateAsync(lead.id);
       toast({
@@ -347,23 +363,105 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
       <Dialog open={open && !showDeleteConfirm} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[780px] max-h-[85vh] bg-card border-border flex flex-col overflow-hidden">
           <div className="flex-1 overflow-auto">
-            <DialogHeader>
-              <div>
-                <DialogTitle className="text-foreground">Detalhes do Lead</DialogTitle>
-                <DialogDescription className="text-muted-foreground">
-                  Visualize e atualize as informações do lead
-                </DialogDescription>
+            <DialogHeader className="pb-2">
+              <div className="flex items-start justify-between">
+                <div>
+                  <DialogTitle className="text-foreground text-xl">{formData.title || "Lead"}</DialogTitle>
+                  <DialogDescription className="text-muted-foreground">
+                    Gerencie todas as informações do lead
+                  </DialogDescription>
+                </div>
               </div>
             </DialogHeader>
 
-            <Tabs defaultValue="detalhes" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="detalhes">Detalhes</TabsTrigger>
-                <TabsTrigger value="comentarios_followup">Comentários / Follow-up</TabsTrigger>
-                <TabsTrigger value="timeline">Linha do tempo</TabsTrigger>
+            {/* Card de Resumo */}
+            <div className="rounded-lg border border-border bg-muted/30 p-4 mb-4">
+              <div className="flex flex-wrap items-center gap-4">
+                {/* Status */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Status:</span>
+                  <Badge variant="outline" className={cn(
+                    "text-xs",
+                    formData.status === "fechado_ganho" && "bg-green-500/20 text-green-400 border-green-500/30",
+                    formData.status === "fechado_perdido" && "bg-red-500/20 text-red-400 border-red-500/30",
+                    formData.status === "negociacao" && "bg-amber-500/20 text-amber-400 border-amber-500/30",
+                    formData.status === "proposta" && "bg-blue-500/20 text-blue-400 border-blue-500/30",
+                    formData.status === "qualificacao" && "bg-purple-500/20 text-purple-400 border-purple-500/30",
+                    formData.status === "novo_lead" && "bg-slate-500/20 text-slate-400 border-slate-500/30",
+                  )}>
+                    {statusOptions.find(s => s.value === formData.status)?.label || formData.status}
+                  </Badge>
+                </div>
+
+                {/* Responsável */}
+                {formData.assigneeId && (
+                  <div className="flex items-center gap-2">
+                    <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">
+                      {assignableUsers?.find(u => u.id === formData.assigneeId)?.full_name || "—"}
+                    </span>
+                  </div>
+                )}
+
+                {/* Próximo Follow-up */}
+                {formData.followUpDate && (
+                  <div className={cn(
+                    "flex items-center gap-2 text-xs",
+                    isPast(formData.followUpDate) && !isToday(formData.followUpDate) && "text-destructive",
+                    isToday(formData.followUpDate) && "text-amber-500",
+                  )}>
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>Follow-up: {format(formData.followUpDate, "dd/MM", { locale: ptBR })}</span>
+                  </div>
+                )}
+
+                {/* Valor do contrato */}
+                {lead.contract_value && lead.contract_value > 0 && (
+                  <div className="flex items-center gap-2 text-xs text-emerald-500">
+                    <DollarSign className="h-3.5 w-3.5" />
+                    <span>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(lead.contract_value)}</span>
+                  </div>
+                )}
+
+                {/* WhatsApp */}
+                <div className="ml-auto">
+                  {whatsappHref ? (
+                    <a
+                      href={whatsappHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs text-white font-medium transition-colors"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                    </a>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Sem telefone</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <Tabs defaultValue="contato" className="w-full">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="contato" className="text-xs sm:text-sm">
+                  <Building2 className="h-3.5 w-3.5 mr-1 hidden sm:inline" />
+                  Contato
+                </TabsTrigger>
+                <TabsTrigger value="financeiro" className="text-xs sm:text-sm">
+                  <Banknote className="h-3.5 w-3.5 mr-1 hidden sm:inline" />
+                  Financeiro
+                </TabsTrigger>
+                <TabsTrigger value="followup" className="text-xs sm:text-sm">
+                  <MessageSquare className="h-3.5 w-3.5 mr-1 hidden sm:inline" />
+                  Follow-up
+                </TabsTrigger>
+                <TabsTrigger value="timeline" className="text-xs sm:text-sm">
+                  <Clock className="h-3.5 w-3.5 mr-1 hidden sm:inline" />
+                  Histórico
+                </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="detalhes" className="space-y-4 mt-4">
+              <TabsContent value="contato" className="space-y-4 mt-4">
                 <form onSubmit={handleSubmit} className="space-y-4">
                   {/* Nome (Título) */}
                   <div className="space-y-2">
@@ -421,6 +519,27 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
                         disabled={isSubmitting}
                       />
                     </div>
+                  </div>
+
+                  {/* WhatsApp Alternativo */}
+                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-2">
+                    <Label htmlFor="whatsapp_phone" className="text-foreground flex items-center gap-2">
+                      <MessageCircle className="w-4 h-4 text-emerald-500" />
+                      WhatsApp para Contato
+                    </Label>
+                    <Input
+                      id="whatsapp_phone"
+                      value={formData.whatsapp_phone}
+                      onChange={(e) => setFormData({ ...formData, whatsapp_phone: e.target.value })}
+                      className="bg-input border-border"
+                      placeholder="(00) 00000-0000"
+                      disabled={isSubmitting}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {formData.whatsapp_phone
+                        ? "✓ O botão WhatsApp usará este número"
+                        : "Preencha para usar um número diferente do telefone principal"}
+                    </p>
                   </div>
 
                   {/* Dados da Empresa */}
@@ -604,65 +723,183 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
 
                   {/* Descrição */}
                   <div className="space-y-2">
-                    <Label htmlFor="description" className="text-foreground">Descrição</Label>
+                    <Label htmlFor="description" className="text-foreground">Descrição / Notas</Label>
                     <Textarea
                       id="description"
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       className="bg-input border-border min-h-[80px]"
+                      placeholder="Informações adicionais sobre o lead..."
                       disabled={isSubmitting}
                     />
                   </div>
 
-                  {/* Status */}
-                  <div className="space-y-2">
-                    <Label className="text-foreground">Status</Label>
-                    <Select
-                      value={formData.status}
-                      onValueChange={(value) => setFormData({ ...formData, status: value })}
-                      disabled={isSubmitting}
-                    >
-                      <SelectTrigger className="bg-input border-border">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {statusOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                </form>
+              </TabsContent>
+
+              {/* Aba Financeiro */}
+              <TabsContent value="financeiro" className="space-y-4 mt-4">
+                <div className="rounded-lg border border-border p-4 space-y-4">
+                  <h3 className="font-medium text-foreground flex items-center gap-2">
+                    <Banknote className="w-4 h-4 text-emerald-500" />
+                    Dados do Contrato
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Tipo de Contrato */}
+                    <div className="space-y-2">
+                      <Label className="text-foreground">Tipo de Contrato</Label>
+                      <Select
+                        value={formData.contractType}
+                        onValueChange={(value: "monthly" | "annual" | "one_time") => setFormData({ ...formData, contractType: value })}
+                        disabled={isSubmitting}
+                      >
+                        <SelectTrigger className="bg-input border-border">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monthly">Mensal</SelectItem>
+                          <SelectItem value="annual">Anual</SelectItem>
+                          <SelectItem value="one_time">Pagamento Único</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Valor do Contrato */}
+                    <div className="space-y-2">
+                      <Label htmlFor="contractValue" className="text-foreground">
+                        Valor do Contrato {formData.contractType === "monthly" ? "(mensal)" : ""}
+                      </Label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="contractValue"
+                          value={formData.contractValue}
+                          onChange={(e) => setFormData({ ...formData, contractValue: formatCurrency(e.target.value) })}
+                          className="pl-9 bg-input border-border"
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quantidade de Meses */}
+                    {formData.contractType === "monthly" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="contractMonths" className="text-foreground">Quantidade de Meses</Label>
+                        <Input
+                          id="contractMonths"
+                          type="number"
+                          min="1"
+                          max="120"
+                          value={formData.contractMonths}
+                          onChange={(e) => setFormData({ ...formData, contractMonths: e.target.value })}
+                          className="bg-input border-border"
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                    )}
                   </div>
 
-                  {/* Responsável */}
-                  <div className="space-y-2">
-                    <Label className="text-foreground">Responsável</Label>
-                    <Select
-                      value={formData.assigneeId}
-                      onValueChange={(value) => setFormData({ ...formData, assigneeId: value })}
-                      disabled={isSubmitting}
-                    >
-                      <SelectTrigger className="bg-input border-border">
-                        <SelectValue placeholder="Selecione o responsável" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {assignableUsers && assignableUsers.length > 0 ? (
-                          assignableUsers.map((user) => (
-                            <SelectItem key={user.id} value={user.id}>
-                              <div className="flex flex-col">
-                                <span>{user.full_name}</span>
-                                <span className="text-xs text-muted-foreground">{USER_TYPE_LABELS[user.user_type]}</span>
-                              </div>
+                  {/* Valor Total calculado */}
+                  {formData.contractValue && formData.contractType === "monthly" && parseInt(formData.contractMonths) > 1 && (
+                    <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Valor Total Estimado:</span>
+                        <span className="text-lg font-semibold text-emerald-500">
+                          {(() => {
+                            const val = parseInt(formData.contractValue.replace(/\D/g, "")) / 100;
+                            const months = parseInt(formData.contractMonths) || 1;
+                            return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val * months);
+                          })()}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formData.contractMonths} meses × {formData.contractValue}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Informações adicionais do contrato */}
+                <div className="rounded-lg border border-border p-4 space-y-4">
+                  <h3 className="font-medium text-foreground flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Informações Complementares
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Status do Lead */}
+                    <div className="space-y-2">
+                      <Label className="text-foreground">Status do Lead</Label>
+                      <Select
+                        value={formData.status}
+                        onValueChange={(value) => setFormData({ ...formData, status: value })}
+                        disabled={isSubmitting}
+                      >
+                        <SelectTrigger className="bg-input border-border">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statusOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
                             </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="none" disabled>
-                            Nenhum usuário disponível
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Origem do Lead */}
+                    <div className="space-y-2">
+                      <Label className="text-foreground">Origem do Lead</Label>
+                      <Select
+                        value={formData.source}
+                        onValueChange={(value: "manual") => setFormData({
+                          ...formData,
+                          source: value,
+                        })}
+                        disabled={isSubmitting}
+                      >
+                        <SelectTrigger className="bg-input border-border">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="manual">Manual</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Responsável */}
+                    {permissions?.isOwner && (
+                      <div className="space-y-2 md:col-span-2">
+                        <Label className="text-foreground">Responsável</Label>
+                        <Select
+                          value={formData.assigneeId}
+                          onValueChange={(value) => setFormData({ ...formData, assigneeId: value })}
+                          disabled={isSubmitting}
+                        >
+                          <SelectTrigger className="bg-input border-border">
+                            <SelectValue placeholder="Selecione o responsável" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {assignableUsers && assignableUsers.length > 0 ? (
+                              assignableUsers.map((user) => (
+                                <SelectItem key={user.id} value={user.id}>
+                                  <div className="flex flex-col">
+                                    <span>{user.full_name}</span>
+                                    <span className="text-xs text-muted-foreground">{USER_TYPE_LABELS[user.user_type]}</span>
+                                  </div>
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="none" disabled>
+                                Nenhum usuário disponível
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
 
                   {/* Etiquetas */}
@@ -689,83 +926,29 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
                       ))}
                     </div>
                   </div>
+                </div>
 
-                  {/* Tipo de Contrato */}
-                  <div className="space-y-2">
-                    <Label className="text-foreground">Tipo de Contrato</Label>
-                    <Select
-                      value={formData.contractType}
-                      onValueChange={(value: "monthly" | "annual" | "one_time") => setFormData({ ...formData, contractType: value })}
-                      disabled={isSubmitting}
-                    >
-                      <SelectTrigger className="bg-input border-border">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="monthly">Mensal</SelectItem>
-                        <SelectItem value="annual">Anual</SelectItem>
-                        <SelectItem value="one_time">Pagamento Único</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Valor do Contrato */}
-                  <div className="space-y-2">
-                    <Label htmlFor="contractValue" className="text-foreground">
-                      Valor do Contrato {formData.contractType === "monthly" ? "(mensal)" : ""}
-                    </Label>
-                    <Input
-                      id="contractValue"
-                      value={formData.contractValue}
-                      onChange={(e) => setFormData({ ...formData, contractValue: formatCurrency(e.target.value) })}
-                      className="bg-input border-border"
-                      disabled={isSubmitting}
-                    />
-                  </div>
-
-                  {/* Quantidade de Meses */}
-                  {formData.contractType === "monthly" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="contractMonths" className="text-foreground">Quantidade de Meses</Label>
-                      <Input
-                        id="contractMonths"
-                        type="number"
-                        min="1"
-                        max="120"
-                        value={formData.contractMonths}
-                        onChange={(e) => setFormData({ ...formData, contractMonths: e.target.value })}
-                        className="bg-input border-border"
-                        disabled={isSubmitting}
-                      />
-                    </div>
-                  )}
-
-                  {/* Origem e Campanha (editar) */}
-                  <div className="space-y-2">
-                    <Label className="text-foreground">Origem do Lead</Label>
-                    <Select
-                      value={formData.source}
-                      onValueChange={(value: "manual") => setFormData({
-                        ...formData,
-                        source: value,
-                      })}
-                      disabled={isSubmitting}
-                    >
-                      <SelectTrigger className="bg-input border-border">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="manual">Manual</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-
-                </form>
+                {/* Botão Salvar na aba Financeiro */}
+                <div className="flex justify-end pt-2">
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={isSubmitting}
+                    className="bg-primary hover:bg-primary/90"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      "Salvar Alterações"
+                    )}
+                  </Button>
+                </div>
               </TabsContent>
 
-              {/* Comentários / Follow-up */}
-              <TabsContent value="comentarios_followup" className="space-y-6 mt-4">
+              {/* Aba Follow-up */}
+              <TabsContent value="followup" className="space-y-6 mt-4">
                 {/* Resumo do follow-up */}
                 {(() => {
                   const d = formData.followUpDate || (lead.next_follow_up_date ? new Date(lead.next_follow_up_date) : undefined);
@@ -974,16 +1157,18 @@ export function LeadEditDialog({ lead, open, onOpenChange }: LeadEditDialogProps
                 <span className="text-xs text-muted-foreground">sem telefone detectado</span>
               )}
             </div>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => setShowDeleteConfirm(true)}
-              disabled={isSubmitting}
-              className="mr-auto"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Excluir
-            </Button>
+            {permissions?.canDeleteLeads && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:bg-destructive/10"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Excluir Lead
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"

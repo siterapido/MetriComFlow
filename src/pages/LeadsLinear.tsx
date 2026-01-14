@@ -2,15 +2,23 @@ import { useState, useMemo } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Loader2, Upload, Edit, Trash2, X } from "lucide-react";
+import { Plus, Search, Loader2, Upload, Edit, Trash2, X, Users } from "lucide-react";
 import { NewLeadModal } from "@/components/leads/NewLeadModal";
 import { LeadImportModal } from "@/components/leads/LeadImportModal";
 import { LeadCard } from "@/components/leads/LeadCard";
 import { BulkEditDialog } from "@/components/leads/BulkEditDialog";
+import { LeadDistributionModal } from "@/components/leads/LeadDistributionModal";
 import { StageValueCard } from "@/components/leads/StageValueCard";
 import { useToast } from "@/hooks/use-toast";
 import { useLeads, useDeleteLead, useUpdateLead, type Lead, useBulkDeleteLeads } from "@/hooks/useLeads";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ArrowDown } from "lucide-react";
 
 // Define board stages
 const BOARD_STAGES = [
@@ -70,12 +78,20 @@ export default function LeadsLinear() {
     }, {} as Record<StageId, { leads: Lead[]; totalValue: number; averageValue: number; count: number }>);
   }, [filteredLeads]);
 
+  const [isDistributeOpen, setIsDistributeOpen] = useState(false);
+
   const handleSelectAll = () => {
     if (selectedLeads.size === filteredLeads.length) {
       handleClearSelection();
     } else {
       setSelectedLeads(new Set(filteredLeads.map(l => l.id)));
     }
+  };
+
+  const handleSelectCount = (count: number) => {
+    if (!filteredLeads) return;
+    const toSelect = filteredLeads.slice(0, count);
+    setSelectedLeads(new Set(toSelect.map(l => l.id)));
   };
 
   const handleNewLead = () => {
@@ -236,14 +252,36 @@ export default function LeadsLinear() {
               </Button>
             )}
 
-            {/* Select All Toggle */}
+            {/* Select All Toggle / Count Selection */}
             {filteredLeads.length > 0 && selectedLeads.size === 0 && (
-              <Button variant="ghost" size="sm" onClick={handleSelectAll} className="h-9 px-2 text-muted-foreground hover:text-foreground">
-                Selecionar todos
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-9 px-2 text-muted-foreground hover:text-foreground gap-1.5">
+                    Selecionar
+                    <ArrowDown className="w-3 h-3 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onSelect={handleSelectAll}>
+                    Selecionar Todos <span className="ml-auto text-xs opacity-50">({filteredLeads.length})</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => handleSelectCount(10)}>Selecionar 10</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => handleSelectCount(30)}>Selecionar 30</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => handleSelectCount(50)}>Selecionar 50</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
 
-            {/* Actions */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 px-2 text-[10px] gap-1.5 text-primary hover:text-primary hover:bg-primary/5 transition-colors border border-primary/20"
+              onClick={() => setIsDistributeOpen(true)}
+            >
+              <Users className="w-3 h-3" />
+              Distribuição
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -431,11 +469,26 @@ export default function LeadsLinear() {
 
       {/* Bulk Edit Dialog */}
       <BulkEditDialog
-        open={isBulkEditOpen}
-        onOpenChange={setIsBulkEditOpen}
+        open={isBulkEditOpen || isDistributeOpen}
+        onOpenChange={(open) => {
+          setIsBulkEditOpen(open);
+          if (!open) setIsDistributeOpen(false);
+        }}
         selectedIds={Array.from(selectedLeads)}
         onSuccess={() => {
           handleClearSelection();
+        }}
+        initialField={isDistributeOpen ? "assignee" : undefined}
+      />
+
+      <LeadDistributionModal
+        open={isDistributeOpen}
+        onOpenChange={setIsDistributeOpen}
+        onSuccess={() => {
+          toast({
+            title: "Sucesso",
+            description: "Leads distribuídos com sucesso!"
+          });
         }}
       />
     </div>

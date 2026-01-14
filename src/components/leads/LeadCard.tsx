@@ -20,6 +20,7 @@ import { ptBR } from "date-fns/locale";
 import { LeadEditDialog } from "./LeadEditDialog";
 import type { Tables } from "@/lib/database.types";
 import { stripNonNumeric, validatePhone } from "@/lib/cpf-cnpj-validator";
+import { getWhatsAppUrl } from "@/lib/whatsapp-utils";
 import { useUpdateLead, useLeads } from "@/hooks/useLeads";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -98,11 +99,8 @@ export const LeadCard = React.memo(({ lead, className, isSelected, onToggleSelec
   }, [lead.phone, lead.description]);
 
   const whatsappHref = useMemo(() => {
-    if (!resolvedPhone) return null;
-    const raw = stripNonNumeric(resolvedPhone);
-    const withCC = raw.startsWith("55") ? raw : `55${raw}`;
-    return `https://wa.me/${withCC}`;
-  }, [resolvedPhone]);
+    return getWhatsAppUrl(resolvedPhone, '11', lead.title);
+  }, [resolvedPhone, lead.title]);
 
   const SourceIcon = () => {
     const source = lead.source || "manual";
@@ -213,6 +211,12 @@ export const LeadCard = React.memo(({ lead, className, isSelected, onToggleSelec
                 <div className="flex items-center gap-0.5 text-[10px]" title="Comentários">
                   <MessageSquare className="w-2.5 h-2.5" />
                   <span>{lead.comments_count}</span>
+                </div>
+              )}
+              {lead.assignee_name && (
+                <div className="flex items-center gap-0.5 text-[10px] font-medium text-primary/70" title={`Responsável: ${lead.assignee_name}`}>
+                  <User className="w-2.5 h-2.5" />
+                  <span className="truncate max-w-[60px]">{lead.assignee_name}</span>
                 </div>
               )}
               <div className="flex items-center gap-0.5 text-[10px]" title="Criado em">

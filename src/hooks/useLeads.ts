@@ -4,6 +4,8 @@ import { toast } from 'sonner'
 import { Tables, TablesInsert, TablesUpdate } from '@/lib/database.types'
 import { useEffect } from 'react'
 import { useActiveOrganization } from '@/hooks/useActiveOrganization'
+import { useUserPermissions } from '@/hooks/useUserPermissions'
+import { useAuth } from '@/hooks/useAuth'
 import { logDebug } from '@/lib/debug'
 
 // Type definitions
@@ -49,6 +51,7 @@ export interface LeadFilters {
   search?: string
   limit?: number
   hideMetaLeads?: boolean
+  unassignedOnly?: boolean
 }
 
 export function useLeads(filters?: LeadFilters, campaignId?: string) {
@@ -147,6 +150,7 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
           )
         `)
         .eq('organization_id', org.id)
+        .is('deleted_at', null) // Não mostrar leads na lixeira
         .order('position')
 
       // Aplicar filtros
@@ -200,6 +204,10 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
         query = query.neq('source', 'meta_ads').is('campaign_id', null)
       }
 
+      if (filters?.unassignedOnly) {
+        query = query.is('assignee_id', null)
+      }
+
       const { data, error } = await query
 
       if (error) {
@@ -248,6 +256,8 @@ export function useLeads(filters?: LeadFilters, campaignId?: string) {
 export const useCreateLead = () => {
   const queryClient = useQueryClient()
   const { data: org } = useActiveOrganization()
+  const { data: permissions } = useUserPermissions()
+  const { user } = useAuth()
 
   return useMutation({
     mutationFn: async (values: LeadInsert) => {
@@ -277,10 +287,13 @@ export const useCreateLead = () => {
 
       if (!org?.id) throw new Error('Organização ativa não definida')
 
-      // Garantir escopo da organização
+      // Garantir escopo da organização e auto-atribuição se for vendedor
+      const isSeller = permissions?.userType === 'sales' || org?.role === 'member';
       const withOrg: LeadInsert = {
         ...sanitizedValues,
         organization_id: (sanitizedValues as any).organization_id ?? (org.id as any),
+        assignee_id: isSeller ? user?.id : (sanitizedValues.assignee_id || null),
+        assignee_name: isSeller ? (user?.user_metadata?.full_name || user?.email) : (sanitizedValues.assignee_name || null)
       }
 
       const { data, error } = await supabase
@@ -319,6 +332,7 @@ export const useCreateLead = () => {
 export const useUpdateLead = () => {
   const queryClient = useQueryClient()
   const { data: org } = useActiveOrganization()
+  const { data: permissions } = useUserPermissions()
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: LeadUpdate }) => {
@@ -358,6 +372,13 @@ export const useUpdateLead = () => {
             return [k, v]
           })
       ) as LeadUpdate
+
+      // Restrição para vendedores: não podem mudar o responsável
+      const isSeller = permissions?.userType === 'sales' || org?.role === 'member';
+      if (isSeller && 'assignee_id' in sanitizedUpdates) {
+        delete sanitizedUpdates.assignee_id;
+        delete (sanitizedUpdates as any).assignee_name;
+      }
 
       console.log('[useUpdateLead] Payload sanitizado:', sanitizedUpdates)
 
@@ -442,7 +463,7 @@ export function useDeleteLead() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      logDebug('[useDeleteLead] Deletando lead:', id)
+      logDebug('[useDeleteLead] Movendo lead para lixeira:', id)
 
       if (!org?.id) {
         const error = new Error('Organização ativa não definida')
@@ -450,21 +471,27 @@ export function useDeleteLead() {
         throw error
       }
 
+      // Obter o ID do usuário atual
+      const { data: { session } } = await supabase.auth.getSession()
+
+      // Soft delete: marcar como deletado ao invés de remover
       const { error } = await supabase
         .from('leads')
-        .delete()
+        .update({
+          deleted_at: new Date().toISOString(),
+          deleted_by: session?.user?.id || null
+        })
         .eq('id', id)
-        .eq('organization_id', org.id)
 
       if (error) {
-        console.error('[useDeleteLead] Erro ao deletar lead:', error)
+        console.error('[useDeleteLead] Erro ao mover lead para lixeira:', error)
         console.error('[useDeleteLead] Código:', error.code)
         console.error('[useDeleteLead] Mensagem:', error.message)
         console.error('[useDeleteLead] Detalhes:', error.details)
         throw error
       }
 
-      logDebug('[useDeleteLead] Lead deletado com sucesso')
+      logDebug('[useDeleteLead] Lead movido para lixeira com sucesso')
     },
     onSuccess: () => {
       logDebug('[useDeleteLead] Invalidando queries')
@@ -476,16 +503,17 @@ export function useDeleteLead() {
       queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
       queryClient.invalidateQueries({ queryKey: ['pipeline-metrics'] })
 
-      toast.success('Lead removido com sucesso!')
+      toast.success('Lead movido para a lixeira!')
     },
     onError: (error) => {
-      console.error('[useDeleteLead] Erro ao deletar lead:', error)
+      console.error('[useDeleteLead] Erro ao mover lead para lixeira:', error)
       const anyErr = error as any
-      const message = anyErr?.message || anyErr?.error || (anyErr?.code ? `Código: ${anyErr.code}` : 'Erro ao remover lead')
+      const message = anyErr?.message || anyErr?.error || (anyErr?.code ? `Código: ${anyErr.code}` : 'Erro ao mover lead para lixeira')
       toast.error(message)
     }
   })
 }
+
 
 export function useLeadActivity(leadId?: string) {
   const queryClient = useQueryClient()
@@ -706,7 +734,7 @@ export function useLeadSourceDetails() {
   })
 }
 
-// Hook para deletar leads em massa
+// Hook para mover leads em massa para lixeira (soft delete)
 export function useBulkDeleteLeads() {
   const queryClient = useQueryClient()
   const { data: org } = useActiveOrganization()
@@ -715,6 +743,9 @@ export function useBulkDeleteLeads() {
     mutationFn: async (leadIds: string[]) => {
       if (!org?.id) throw new Error('Organização ativa não definida')
 
+      // Obter o ID do usuário atual
+      const { data: { session } } = await supabase.auth.getSession()
+
       // Process in chunks to avoid URL length limits (400 Bad Request)
       const chunkSize = 50;
       const chunks = [];
@@ -722,13 +753,15 @@ export function useBulkDeleteLeads() {
         chunks.push(leadIds.slice(i, i + chunkSize));
       }
 
-      // Execute queries in parallel
+      // Soft delete: marcar como deletado ao invés de remover
       await Promise.all(chunks.map(async (chunkIds) => {
         const { error } = await supabase
           .from('leads')
-          .delete()
+          .update({
+            deleted_at: new Date().toISOString(),
+            deleted_by: session?.user?.id || null
+          })
           .in('id', chunkIds)
-          .eq('organization_id', org.id)
 
         if (error) throw error;
       }));
@@ -737,14 +770,15 @@ export function useBulkDeleteLeads() {
       queryClient.invalidateQueries({ queryKey: ['leads'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
       queryClient.invalidateQueries({ queryKey: ['pipeline-metrics'] })
-      toast.success('Leads excluídos com sucesso!')
+      toast.success('Leads movidos para a lixeira!')
     },
     onError: (error) => {
-      console.error('[useBulkDeleteLeads] Erro ao deletar leads:', error)
-      toast.error('Erro ao excluir leads')
+      console.error('[useBulkDeleteLeads] Erro ao mover leads para lixeira:', error)
+      toast.error('Erro ao mover leads para lixeira')
     }
   })
 }
+
 
 // Hook para atualizar leads em massa
 export function useBulkUpdateLeads() {
